@@ -1,0 +1,10 @@
+# Keep the gateway build context small. It only needs platform_core + the gateway
+# backend (Python); never the venv, node_modules, built dists, or git history.
+.git
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/dist

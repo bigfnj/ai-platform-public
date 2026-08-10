@@ -1,0 +1,14 @@
+# mutable state (analyses DB + uploaded photos) — a mounted volume in the container
+var/
+data/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# frontend
+frontend/node_modules/
+frontend/dist/

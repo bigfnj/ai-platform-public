@@ -1,0 +1,2773 @@
+{
+  "mode": "reference",
+  "model": "@vision",
+  "summary": {
+    "n": 200,
+    "errors": 0,
+    "hits": 166,
+    "misses": 34,
+    "recall": 0.83,
+    "mean_extras": 0.32,
+    "confusion": {
+      "amaranthus": {
+        "aster": 1,
+        "celosia": 1,
+        "(nothing)": 1
+      },
+      "anemone": {
+        "ranunculus": 1
+      },
+      "bells-of-ireland": {
+        "eucalyptus": 1,
+        "lisianthus": 1,
+        "(nothing)": 1,
+        "snapdragon": 1
+      },
+      "freesia": {
+        "gladiolus": 1,
+        "lily": 1,
+        "ranunculus": 1
+      },
+      "gerbera": {
+        "chrysanthemum": 2
+      },
+      "magnolia": {
+        "(nothing)": 1,
+        "rose": 1
+      },
+      "marigold": {
+        "ranunculus": 1
+      },
+      "ranunculus": {
+        "poppy": 1
+      },
+      "ruscus": {
+        "(nothing)": 1,
+        "eucalyptus": 2
+      },
+      "scabiosa": {
+        "veronica": 1,
+        "(nothing)": 2,
+        "aster": 1
+      },
+      "spirea": {
+        "babys-breath": 1,
+        "stock": 1,
+        "(nothing)": 1
+      },
+      "statice": {
+        "snapdragon": 1,
+        "wax-flower": 1
+      },
+      "stock": {
+        "snapdragon": 1
+      },
+      "veronica": {
+        "delphinium": 1
+      },
+      "wax-flower": {
+        "statice": 1,
+        "stock": 1,
+        "snapdragon": 1
+      }
+    }
+  },
+  "results": [
+    {
+      "expected": "alstroemeria",
+      "resolved": [
+        "alstroemeria",
+        "rose"
+      ],
+      "names": [
+        "alstroemeria",
+        "rose",
+        "unidentifiable green foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "rose"
+      ],
+      "error": null
+    },
+    {
+      "expected": "alstroemeria",
+      "resolved": [
+        "alstroemeria"
+      ],
+      "names": [
+        "alstroemeria",
+        "green foliage - likely leaves of the alstroemeria plant itself, or similar broadleaf greenery"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "alstroemeria",
+      "resolved": [
+        "alstroemeria"
+      ],
+      "names": [
+        "alstroemeria"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "alstroemeria",
+      "resolved": [
+        "alstroemeria"
+      ],
+      "names": [
+        "alstroemeria"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaranthus",
+      "resolved": [
+        "aster"
+      ],
+      "names": [
+        "gomphrena",
+        "aster",
+        "various green foliage"
+      ],
+      "hit": false,
+      "extras": [
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "amaranthus",
+      "resolved": [
+        "celosia",
+        "aster"
+      ],
+      "names": [
+        "celosia",
+        "aster",
+        "various foliage (unidentifiable species)"
+      ],
+      "hit": false,
+      "extras": [
+        "celosia",
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "amaranthus",
+      "resolved": [
+        "amaranthus"
+      ],
+      "names": [
+        "amaranth",
+        "foliage (various shades of green)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaranthus",
+      "resolved": [],
+      "names": [
+        "gomphrena"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaryllis",
+      "resolved": [
+        "amaryllis"
+      ],
+      "names": [
+        "amaryllis"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaryllis",
+      "resolved": [
+        "amaryllis"
+      ],
+      "names": [
+        "amaryllis"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaryllis",
+      "resolved": [
+        "amaryllis"
+      ],
+      "names": [
+        "amaryllis"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "amaryllis",
+      "resolved": [
+        "amaryllis"
+      ],
+      "names": [
+        "amaryllis"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "anemone",
+      "resolved": [
+        "anemone"
+      ],
+      "names": [
+        "anemone",
+        "various green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "anemone",
+      "resolved": [
+        "anemone",
+        "gerbera",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "anemone",
+        "gerbera daisy",
+        "dusty miller",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "gerbera",
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "anemone",
+      "resolved": [
+        "ranunculus"
+      ],
+      "names": [
+        "ranunculus",
+        "leafy stems"
+      ],
+      "hit": false,
+      "extras": [
+        "ranunculus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "anemone",
+      "resolved": [
+        "anemone",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "anemone",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "anthurium",
+      "resolved": [
+        "anthurium"
+      ],
+      "names": [
+        "anthurium"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "anthurium",
+      "resolved": [
+        "anthurium"
+      ],
+      "names": [
+        "anthurium"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "anthurium",
+      "resolved": [
+        "anthurium"
+      ],
+      "names": [
+        "anthurium",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "anthurium",
+      "resolved": [
+        "anthurium"
+      ],
+      "names": [
+        "anthurium",
+        "large green leaves (likely anthurium foliage)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "aster",
+      "resolved": [
+        "aster",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "aster",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "aster",
+      "resolved": [
+        "aster"
+      ],
+      "names": [
+        "aster",
+        "foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "aster",
+      "resolved": [
+        "aster"
+      ],
+      "names": [
+        "aster"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "aster",
+      "resolved": [
+        "aster"
+      ],
+      "names": [
+        "aster",
+        "foliage (various green shades)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "babys-breath",
+      "resolved": [
+        "babys-breath"
+      ],
+      "names": [
+        "baby's breath"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "babys-breath",
+      "resolved": [
+        "babys-breath"
+      ],
+      "names": [
+        "baby's breath"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "babys-breath",
+      "resolved": [
+        "babys-breath"
+      ],
+      "names": [
+        "baby's breath"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "babys-breath",
+      "resolved": [
+        "babys-breath"
+      ],
+      "names": [
+        "baby's breath"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "bells-of-ireland",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Eucalyptus"
+      ],
+      "hit": false,
+      "extras": [
+        "eucalyptus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "bells-of-ireland",
+      "resolved": [
+        "lisianthus"
+      ],
+      "names": [
+        "Lisianthus"
+      ],
+      "hit": false,
+      "extras": [
+        "lisianthus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "bells-of-ireland",
+      "resolved": [],
+      "names": [],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "bells-of-ireland",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon"
+      ],
+      "hit": false,
+      "extras": [
+        "snapdragon"
+      ],
+      "error": null
+    },
+    {
+      "expected": "bird-of-paradise",
+      "resolved": [
+        "bird-of-paradise"
+      ],
+      "names": [
+        "bird of paradise",
+        "foliage (unidentifiable species)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "bird-of-paradise",
+      "resolved": [
+        "bird-of-paradise"
+      ],
+      "names": [
+        "bird of paradise"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "bird-of-paradise",
+      "resolved": [
+        "bird-of-paradise"
+      ],
+      "names": [
+        "bird of paradise"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "bird-of-paradise",
+      "resolved": [
+        "bird-of-paradise",
+        "lily"
+      ],
+      "names": [
+        "bird of paradise",
+        "lily",
+        "foliage (likely broadleaf, unidentifiable species)"
+      ],
+      "hit": true,
+      "extras": [
+        "lily"
+      ],
+      "error": null
+    },
+    {
+      "expected": "calla-lily",
+      "resolved": [
+        "calla-lily"
+      ],
+      "names": [
+        "calla lily"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "calla-lily",
+      "resolved": [
+        "calla-lily"
+      ],
+      "names": [
+        "calla lily"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "calla-lily",
+      "resolved": [
+        "calla-lily"
+      ],
+      "names": [
+        "calla lily"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "calla-lily",
+      "resolved": [
+        "calla-lily"
+      ],
+      "names": [
+        "calla lily",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "camellia",
+      "resolved": [
+        "camellia"
+      ],
+      "names": [
+        "camellia",
+        "glossy green foliage (likely camellia leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "camellia",
+      "resolved": [
+        "camellia"
+      ],
+      "names": [
+        "camellia",
+        "dark green foliage - likely camellia leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "camellia",
+      "resolved": [
+        "camellia"
+      ],
+      "names": [
+        "camellia",
+        "camellia foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "camellia",
+      "resolved": [
+        "camellia"
+      ],
+      "names": [
+        "camellia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "carnation",
+      "resolved": [
+        "carnation",
+        "babys-breath"
+      ],
+      "names": [
+        "carnation",
+        "baby's breath",
+        "salal"
+      ],
+      "hit": true,
+      "extras": [
+        "babys-breath"
+      ],
+      "error": null
+    },
+    {
+      "expected": "carnation",
+      "resolved": [
+        "carnation"
+      ],
+      "names": [
+        "carnation"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "carnation",
+      "resolved": [
+        "carnation"
+      ],
+      "names": [
+        "carnation"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "carnation",
+      "resolved": [
+        "carnation"
+      ],
+      "names": [
+        "carnation",
+        "various green foliage, likely a mix of ground cover and small leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "celosia",
+      "resolved": [
+        "celosia"
+      ],
+      "names": [
+        "celosia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "celosia",
+      "resolved": [
+        "celosia"
+      ],
+      "names": [
+        "celosia",
+        "lanceolate leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "celosia",
+      "resolved": [
+        "celosia"
+      ],
+      "names": [
+        "celosia",
+        "foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "celosia",
+      "resolved": [
+        "celosia"
+      ],
+      "names": [
+        "celosia",
+        "foliage (various shades of green and burgundy)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "chrysanthemum",
+      "resolved": [
+        "chrysanthemum"
+      ],
+      "names": [
+        "chrysanthemum"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "chrysanthemum",
+      "resolved": [
+        "chrysanthemum"
+      ],
+      "names": [
+        "chrysanthemum",
+        "salal"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "chrysanthemum",
+      "resolved": [
+        "chrysanthemum"
+      ],
+      "names": [
+        "chrysanthemum"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "chrysanthemum",
+      "resolved": [
+        "rose",
+        "chrysanthemum",
+        "gerbera"
+      ],
+      "names": [
+        "rose",
+        "chrysanthemum",
+        "gerbera",
+        "banana leaf"
+      ],
+      "hit": true,
+      "extras": [
+        "rose",
+        "gerbera"
+      ],
+      "error": null
+    },
+    {
+      "expected": "cosmos",
+      "resolved": [
+        "cosmos"
+      ],
+      "names": [
+        "cosmos",
+        "foliage (various green shades)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "cosmos",
+      "resolved": [
+        "cosmos"
+      ],
+      "names": [
+        "cosmos"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "cosmos",
+      "resolved": [
+        "cosmos",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "cosmos",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "cosmos",
+      "resolved": [
+        "cosmos",
+        "gerbera"
+      ],
+      "names": [
+        "cosmos",
+        "gerbera",
+        "unidentified green foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "gerbera"
+      ],
+      "error": null
+    },
+    {
+      "expected": "daffodil",
+      "resolved": [
+        "daffodil"
+      ],
+      "names": [
+        "daffodil"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daffodil",
+      "resolved": [
+        "daffodil"
+      ],
+      "names": [
+        "daffodil",
+        "grassy foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daffodil",
+      "resolved": [
+        "daffodil"
+      ],
+      "names": [
+        "daffodil",
+        "grassy foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daffodil",
+      "resolved": [
+        "daffodil"
+      ],
+      "names": [
+        "daffodil",
+        "unidentifiable foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "dahlia",
+      "resolved": [
+        "dahlia"
+      ],
+      "names": [
+        "dahlia"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "dahlia",
+      "resolved": [
+        "dahlia"
+      ],
+      "names": [
+        "dahlia",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "dahlia",
+      "resolved": [
+        "dahlia"
+      ],
+      "names": [
+        "dahlia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "dahlia",
+      "resolved": [
+        "dahlia"
+      ],
+      "names": [
+        "dahlia"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daisy",
+      "resolved": [
+        "daisy"
+      ],
+      "names": [
+        "daisy",
+        "foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daisy",
+      "resolved": [
+        "daisy",
+        "aster"
+      ],
+      "names": [
+        "daisy",
+        "aster",
+        "unidentifiable foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "daisy",
+      "resolved": [
+        "daisy"
+      ],
+      "names": [
+        "daisy",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "daisy",
+      "resolved": [
+        "daisy"
+      ],
+      "names": [
+        "daisy",
+        "foliage (likely salal or similar broadleaf)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "delphinium",
+      "resolved": [
+        "delphinium"
+      ],
+      "names": [
+        "delphinium/larkspur",
+        "geranium foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "delphinium",
+      "resolved": [
+        "delphinium",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "delphinium/larkspur",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "delphinium",
+      "resolved": [
+        "delphinium",
+        "ruscus"
+      ],
+      "names": [
+        "delphinium/larkspur",
+        "foliage (likely delphinium leaves)",
+        "ruscus"
+      ],
+      "hit": true,
+      "extras": [
+        "ruscus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "delphinium",
+      "resolved": [
+        "delphinium",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "delphinium/larkspur",
+        "fern-like foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "eucalyptus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "eucalyptus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "eucalyptus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Eucalyptus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "eucalyptus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Eucalyptus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "eucalyptus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Eucalyptus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "freesia",
+      "resolved": [
+        "gladiolus"
+      ],
+      "names": [
+        "gladiolus"
+      ],
+      "hit": false,
+      "extras": [
+        "gladiolus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "freesia",
+      "resolved": [
+        "lily"
+      ],
+      "names": [
+        "lily",
+        "lanceolate leaves"
+      ],
+      "hit": false,
+      "extras": [
+        "lily"
+      ],
+      "error": null
+    },
+    {
+      "expected": "freesia",
+      "resolved": [
+        "freesia"
+      ],
+      "names": [
+        "Freesia"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "freesia",
+      "resolved": [
+        "ranunculus"
+      ],
+      "names": [
+        "ranunculus"
+      ],
+      "hit": false,
+      "extras": [
+        "ranunculus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "gerbera",
+      "resolved": [
+        "chrysanthemum"
+      ],
+      "names": [
+        "chrysanthemum"
+      ],
+      "hit": false,
+      "extras": [
+        "chrysanthemum"
+      ],
+      "error": null
+    },
+    {
+      "expected": "gerbera",
+      "resolved": [
+        "chrysanthemum"
+      ],
+      "names": [
+        "chrysanthemum"
+      ],
+      "hit": false,
+      "extras": [
+        "chrysanthemum"
+      ],
+      "error": null
+    },
+    {
+      "expected": "gerbera",
+      "resolved": [
+        "gerbera"
+      ],
+      "names": [
+        "gerbera",
+        "various leafy greens"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "gerbera",
+      "resolved": [
+        "gerbera"
+      ],
+      "names": [
+        "gerbera daisy"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "gladiolus",
+      "resolved": [
+        "gladiolus"
+      ],
+      "names": [
+        "gladiolus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "gladiolus",
+      "resolved": [
+        "gladiolus"
+      ],
+      "names": [
+        "gladiolus",
+        "green foliage - likely gladiolus leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "gladiolus",
+      "resolved": [
+        "gladiolus"
+      ],
+      "names": [
+        "gladiolus",
+        "sword-like foliage (likely gladiolus leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "gladiolus",
+      "resolved": [
+        "gladiolus"
+      ],
+      "names": [
+        "gladiolus",
+        "green stems"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hyacinth",
+      "resolved": [
+        "hyacinth"
+      ],
+      "names": [
+        "hyacinth",
+        "foliage (likely hyacinth leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hyacinth",
+      "resolved": [
+        "hyacinth",
+        "tulip"
+      ],
+      "names": [
+        "hyacinth",
+        "tulip",
+        "foliage (likely broadleaf evergreen)"
+      ],
+      "hit": true,
+      "extras": [
+        "tulip"
+      ],
+      "error": null
+    },
+    {
+      "expected": "hyacinth",
+      "resolved": [
+        "hyacinth"
+      ],
+      "names": [
+        "hyacinth"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hyacinth",
+      "resolved": [
+        "hyacinth"
+      ],
+      "names": [
+        "hyacinth",
+        "forget-me-not",
+        "foliage (likely hyacinth leaves)",
+        "grass"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hydrangea",
+      "resolved": [
+        "hydrangea"
+      ],
+      "names": [
+        "hydrangea",
+        "grass",
+        "foliage (unidentifiable)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hydrangea",
+      "resolved": [
+        "hydrangea"
+      ],
+      "names": [
+        "hydrangea",
+        "hydrangea foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hydrangea",
+      "resolved": [
+        "hydrangea"
+      ],
+      "names": [
+        "hydrangea",
+        "foliage (broadleaf, likely hydrangea leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "hydrangea",
+      "resolved": [
+        "hydrangea"
+      ],
+      "names": [
+        "hydrangea",
+        "leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "iris",
+      "resolved": [
+        "iris",
+        "aster"
+      ],
+      "names": [
+        "iris",
+        "aster",
+        "foliage (various green leaves)"
+      ],
+      "hit": true,
+      "extras": [
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "iris",
+      "resolved": [
+        "iris"
+      ],
+      "names": [
+        "iris"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "iris",
+      "resolved": [
+        "iris"
+      ],
+      "names": [
+        "iris",
+        "grass-like foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "iris",
+      "resolved": [
+        "iris"
+      ],
+      "names": [
+        "iris",
+        "foliage (likely iris leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "leatherleaf-fern",
+      "resolved": [
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "fern"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "leatherleaf-fern",
+      "resolved": [
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "fern"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "leatherleaf-fern",
+      "resolved": [
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "fern"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "leatherleaf-fern",
+      "resolved": [
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "fern"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily",
+      "resolved": [
+        "lily"
+      ],
+      "names": [
+        "lily"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily",
+      "resolved": [
+        "lily"
+      ],
+      "names": [
+        "lily",
+        "variegated foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily",
+      "resolved": [
+        "lily"
+      ],
+      "names": [
+        "lily",
+        "unidentifiable green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily",
+      "resolved": [
+        "lily"
+      ],
+      "names": [
+        "lily",
+        "begonia",
+        "leafy greens"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily-of-the-valley",
+      "resolved": [
+        "lily-of-the-valley"
+      ],
+      "names": [
+        "lily of the valley"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily-of-the-valley",
+      "resolved": [
+        "lily-of-the-valley"
+      ],
+      "names": [
+        "lily of the valley"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily-of-the-valley",
+      "resolved": [
+        "lily-of-the-valley"
+      ],
+      "names": [
+        "lily of the valley",
+        "foliage leaves (likely lily of the valley)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lily-of-the-valley",
+      "resolved": [
+        "lily-of-the-valley"
+      ],
+      "names": [
+        "lily of the valley",
+        "foliage leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lisianthus",
+      "resolved": [
+        "lisianthus"
+      ],
+      "names": [
+        "lisianthus",
+        "green leaves (likely lisianthus foliage)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lisianthus",
+      "resolved": [
+        "lisianthus"
+      ],
+      "names": [
+        "lisianthus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "lisianthus",
+      "resolved": [
+        "lisianthus",
+        "eucalyptus"
+      ],
+      "names": [
+        "lisianthus",
+        "eucalyptus"
+      ],
+      "hit": true,
+      "extras": [
+        "eucalyptus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "lisianthus",
+      "resolved": [
+        "lisianthus"
+      ],
+      "names": [
+        "lisianthus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "magnolia",
+      "resolved": [],
+      "names": [
+        "glossy green foliage - likely boxwood or similar shrub"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "magnolia",
+      "resolved": [
+        "rose",
+        "camellia",
+        "ranunculus"
+      ],
+      "names": [
+        "rose",
+        "camellia",
+        "ranunculus",
+        "foliage (various types)",
+        "trees"
+      ],
+      "hit": false,
+      "extras": [
+        "rose",
+        "camellia",
+        "ranunculus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "magnolia",
+      "resolved": [
+        "magnolia"
+      ],
+      "names": [
+        "magnolia",
+        "glossy green foliage (likely magnolia leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "magnolia",
+      "resolved": [
+        "magnolia"
+      ],
+      "names": [
+        "magnolia",
+        "magnolia leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "marigold",
+      "resolved": [
+        "marigold",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "marigold",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "marigold",
+      "resolved": [
+        "ranunculus",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "ranunculus",
+        "fern",
+        "unidentified green foliage"
+      ],
+      "hit": false,
+      "extras": [
+        "ranunculus",
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "marigold",
+      "resolved": [
+        "marigold"
+      ],
+      "names": [
+        "marigold",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "marigold",
+      "resolved": [
+        "marigold"
+      ],
+      "names": [
+        "marigold",
+        "unidentifiable foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "orchid",
+      "resolved": [
+        "orchid"
+      ],
+      "names": [
+        "orchid",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "orchid",
+      "resolved": [
+        "orchid",
+        "aster"
+      ],
+      "names": [
+        "orchid",
+        "aster",
+        "foliage (unidentifiable type)"
+      ],
+      "hit": true,
+      "extras": [
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "orchid",
+      "resolved": [
+        "orchid",
+        "alstroemeria"
+      ],
+      "names": [
+        "orchid",
+        "alstroemeria"
+      ],
+      "hit": true,
+      "extras": [
+        "alstroemeria"
+      ],
+      "error": null
+    },
+    {
+      "expected": "orchid",
+      "resolved": [
+        "orchid"
+      ],
+      "names": [
+        "orchid",
+        "foliage - dark green, linear leaves (likely orchid foliage)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "peony",
+      "resolved": [
+        "peony",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "peony",
+        "fern-like foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "peony",
+      "resolved": [
+        "peony"
+      ],
+      "names": [
+        "peony",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "peony",
+      "resolved": [
+        "peony",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "peony",
+        "fern"
+      ],
+      "hit": true,
+      "extras": [
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "peony",
+      "resolved": [
+        "peony"
+      ],
+      "names": [
+        "peony"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "poppy",
+      "resolved": [
+        "poppy"
+      ],
+      "names": [
+        "poppy",
+        "green stems"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "poppy",
+      "resolved": [
+        "poppy"
+      ],
+      "names": [
+        "poppy"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "poppy",
+      "resolved": [
+        "poppy"
+      ],
+      "names": [
+        "poppy",
+        "grass",
+        "various green foliage (unidentifiable species)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "poppy",
+      "resolved": [
+        "poppy"
+      ],
+      "names": [
+        "poppy"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "protea",
+      "resolved": [
+        "protea"
+      ],
+      "names": [
+        "protea",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "protea",
+      "resolved": [
+        "protea",
+        "eucalyptus"
+      ],
+      "names": [
+        "protea",
+        "eucalyptus"
+      ],
+      "hit": true,
+      "extras": [
+        "eucalyptus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "protea",
+      "resolved": [
+        "protea"
+      ],
+      "names": [
+        "protea",
+        "glossy green foliage (likely some type of shrub leaf)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "protea",
+      "resolved": [
+        "protea",
+        "ruscus"
+      ],
+      "names": [
+        "protea",
+        "ruscus"
+      ],
+      "hit": true,
+      "extras": [
+        "ruscus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "ranunculus",
+      "resolved": [
+        "ranunculus"
+      ],
+      "names": [
+        "ranunculus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "ranunculus",
+      "resolved": [
+        "poppy",
+        "aster"
+      ],
+      "names": [
+        "poppy",
+        "aster"
+      ],
+      "hit": false,
+      "extras": [
+        "poppy",
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "ranunculus",
+      "resolved": [
+        "ranunculus"
+      ],
+      "names": [
+        "ranunculus",
+        "grasses",
+        "various leafy plants"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "ranunculus",
+      "resolved": [
+        "ranunculus"
+      ],
+      "names": [
+        "ranunculus",
+        "grass-like foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "rose",
+      "resolved": [
+        "rose"
+      ],
+      "names": [
+        "rose",
+        "green foliage - likely rose leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "rose",
+      "resolved": [
+        "rose"
+      ],
+      "names": [
+        "rose",
+        "rose foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "rose",
+      "resolved": [
+        "rose",
+        "ranunculus"
+      ],
+      "names": [
+        "rose",
+        "ranunculus",
+        "grass"
+      ],
+      "hit": true,
+      "extras": [
+        "ranunculus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "rose",
+      "resolved": [
+        "rose"
+      ],
+      "names": [
+        "rose",
+        "foliage (various green shades)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "ruscus",
+      "resolved": [],
+      "names": [
+        "holly"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "ruscus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Salal",
+        "Eucalyptus"
+      ],
+      "hit": false,
+      "extras": [
+        "eucalyptus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "ruscus",
+      "resolved": [
+        "eucalyptus"
+      ],
+      "names": [
+        "Eucalyptus"
+      ],
+      "hit": false,
+      "extras": [
+        "eucalyptus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "ruscus",
+      "resolved": [
+        "ruscus"
+      ],
+      "names": [
+        "ruscus"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "scabiosa",
+      "resolved": [
+        "veronica"
+      ],
+      "names": [
+        "veronica",
+        "green foliage (unidentifiable type)"
+      ],
+      "hit": false,
+      "extras": [
+        "veronica"
+      ],
+      "error": null
+    },
+    {
+      "expected": "scabiosa",
+      "resolved": [],
+      "names": [
+        "allium"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "scabiosa",
+      "resolved": [],
+      "names": [
+        "allium"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "scabiosa",
+      "resolved": [
+        "aster"
+      ],
+      "names": [
+        "aster"
+      ],
+      "hit": false,
+      "extras": [
+        "aster"
+      ],
+      "error": null
+    },
+    {
+      "expected": "snapdragon",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon",
+        "green foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "snapdragon",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon",
+        "grass-like foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "snapdragon",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "snapdragon",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon",
+        "grass-like foliage"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "spirea",
+      "resolved": [
+        "babys-breath"
+      ],
+      "names": [
+        "baby's breath"
+      ],
+      "hit": false,
+      "extras": [
+        "babys-breath"
+      ],
+      "error": null
+    },
+    {
+      "expected": "spirea",
+      "resolved": [
+        "spirea"
+      ],
+      "names": [
+        "spirea"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "spirea",
+      "resolved": [
+        "stock"
+      ],
+      "names": [
+        "stock"
+      ],
+      "hit": false,
+      "extras": [
+        "stock"
+      ],
+      "error": null
+    },
+    {
+      "expected": "spirea",
+      "resolved": [],
+      "names": [
+        "apple blossom",
+        "green foliage",
+        "branch"
+      ],
+      "hit": false,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "statice",
+      "resolved": [
+        "statice"
+      ],
+      "names": [
+        "statice"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "statice",
+      "resolved": [
+        "statice"
+      ],
+      "names": [
+        "statice"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "statice",
+      "resolved": [
+        "snapdragon",
+        "aster",
+        "ruscus",
+        "leatherleaf-fern"
+      ],
+      "names": [
+        "snapdragon",
+        "aster",
+        "ruscus",
+        "fern",
+        "grasses"
+      ],
+      "hit": false,
+      "extras": [
+        "snapdragon",
+        "aster",
+        "ruscus",
+        "leatherleaf-fern"
+      ],
+      "error": null
+    },
+    {
+      "expected": "statice",
+      "resolved": [
+        "wax-flower"
+      ],
+      "names": [
+        "wax flower",
+        "grasses",
+        "various leafy plants"
+      ],
+      "hit": false,
+      "extras": [
+        "wax-flower"
+      ],
+      "error": null
+    },
+    {
+      "expected": "stock",
+      "resolved": [
+        "stock"
+      ],
+      "names": [
+        "stock"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "stock",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon",
+        "unidentifiable green foliage"
+      ],
+      "hit": false,
+      "extras": [
+        "snapdragon"
+      ],
+      "error": null
+    },
+    {
+      "expected": "stock",
+      "resolved": [
+        "stock"
+      ],
+      "names": [
+        "stock",
+        "foliage (likely a type of salal or similar broadleaf)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "stock",
+      "resolved": [
+        "stock"
+      ],
+      "names": [
+        "stock"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sunflower",
+      "resolved": [
+        "sunflower"
+      ],
+      "names": [
+        "sunflower",
+        "stem with leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sunflower",
+      "resolved": [
+        "sunflower"
+      ],
+      "names": [
+        "sunflower"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sunflower",
+      "resolved": [
+        "sunflower"
+      ],
+      "names": [
+        "sunflower",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sunflower",
+      "resolved": [
+        "sunflower"
+      ],
+      "names": [
+        "sunflower",
+        "sunflower leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sweet-pea",
+      "resolved": [
+        "sweet-pea"
+      ],
+      "names": [
+        "sweet pea",
+        "foliage (likely sweet pea leaves and tendrils)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sweet-pea",
+      "resolved": [
+        "sweet-pea"
+      ],
+      "names": [
+        "sweet pea",
+        "foliage (likely sweet pea tendrils and leaves)"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sweet-pea",
+      "resolved": [
+        "sweet-pea"
+      ],
+      "names": [
+        "sweet pea"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "sweet-pea",
+      "resolved": [
+        "sweet-pea",
+        "rose"
+      ],
+      "names": [
+        "sweet pea",
+        "rose",
+        "foliage"
+      ],
+      "hit": true,
+      "extras": [
+        "rose"
+      ],
+      "error": null
+    },
+    {
+      "expected": "tulip",
+      "resolved": [
+        "tulip"
+      ],
+      "names": [
+        "tulip",
+        "ivy"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "tulip",
+      "resolved": [
+        "tulip"
+      ],
+      "names": [
+        "tulip",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "tulip",
+      "resolved": [
+        "tulip"
+      ],
+      "names": [
+        "tulip",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "tulip",
+      "resolved": [
+        "tulip",
+        "daffodil"
+      ],
+      "names": [
+        "tulip",
+        "narcissus (daffodil)",
+        "foliage - grass-like leaves"
+      ],
+      "hit": true,
+      "extras": [
+        "daffodil"
+      ],
+      "error": null
+    },
+    {
+      "expected": "veronica",
+      "resolved": [
+        "veronica"
+      ],
+      "names": [
+        "veronica"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "veronica",
+      "resolved": [
+        "veronica"
+      ],
+      "names": [
+        "veronica",
+        "grass"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "veronica",
+      "resolved": [
+        "delphinium"
+      ],
+      "names": [
+        "larkspur",
+        "grass",
+        "various green foliage"
+      ],
+      "hit": false,
+      "extras": [
+        "delphinium"
+      ],
+      "error": null
+    },
+    {
+      "expected": "veronica",
+      "resolved": [
+        "veronica"
+      ],
+      "names": [
+        "veronica"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "wax-flower",
+      "resolved": [
+        "statice",
+        "ruscus"
+      ],
+      "names": [
+        "statice",
+        "ruscus"
+      ],
+      "hit": false,
+      "extras": [
+        "statice",
+        "ruscus"
+      ],
+      "error": null
+    },
+    {
+      "expected": "wax-flower",
+      "resolved": [
+        "stock"
+      ],
+      "names": [
+        "stock"
+      ],
+      "hit": false,
+      "extras": [
+        "stock"
+      ],
+      "error": null
+    },
+    {
+      "expected": "wax-flower",
+      "resolved": [
+        "wax-flower"
+      ],
+      "names": [
+        "wax flower",
+        "casuarina"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "wax-flower",
+      "resolved": [
+        "snapdragon"
+      ],
+      "names": [
+        "snapdragon",
+        "ivy",
+        "various deciduous branches"
+      ],
+      "hit": false,
+      "extras": [
+        "snapdragon"
+      ],
+      "error": null
+    },
+    {
+      "expected": "zinnia",
+      "resolved": [
+        "zinnia"
+      ],
+      "names": [
+        "zinnia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "zinnia",
+      "resolved": [
+        "zinnia"
+      ],
+      "names": [
+        "zinnia"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "zinnia",
+      "resolved": [
+        "zinnia"
+      ],
+      "names": [
+        "zinnia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    },
+    {
+      "expected": "zinnia",
+      "resolved": [
+        "zinnia"
+      ],
+      "names": [
+        "zinnia",
+        "green leaves"
+      ],
+      "hit": true,
+      "extras": [],
+      "error": null
+    }
+  ],
+  "note": "recall reflects the current KB resolver (incl. the 'fern' alias); raw model outputs unchanged from the 2026-07-31 run"
+}

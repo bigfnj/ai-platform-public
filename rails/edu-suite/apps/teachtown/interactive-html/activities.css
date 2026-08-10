@@ -1,0 +1,43 @@
+/* Interactive-activity widgets, rendered by activities.js into the .answerDock aside
+   that sits beside the worksheet image. Warm palette matching the rest of the unit. */
+.answerDock.act { display: flex; flex-direction: column; gap: 10px; }
+.actTitle { font-size: 16px; color: #27334e; }
+.actHint { color: #7a8498; line-height: 1.35; }
+.actBody { display: flex; flex-direction: column; gap: 10px; }
+
+.actFoot { display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap; }
+.actCheck { background: #24304a; color: #fff; border: 0; border-radius: 13px; padding: 11px 16px; font-weight: 900; cursor: pointer; }
+.actCheck:hover { background: #33415f; }
+.actFb { font-weight: 900; }
+.actFb.good { color: #2b9d5f; }
+.actFb.bad { color: #d1534a; }
+
+/* shared correct/wrong states */
+.ok { border-color: #40b983 !important; background: #eafaf1 !important; }
+.no { border-color: #ff7a6b !important; background: #fff0ee !important; }
+
+/* match */
+.actRow { display: flex; align-items: center; gap: 8px; }
+.actLeft { flex: 1; min-width: 0; font-weight: 800; color: #27334e; overflow-wrap: anywhere; }
+.actSelect { flex: 1; min-width: 0; padding: 9px; border: 2px solid #d7deeb; border-radius: 11px; background: #fff; font-size: 14px; font-weight: 700; }
+
+/* drag-drop */
+.actBank { display: flex; flex-wrap: wrap; gap: 7px; }
+.actChip { padding: 9px 12px; border: 2px solid #d7deeb; border-radius: 12px; background: #fff0bf; font-weight: 800; cursor: grab; }
+.actChip.sel { outline: 3px solid #ffd166; }
+.actSlot { display: flex; align-items: center; gap: 8px; }
+.actSlotLabel { flex: 1; min-width: 0; font-weight: 800; color: #27334e; overflow-wrap: anywhere; }
+.actZone { flex: 1; min-width: 0; min-height: 40px; display: grid; place-items: center; padding: 8px; border: 3px dashed #9ba9c2; border-radius: 12px; color: #8a93a5; font-weight: 800; text-align: center; }
+.actZone.filled { color: #27334e; border-style: solid; background: #f7f9ff; }
+
+/* highlight */
+.actQ { display: flex; flex-direction: column; gap: 6px; }
+.actQPrompt { font-weight: 800; color: #27334e; line-height: 1.35; }
+.actOpts { display: flex; flex-wrap: wrap; gap: 7px; }
+.actOpt { padding: 9px 12px; border: 2px solid #d7deeb; border-radius: 12px; background: #fff; font-weight: 800; cursor: pointer; }
+.actOpt.lit { border-color: #ffb703; background: #fff6d9; }
+
+/* fill-in */
+.actFill { display: flex; flex-direction: column; gap: 4px; }
+.actFillQ { font-weight: 800; color: #27334e; line-height: 1.3; }
+.actFillInput { width: 100%; padding: 11px; border: 2px solid #ccd5e6; border-radius: 12px; font-size: 15px; }

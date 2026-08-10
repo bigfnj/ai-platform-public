@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+*.local
+# local-only agent ops notes (machine-specific: hosting, native services, secret locations)
+CLAUDE.local.md
+# workstation terminal: SSH key(s) the backend logs in with — never commit
+deploy/workstation-keys/
+# transient deploy/job logs (foldin/rehydrate/etc.) — operational output, not tracked
+deploy/*.log
+
+# Node / web (future)
+node_modules/
+dist/
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

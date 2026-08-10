@@ -1,0 +1,16 @@
+# Keep the dashboard build context small + torch-free. The image never needs the
+# CUDA venv, git history, caches, generated media, or the XTTS voice clips (all
+# GPU/model work runs in the native broker, not this container).
+.git
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+# generated / large assets not needed by the dashboard at runtime
+apps/cvc-worksheets/assets/generated
+**/*.wav
+**/interactive-html/vendor
+# local job library (mounted as a volume at runtime, never baked in)
+edu-suite-library

@@ -1,0 +1,24 @@
+[project]
+name = "slide-audio"
+version = "0.1.0"
+description = "Curriculum slide PDFs → per-slide bilingual (EN/es_MX) audio + karaoke HTML player"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "edu-media-core",
+    "python-dotenv>=1.2.2",
+    "watchdog>=6.0.0",
+]
+
+[project.scripts]
+slide-audio = "translation_service.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/translation_service"]
+
+[tool.uv.sources]
+edu-media-core = { workspace = true }

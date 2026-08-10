@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+
+# Node / frontend build
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Local data — the recipe corpus, SQLite DB, and generated icons live on the
+# data volume, never in git.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+.DS_Store

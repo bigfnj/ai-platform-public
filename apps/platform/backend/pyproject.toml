@@ -1,0 +1,26 @@
+[project]
+name = "platform-gateway-backend"
+version = "0.1.0"
+description = "Platform gateway: serves the unified shell SPA, proxies app backends, exposes broker/GPU status."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "platform-core",
+    # auth / multi-tenant
+    "sqlalchemy>=2.0",
+    "pwdlib[argon2]>=0.2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["platform_gateway_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Local test runs resolve the app + shared core from the tree (the container pip-installs them).
+pythonpath = [".", "../../../packages/platform_core"]

@@ -1,0 +1,242 @@
+[
+  {
+    "en": "jab",
+    "es": "golpe",
+    "image_query": "fist punch cartoon",
+    "worksheet": 1,
+    "page": 1,
+    "vowel": "a"
+  },
+  {
+    "en": "lag",
+    "es": "retraso",
+    "image_query": "snail slow cartoon",
+    "worksheet": 1,
+    "page": 1,
+    "vowel": "a"
+  },
+  {
+    "en": "zap",
+    "es": "rayo",
+    "image_query": "lightning bolt cartoon",
+    "worksheet": 1,
+    "page": 1,
+    "vowel": "a"
+  },
+  {
+    "en": "ram",
+    "es": "carnero",
+    "image_query": "ram sheep animal cartoon",
+    "worksheet": 1,
+    "page": 2,
+    "vowel": "a"
+  },
+  {
+    "en": "tan",
+    "es": "bronceado",
+    "image_query": "sun tan beach cartoon",
+    "worksheet": 1,
+    "page": 2,
+    "vowel": "a"
+  },
+  {
+    "en": "wax",
+    "es": "cera",
+    "image_query": "candle wax cartoon",
+    "worksheet": 1,
+    "page": 2,
+    "vowel": "a"
+  },
+  {
+    "en": "pep",
+    "es": "ánimo",
+    "image_query": "cheerleader energy cartoon",
+    "worksheet": 2,
+    "page": 1,
+    "vowel": "e"
+  },
+  {
+    "en": "web",
+    "es": "telaraña",
+    "image_query": "spider web cartoon",
+    "worksheet": 2,
+    "page": 1,
+    "vowel": "e"
+  },
+  {
+    "en": "vet",
+    "es": "veterinario",
+    "image_query": "cartoon vet doctor pet",
+    "worksheet": 2,
+    "page": 1,
+    "vowel": "e"
+  },
+  {
+    "en": "hem",
+    "es": "costura",
+    "image_query": "sewing needle thread cartoon",
+    "worksheet": 2,
+    "page": 2,
+    "vowel": "e"
+  },
+  {
+    "en": "gel",
+    "es": "gel",
+    "image_query": "hair gel tube cartoon",
+    "worksheet": 2,
+    "page": 2,
+    "vowel": "e"
+  },
+  {
+    "en": "den",
+    "es": "cueva",
+    "image_query": "bear cave den cartoon",
+    "worksheet": 2,
+    "page": 2,
+    "vowel": "e"
+  },
+  {
+    "en": "rim",
+    "es": "borde",
+    "image_query": "wheel rim cartoon",
+    "worksheet": 3,
+    "page": 1,
+    "vowel": "i"
+  },
+  {
+    "en": "lid",
+    "es": "tapa",
+    "image_query": "jar lid cartoon",
+    "worksheet": 3,
+    "page": 1,
+    "vowel": "i"
+  },
+  {
+    "en": "zip",
+    "es": "cierre",
+    "image_query": "zipper cartoon",
+    "worksheet": 3,
+    "page": 1,
+    "vowel": "i"
+  },
+  {
+    "en": "wig",
+    "es": "peluca",
+    "image_query": "colorful wig cartoon",
+    "worksheet": 3,
+    "page": 2,
+    "vowel": "i"
+  },
+  {
+    "en": "dip",
+    "es": "salsa",
+    "image_query": "chip dip bowl cartoon",
+    "worksheet": 3,
+    "page": 2,
+    "vowel": "i"
+  },
+  {
+    "en": "fig",
+    "es": "higo",
+    "image_query": "fig fruit cartoon",
+    "worksheet": 3,
+    "page": 2,
+    "vowel": "i"
+  },
+  {
+    "en": "sob",
+    "es": "llanto",
+    "image_query": "crying tears cartoon child",
+    "worksheet": 4,
+    "page": 1,
+    "vowel": "o"
+  },
+  {
+    "en": "rod",
+    "es": "caña",
+    "image_query": "fishing rod cartoon",
+    "worksheet": 4,
+    "page": 1,
+    "vowel": "o"
+  },
+  {
+    "en": "cot",
+    "es": "catre",
+    "image_query": "camping cot bed cartoon",
+    "worksheet": 4,
+    "page": 1,
+    "vowel": "o"
+  },
+  {
+    "en": "jog",
+    "es": "trotar",
+    "image_query": "person jogging cartoon",
+    "worksheet": 4,
+    "page": 2,
+    "vowel": "o"
+  },
+  {
+    "en": "mob",
+    "es": "multitud",
+    "image_query": "crowd people cartoon",
+    "worksheet": 4,
+    "page": 2,
+    "vowel": "o"
+  },
+  {
+    "en": "lop",
+    "es": "conejo",
+    "image_query": "lop ear rabbit cartoon",
+    "worksheet": 4,
+    "page": 2,
+    "vowel": "o"
+  },
+  {
+    "en": "tub",
+    "es": "tina",
+    "image_query": "bathtub cartoon",
+    "worksheet": 5,
+    "page": 1,
+    "vowel": "u"
+  },
+  {
+    "en": "gum",
+    "es": "chicle",
+    "image_query": "bubble gum cartoon",
+    "worksheet": 5,
+    "page": 1,
+    "vowel": "u"
+  },
+  {
+    "en": "bud",
+    "es": "brote",
+    "image_query": "flower bud cartoon",
+    "worksheet": 5,
+    "page": 1,
+    "vowel": "u"
+  },
+  {
+    "en": "hut",
+    "es": "cabaña",
+    "image_query": "small hut house cartoon",
+    "worksheet": 5,
+    "page": 2,
+    "vowel": "u"
+  },
+  {
+    "en": "mug",
+    "es": "taza",
+    "image_query": "coffee mug cartoon",
+    "worksheet": 5,
+    "page": 2,
+    "vowel": "u"
+  },
+  {
+    "en": "pun",
+    "es": "chiste",
+    "image_query": "joke laugh cartoon child",
+    "worksheet": 5,
+    "page": 2,
+    "vowel": "u"
+  }
+]

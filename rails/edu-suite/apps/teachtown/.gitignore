@@ -1,0 +1,23 @@
+# Dependencies
+**/node_modules/
+
+# Generated build and cache files
+**/.next/
+**/dist/
+**/.vinext/
+**/.wrangler/
+**/.cache/
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini

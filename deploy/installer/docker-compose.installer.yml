@@ -1,0 +1,91 @@
+# Lean installer stack: the bundled gateway (frontends baked in) + the two installable rail
+# backends + caddy. No dist bind-mounts (the gateway image carries them), no host Node.
+# recipe-book is behind a profile so it only comes up when the chooser selected it.
+#
+# The installer runs this from deploy/ with an explicit env file, e.g.:
+#   docker compose --env-file .env -f installer/docker-compose.installer.yml [--profile recipe-book] up -d --build
+#
+# Build contexts are relative to THIS file (deploy/installer/), so ../.. is the repo root.
+name: platform
+
+services:
+  terminal-fun:                  # local terminal games/toys + a broker-backed AI assistant
+    build:
+      context: ../../rails/terminal-fun
+      dockerfile: deploy/Dockerfile
+    image: terminal-fun-backend:latest
+    environment:
+      TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma3:4b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    expose:
+      - "8730"
+    restart: always
+
+  recipe-book:                   # recipe + cocktail book (opt-in; ships with seed + baked icons)
+    profiles: ["recipe-book"]
+    build:
+      context: ../../rails/recipe-book
+      dockerfile: deploy/Dockerfile
+    image: recipe-book-backend:latest
+    environment:
+      RECIPE_BOOK_DATA_DIR: /srv/var
+      RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      RECIPE_BOOK_LLM_MODEL: ${RECIPE_BOOK_LLM_MODEL:-gemma3:4b}
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-gemma3:4b}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-gemma3:4b}
+      RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-bge-m3}
+      RECIPE_BOOK_PRIMARY_USER: ${PLATFORM_ADMIN_USER:-admin}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - recipe_book_data:/srv/var
+    expose:
+      - "8830"
+    restart: always
+
+  gateway:                       # shell host + reverse proxy; frontends baked into the image
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.gateway.bundled
+    image: platform-gateway-bundled:latest
+    depends_on:
+      - terminal-fun
+    environment:
+      PLATFORM_DB_URL: sqlite:////data/platform.db
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
+      PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - gateway_data:/data
+    expose:
+      - "8700"
+    restart: always
+
+  caddy:                         # front door on host :1111
+    image: caddy:2
+    depends_on:
+      - gateway
+    ports:
+      - "1111:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+volumes:
+  recipe_book_data:
+  gateway_data:
+  caddy_data:
+  caddy_config:

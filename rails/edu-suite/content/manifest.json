@@ -1,0 +1,397 @@
+{
+  "generated": "2026-07-20T18:02:51+00:00",
+  "root": "content",
+  "units": [
+    {
+      "unit": "two-different-beats-07-10-2026",
+      "grade": "high-school",
+      "path": "high-school/two-different-beats-07-10-2026",
+      "weeks": {
+        "1": [
+          {
+            "file": "Math Warmup.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Math Warmup.pdf"
+          },
+          {
+            "file": "Math Week 1.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Math Week 1.pdf"
+          },
+          {
+            "file": "Science Week 1.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Science Week 1.pdf"
+          },
+          {
+            "file": "Science Week Work.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Science Week Work.pdf"
+          },
+          {
+            "file": "Social Studies Week 1.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Social Studies Week 1.pdf"
+          },
+          {
+            "file": "Week 1 Context Clues.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Week 1 Context Clues.pdf"
+          },
+          {
+            "file": "Week 1 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Week 1 ELA.pdf"
+          },
+          {
+            "file": "Week 1 Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Week 1 Reading Comp.pdf"
+          },
+          {
+            "file": "Week 1 Social.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 1/Week 1 Social.pdf"
+          }
+        ],
+        "2": [
+          {
+            "file": "Math Warm up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Math Warm up.pdf"
+          },
+          {
+            "file": "Math Week 2.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Math Week 2.pdf"
+          },
+          {
+            "file": "Science Week 2.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Science Week 2.pdf"
+          },
+          {
+            "file": "Science Work.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Science Work.pdf"
+          },
+          {
+            "file": "Social Studies Week 2.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Social Studies Week 2.pdf"
+          },
+          {
+            "file": "Social Week 2.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Social Week 2.pdf"
+          },
+          {
+            "file": "Week 2 Comp - ELA.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Week 2 Comp - ELA.pdf"
+          },
+          {
+            "file": "Week 2 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Week 2 ELA.pdf"
+          },
+          {
+            "file": "Week 2 Reading.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 2/Week 2 Reading.pdf"
+          }
+        ],
+        "3": [
+          {
+            "file": "Math Warm Up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Math Warm Up.pdf"
+          },
+          {
+            "file": "Math Week 3.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Math Week 3.pdf"
+          },
+          {
+            "file": "Social Studies Week 3.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Social Studies Week 3.pdf"
+          },
+          {
+            "file": "Social Week 3.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Social Week 3.pdf"
+          },
+          {
+            "file": "Suffix Worksheet.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Suffix Worksheet.pdf"
+          },
+          {
+            "file": "Week 3 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Week 3 ELA.pdf"
+          },
+          {
+            "file": "Week 3 R. Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 3/Week 3 R. Comp.pdf"
+          }
+        ],
+        "4": [
+          {
+            "file": "Hyperbole.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 4/Hyperbole.pdf"
+          },
+          {
+            "file": "Math Warm Up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "high-school/two-different-beats-07-10-2026/Week 4/Math Warm Up.pdf"
+          },
+          {
+            "file": "Math Week 4.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 4/Math Week 4.pdf"
+          },
+          {
+            "file": "Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "high-school/two-different-beats-07-10-2026/Week 4/Reading Comp.pdf"
+          },
+          {
+            "file": "Week 4 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "high-school/two-different-beats-07-10-2026/Week 4/Week 4 ELA.pdf"
+          }
+        ]
+      },
+      "loose": [
+        {
+          "file": "Age of Imperialism.pdf",
+          "subject": "Social Studies",
+          "type": "worksheet",
+          "path": "high-school/two-different-beats-07-10-2026/Age of Imperialism.pdf"
+        },
+        {
+          "file": "Food and Water.pdf",
+          "subject": "Science",
+          "type": "worksheet",
+          "path": "high-school/two-different-beats-07-10-2026/Food and Water.pdf"
+        },
+        {
+          "file": "Two Different Beats.pdf",
+          "subject": "Unknown",
+          "type": "worksheet",
+          "path": "high-school/two-different-beats-07-10-2026/Two Different Beats.pdf"
+        }
+      ]
+    },
+    {
+      "unit": "malala-07-10-2026",
+      "grade": "middle-school",
+      "path": "middle-school/malala-07-10-2026",
+      "weeks": {
+        "1": [
+          {
+            "file": "Area.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 1/Area.pdf"
+          },
+          {
+            "file": "Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "middle-school/malala-07-10-2026/Week 1/Reading Comp.pdf"
+          },
+          {
+            "file": "Social Studies Week 1.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 1/Social Studies Week 1.pdf"
+          },
+          {
+            "file": "Warm up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "middle-school/malala-07-10-2026/Week 1/Warm up.pdf"
+          },
+          {
+            "file": "Week 1 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 1/Week 1 ELA.pdf"
+          },
+          {
+            "file": "Week 1 Math.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 1/Week 1 Math.pdf"
+          },
+          {
+            "file": "Week 1 Science.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 1/Week 1 Science.pdf"
+          }
+        ],
+        "2": [
+          {
+            "file": "Area.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Area.pdf"
+          },
+          {
+            "file": "Matching Social studies.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Matching Social studies.pdf"
+          },
+          {
+            "file": "Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "middle-school/malala-07-10-2026/Week 2/Reading Comp.pdf"
+          },
+          {
+            "file": "Social Studies Week 2.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Social Studies Week 2.pdf"
+          },
+          {
+            "file": "Warm up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "middle-school/malala-07-10-2026/Week 2/Warm up.pdf"
+          },
+          {
+            "file": "Week 2 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Week 2 ELA.pdf"
+          },
+          {
+            "file": "Week 2 Math.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Week 2 Math.pdf"
+          },
+          {
+            "file": "Week 2 Science.pdf",
+            "subject": "Science",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 2/Week 2 Science.pdf"
+          }
+        ],
+        "3": [
+          {
+            "file": "Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "middle-school/malala-07-10-2026/Week 3/Reading Comp.pdf"
+          },
+          {
+            "file": "Social Studies WEek 3.pdf",
+            "subject": "Social Studies",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 3/Social Studies WEek 3.pdf"
+          },
+          {
+            "file": "Warm up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "middle-school/malala-07-10-2026/Week 3/Warm up.pdf"
+          },
+          {
+            "file": "Week 3 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 3/Week 3 ELA.pdf"
+          },
+          {
+            "file": "Week 3 Math.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 3/Week 3 Math.pdf"
+          }
+        ],
+        "4": [
+          {
+            "file": "Reading Comp.pdf",
+            "subject": "ELA",
+            "type": "reading",
+            "path": "middle-school/malala-07-10-2026/Week 4/Reading Comp.pdf"
+          },
+          {
+            "file": "Warm up.pdf",
+            "subject": "Math",
+            "type": "warmup",
+            "path": "middle-school/malala-07-10-2026/Week 4/Warm up.pdf"
+          },
+          {
+            "file": "Week 4 ELA.pdf",
+            "subject": "ELA",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 4/Week 4 ELA.pdf"
+          },
+          {
+            "file": "Week 4 Math.pdf",
+            "subject": "Math",
+            "type": "worksheet",
+            "path": "middle-school/malala-07-10-2026/Week 4/Week 4 Math.pdf"
+          }
+        ]
+      },
+      "loose": []
+    }
+  ],
+  "summary": {
+    "units": 2,
+    "files": 57,
+    "by_subject": {
+      "ELA": 20,
+      "Math": 18,
+      "Science": 7,
+      "Social Studies": 11,
+      "Unknown": 1
+    },
+    "by_type": {
+      "reading": 10,
+      "warmup": 8,
+      "worksheet": 39
+    }
+  }
+}

@@ -1,0 +1,23 @@
+[project]
+name = "cvc-worksheets"
+version = "0.1.0"
+description = "CVC word lists → printable bilingual illustrated phonics worksheets"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "edu-media-core",
+    "jinja2>=3.1.0",
+    "python-dotenv>=1.2.2",
+]
+
+[project.scripts]
+cvc = "cvc_words.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cvc_words"]
+
+[tool.uv.sources]
+edu-media-core = { workspace = true }

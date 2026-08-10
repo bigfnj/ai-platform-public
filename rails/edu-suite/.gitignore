@@ -1,0 +1,54 @@
+# Python
+**/__pycache__/
+*.py[cod]
+**/.venv/
+.venv/
+
+# uv (root workspace lock is tracked; per-app locks are not needed)
+
+# Node
+**/node_modules/
+**/.next/
+**/dist/
+**/dist-iep/
+**/.vinext/
+**/.wrangler/
+**/.cache/
+
+# Generated outputs and cached assets
+**/output/
+**/.translation_cache.json
+apps/cvc-worksheets/data/translation_cache.json
+apps/cvc-worksheets/assets/generated/
+apps/cvc-worksheets/assets/clipart/
+apps/cvc-worksheets/assets/audio/
+
+# Model weights / large binaries
+*.safetensors
+*.ckpt
+
+# Reference voice clips are local runtime assets, not committed
+# (place english_reference.wav / spanish_reference.wav in shared/voices/)
+shared/voices/*.wav
+
+# teachtown generated enrichment (enrich.py output; sample is committed instead)
+apps/teachtown/interactive-html/enrichment.json
+apps/teachtown/interactive-html/public/audio/
+apps/teachtown/data/enrich_cache.json
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local smoke-test input fixtures (sample books/worksheets/words), not committed
+/test/

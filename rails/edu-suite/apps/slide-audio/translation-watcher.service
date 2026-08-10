@@ -1,0 +1,24 @@
+[Unit]
+Description=Translation Service — intake folder watcher
+After=network.target
+
+[Service]
+Type=simple
+User=bigfnj
+WorkingDirectory=/home/bigfnj/projects/translation-service
+Environment="COQUI_TOS_AGREED=1"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PATH=/home/bigfnj/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/bigfnj/.local/bin/uv run python cli.py --watch
+Restart=on-failure
+RestartSec=10
+
+# Give the GPU models time to load
+TimeoutStartSec=120
+
+# Log output visible via: journalctl -u translation-watcher -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,44 @@
+# edu-suite hosting stack: the dashboard container + Caddy in front.
+#
+# The GPU/media layer stays NATIVE on Windows (Ollama + the platform broker + the
+# XTTS/SDXL worker venv). Containers reach the broker via host.docker.internal.
+# Start the native broker on 0.0.0.0 first so the container can reach it:
+#   uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500
+# Then, from this folder:  docker compose up -d --build
+name: edu-suite
+
+services:
+  dashboard:
+    build:
+      context: ..                # edu-suite repo root (Dockerfile copies from here)
+      dockerfile: deploy/Dockerfile
+    image: edu-suite-dashboard:latest
+    environment:
+      BROKER_URL: http://host.docker.internal:11500
+      EDU_LIBRARY_DIR: /library
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach the native broker on the host
+    volumes:
+      # Reuse the existing on-disk job library by default; override with EDU_LIBRARY_HOST.
+      - "${EDU_LIBRARY_HOST:-D:/edu-suite-library}:/library"
+    expose:
+      - "8800"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - dashboard
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"           # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # persists the internal CA + issued certs
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,324 @@
+# Platform hosting stack: the unified shell behind Caddy.
+#
+#   Browser ── Caddy (:80/:443) ── gateway (shell SPA + edu-suite remote + proxy)
+#                                     ├─ /edu-suite/api/* ─> dashboard (edu-suite backend)
+#                                     └─ /api/platform/*  ─> broker (NATIVE, host.docker.internal)
+#
+# The GPU/media layer (broker + Ollama + XTTS/SDXL worker) stays NATIVE on Windows.
+# Start the broker on 0.0.0.0 first, and build each rail's frontend (they're mounted here):
+#   platform:  cd apps/platform/frontend && npm run build
+#   edu-suite: cd rails/edu-suite/apps/dashboard/frontend && npm run build
+#   broker:    uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500
+# Then, from this folder:  docker compose up -d --build
+name: platform
+
+services:
+  dashboard:                     # edu-suite backend (torch-free; model work via the broker)
+    build:
+      context: ../rails/edu-suite   # reuses edu-suite/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: edu-suite-dashboard:latest
+    environment:
+      BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      EDU_LIBRARY_DIR: /library
+      # Render local (workstation) time, not UTC, for human-readable output names.
+      TZ: ${TZ:-America/Los_Angeles}
+      # Keep the SQLite job DB on a real volume, NOT the Windows bind mount: SQLite WAL's
+      # shared-memory index can't be mapped there by the per-job worker subprocess, so
+      # every job crashed on DB open. Artifacts (input/output/zips) stay on /library.
+      EDU_DB_PATH: /data/library.db
+      # Shared translation cache on a persistent volume (survives rebuilds; one cache
+      # across all workflows instead of per-job caches thrown away with work/).
+      EDU_CACHE_DIR: /cache
+      # Size-scoped wildcard; the broker resolves it to the newest matching installed
+      # model (see resolve_ollama_model). Override with EDU_LLM_MODEL in deploy/.env.
+      EDU_LLM_MODEL: ${EDU_LLM_MODEL:-mistral-small3*:24b}
+      # Retention for the edu-suite (content) instance: the central scheduler fires
+      # POST /api/maintenance/expire daily to delete done/failed jobs older than this. 0 = keep
+      # forever. (The IEP instance has its own separate 30-day in-process sweep.)
+      EDU_SUITE_RETENTION_DAYS: ${EDU_SUITE_RETENTION_DAYS:-365}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${EDU_LIBRARY_HOST:-D:/edu-suite-library}:/library"
+      - edu_db:/data          # job/event DB on ext4 so SQLite WAL works across processes
+      - edu_cache:/cache       # shared translation cache, persisted across rebuilds
+    expose:
+      - "8800"
+    restart: always
+
+  iep:                           # IEP Present Levels — SAME image as dashboard, IEP_ONLY=1.
+    # Reuses edu-suite-dashboard:latest (built by the `dashboard` service); no separate build.
+    # Its own library + DB volumes keep student PII physically separate from edu-suite content.
+    image: edu-suite-dashboard:latest
+    depends_on:
+      - dashboard                # ensures the shared image is built before this starts
+    environment:
+      IEP_ONLY: "1"              # serve ONLY the IEP Present Levels workflow
+      BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      EDU_LIBRARY_DIR: /library
+      EDU_DB_PATH: /data/library.db
+      EDU_CACHE_DIR: /cache
+      TZ: ${TZ:-America/Los_Angeles}
+      # IEP generation defaults to qwen3.6 (English-only); broker resolves the glob.
+      IEP_LLM_MODEL: ${IEP_LLM_MODEL:-qwen3.6*:27b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${IEP_LIBRARY_HOST:-D:/iep-library}:/library"   # student PII — separate from edu-suite
+      - iep_db:/data
+      - iep_cache:/cache
+    expose:
+      - "8800"
+    restart: always
+
+  recipe-book:                   # recipe-book backend (FastAPI over the recipe_book core; LLM + SDXL icons via broker)
+    build:
+      context: ../rails/recipe-book # uses recipe-book/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: recipe-book-backend:latest
+    environment:
+      RECIPE_BOOK_DATA_DIR: /srv/var
+      RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      # Size-scoped wildcard; the broker resolves it to the newest matching installed model.
+      RECIPE_BOOK_LLM_MODEL: ${RECIPE_BOOK_LLM_MODEL:-mistral-small3*:24b}
+      # The real culinary AI + the recipe-photo reader. Point at per-rail roles in deploy/.env
+      # (@recipe / @recipe-vision) so Admin > Rails can repoint them live; defaults preserve
+      # today's model (gemma3:27b) if unset.
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-gemma4*:26b}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-gemma4*:26b}
+      # Per-recipe icon IMAGE model (media worker, not Ollama). Point at the @recipe-icon media
+      # role in deploy/.env so Admin > Rails can switch sdxl-turbo <-> flux-schnell live.
+      RECIPE_BOOK_ICON_MODEL: ${RECIPE_BOOK_ICON_MODEL:-flux-schnell}
+      # Multi-tenant: the platform user who inherits the pre-existing single-tenant data
+      # (meal plan / pantry / bar) when per-user scoping goes live.
+      RECIPE_BOOK_PRIMARY_USER: ${RECIPE_BOOK_PRIMARY_USER:-admin}
+      # "Send to Phone": per-user Google Tasks. Set the shared OAuth *app* creds + redirect URI
+      # and each user connects their own Google account in-app; blank = feature off (Connect
+      # button hidden). One-time OAuth setup: rails/recipe-book/docs/GOOGLE_TASKS.md.
+      RECIPE_BOOK_GTASKS_CLIENT_ID: ${RECIPE_BOOK_GTASKS_CLIENT_ID:-}
+      RECIPE_BOOK_GTASKS_CLIENT_SECRET: ${RECIPE_BOOK_GTASKS_CLIENT_SECRET:-}
+      # Must match the Web client's registered redirect URI, e.g.
+      # https://platform.example.com/recipe-book/api/gtasks/callback
+      RECIPE_BOOK_GTASKS_REDIRECT_URI: ${RECIPE_BOOK_GTASKS_REDIRECT_URI:-}
+      RECIPE_BOOK_GTASKS_LIST_TITLE: ${RECIPE_BOOK_GTASKS_LIST_TITLE:-Shopping List}
+      # Fernet key (deploy/.env) that encrypts stored Google refresh tokens at rest. Blank =
+      # plaintext (legacy). Rotating it invalidates stored tokens (users re-connect).
+      RECIPE_BOOK_TOKEN_KEY: ${RECIPE_BOOK_TOKEN_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - recipe_book_data:/srv/var  # recipe_book.db + recipes/ (markdown corpus) + icons/, seeded once from the host
+    expose:
+      - "8830"
+    restart: always
+
+  bouquet:                       # Bouquet Builder — bouquet photo -> full flower report.
+    # Two broker round-trips: @vision (gemma3:27b) identifies the flowers from the photo,
+    # @chat writes the report from the baked-in flower knowledge base. Torch-free.
+    build:
+      context: ../rails/bouquet     # uses bouquet/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: bouquet-backend:latest
+    environment:
+      BOUQUET_DATA_DIR: /srv/var
+      BOUQUET_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      # Roles: @vision identifies the flowers; the large chat model writes both the
+      # florist description and the expert analysis. The broker resolves the leading @
+      # (roles.json). Override with a plain model name in deploy/.env if needed.
+      BOUQUET_VISION_MODEL: ${BOUQUET_VISION_MODEL:-@vision}
+      BOUQUET_DESCRIPTION_MODEL: ${BOUQUET_DESCRIPTION_MODEL:-@chat-large}
+      BOUQUET_ANALYSIS_MODEL: ${BOUQUET_ANALYSIS_MODEL:-@chat-large}
+      # Local time drives the weekly cleanup sweep (Sunday 03:00) of abandoned uploads.
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - bouquet_data:/srv/var    # analyses DB + uploaded photos (the flower KB is baked into the image)
+    expose:
+      - "8840"
+    restart: always
+
+  workstation:                   # browser-terminal backend — SSH client into the host.
+    # INERT until you (a) add "workstation" to the gateway's PLATFORM_ENABLED_APPS and
+    # (b) create ./workstation-keys with an SSH key + known_hosts and set WORKSTATION_SSH_*.
+    # Highest-privilege app (a shell on the host) — entitle it to yourself only.
+    # See apps/workstation/README.md.
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.workstation
+    image: workstation-backend:latest
+    environment:
+      WORKSTATION_SSH_HOST: ${WORKSTATION_SSH_HOST:-host.docker.internal}
+      WORKSTATION_SSH_PORT: ${WORKSTATION_SSH_PORT:-22}
+      WORKSTATION_SSH_USER: ${WORKSTATION_SSH_USER:-}
+      WORKSTATION_SSH_KEY_PATH: /keys/id_workstation
+      WORKSTATION_KNOWN_HOSTS_PATH: /keys/known_hosts
+      WORKSTATION_INSECURE_SKIP_HOST_KEY_CHECK: ${WORKSTATION_INSECURE_SKIP_HOST_KEY_CHECK:-false}
+      WORKSTATION_AUDIT_DIR: /audit
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Least-privilege (P1.4): non-root user (in the image), read-only rootfs, no new
+    # privileges, all Linux capabilities dropped. Writable paths are the tmpfs + the
+    # audit volume only. Shrinks the blast radius if this backend is ever compromised.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    volumes:
+      - "${WORKSTATION_KEYS_HOST:-./workstation-keys}:/keys:ro"
+      - workstation_audit:/audit   # session audit log (rotated, retention-capped)
+    expose:
+      - "8720"
+    restart: always
+
+  terminal-fun:                  # Terminal Fun — local terminal games/toys + an AI assistant
+    # (page Q&A + on-the-fly toy tuning) that talks to the platform broker. Games run as a
+    # non-root PTY subprocess inside this container with an ephemeral per-session home on tmpfs.
+    build:
+      context: ../rails/terminal-fun
+      dockerfile: deploy/Dockerfile
+    image: terminal-fun-backend:latest
+    environment:
+      TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma4*:12b}
+      TERMINAL_FUN_DATA_DIR: /data   # per-user game saves (NetHack + Crawl) persist here
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Sandbox: non-root (in the image), no new privileges, all Linux caps dropped, writable temp
+    # on tmpfs. NOT read_only rootfs — some games (e.g. nethack) write into /var/games at runtime.
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    volumes:
+      - terminal_fun_data:/data   # per-user save/resume state (NetHack + Crawl), persisted
+    expose:
+      - "8730"
+    restart: always
+
+  ai-playground:                 # AI Playground — multi-demo rail (first demo: RAG over documents).
+    # Retrieval via @embed (bge-m3) + local generation via @ai-playground (Nemotron) through the
+    # broker; the in-demo NIM toggle flips generation to the NVIDIA cloud. Streams tokens over a
+    # WebSocket (the gateway's live /ws proxy). Torch-free.
+    build:
+      context: ../rails/ai-playground   # uses ai-playground/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: ai-playground-backend:latest
+    environment:
+      AI_PLAYGROUND_DATA_DIR: /srv/var
+      AI_PLAYGROUND_SEED_DIR: /srv/seed/corpora
+      AI_PLAYGROUND_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      # Local generation role (repointable via Admin > Rails) + the retrieval embedder.
+      AI_PLAYGROUND_CHAT_MODEL: ${AI_PLAYGROUND_CHAT_MODEL:-@ai-playground}
+      AI_PLAYGROUND_EMBED_MODEL: ${AI_PLAYGROUND_EMBED_MODEL:-@embed}
+      # NVIDIA NIM toggle: key from the gitignored deploy/.env. Absent => toggle greyed out.
+      AI_PLAYGROUND_NVIDIA_API_KEY: ${AI_PLAYGROUND_NVIDIA_API_KEY:-}
+      AI_PLAYGROUND_NVIDIA_BASE_URL: ${AI_PLAYGROUND_NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      AI_PLAYGROUND_NVIDIA_CHAT_MODEL: ${AI_PLAYGROUND_NVIDIA_CHAT_MODEL:-nvidia/nemotron-mini-4b-instruct}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ai_playground_data:/srv/var   # corpora DB + uploaded docs (seed corpora baked into the image)
+    expose:
+      - "8850"
+    restart: always
+
+  gateway:                       # shell host + reverse proxy
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.gateway
+    image: platform-gateway:latest
+    depends_on:
+      - dashboard
+      - iep
+      - recipe-book
+      - bouquet
+      - workstation
+      - terminal-fun
+      - ai-playground
+    environment:
+      PLATFORM_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      # Direct Ollama endpoint — only the admin model-pool Delete (ollama rm) uses it.
+      PLATFORM_OLLAMA_URL: http://host.docker.internal:11434
+      PLATFORM_APP_EDU_SUITE_URL: http://dashboard:8800
+      PLATFORM_APP_IEP_URL: http://iep:8800
+      PLATFORM_APP_RECIPE_BOOK_URL: http://recipe-book:8830
+      PLATFORM_APP_BOUQUET_URL: http://bouquet:8840
+      PLATFORM_APP_WORKSTATION_URL: http://workstation:8720
+      PLATFORM_APP_TERMINAL_FUN_URL: http://terminal-fun:8730
+      PLATFORM_APP_AI_PLAYGROUND_URL: http://ai-playground:8850
+      PLATFORM_FRONTEND_DIST: /app/shell-dist
+      PLATFORM_EDU_SUITE_DIST: /app/edu-suite-dist
+      PLATFORM_IEP_DIST: /app/iep-dist
+      PLATFORM_RECIPE_BOOK_DIST: /app/recipe-book-dist
+      PLATFORM_BOUQUET_DIST: /app/bouquet-dist
+      PLATFORM_WORKSTATION_DIST: /app/workstation-dist
+      PLATFORM_TERMINAL_FUN_DIST: /app/terminal-fun-dist
+      PLATFORM_AI_PLAYGROUND_DIST: /app/ai-playground-dist
+      # auth / multi-tenant
+      PLATFORM_DB_URL: sqlite:////data/platform.db
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      # MUST be true once served over HTTPS/public (see Caddyfile + INSTRUCTIONS).
+      PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:                     # host-built dists, mounted read-only
+      - ../apps/platform/frontend/dist:/app/shell-dist:ro
+      - ../rails/edu-suite/apps/dashboard/frontend/dist:/app/edu-suite-dist:ro
+      - ../rails/edu-suite/apps/dashboard/frontend/dist-iep:/app/iep-dist:ro
+      - ../rails/recipe-book/frontend/dist:/app/recipe-book-dist:ro
+      - ../rails/bouquet/frontend/dist:/app/bouquet-dist:ro
+      - ../rails/workstation/frontend/dist:/app/workstation-dist:ro
+      - ../rails/terminal-fun/frontend/dist:/app/terminal-fun-dist:ro
+      - ../rails/ai-playground/frontend/dist:/app/ai-playground-dist:ro
+      - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
+    expose:
+      - "8700"
+    restart: always
+
+  caddy:                         # TLS + reverse proxy front door
+    image: caddy:2
+    depends_on:
+      - gateway
+    ports:
+      # Published on a high host port instead of privileged 80/443. Recreating this
+      # container on a full `compose up` was rebinding 80/443 and churning the Windows
+      # Docker/WSL NAT, which briefly dropped host internet. Cloudflare terminates public
+      # TLS and the tunnel forwards plain HTTP to this port, so no local 443 is needed.
+      # REQUIRED when changing this: update the Cloudflare tunnel Public Hostname service
+      # URL to http://localhost:1111, and use http://platform.localhost:1111 locally.
+      - "1111:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+volumes:
+  caddy_data:
+  caddy_config:
+  workstation_audit:  # workstation session audit log (rotated daily, retention-capped)
+  gateway_data:   # persists the gateway auth DB across rebuilds
+  recipe_book_data: # persists recipe-book's DB + markdown corpus + generated icons across rebuilds
+  bouquet_data:   # persists bouquet's analyses DB + uploaded photos (the flower KB is baked into the image)
+  ai_playground_data: # persists ai-playground's corpora DB + uploaded docs (seed corpora baked into the image)
+  edu_db:         # edu-suite job/event SQLite DB (off the bind mount so WAL works)
+  edu_cache:      # edu-suite shared translation cache
+  iep_db:         # IEP app job/event DB (separate from edu-suite — student PII isolation)
+  iep_cache:      # IEP app cache
+  terminal_fun_data:  # terminal-fun per-user save/resume state (NetHack + Crawl)

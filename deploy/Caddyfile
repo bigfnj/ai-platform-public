@@ -1,0 +1,19 @@
+# Caddy in front of the platform gateway (the unified shell + reverse proxy).
+#
+# `local_certs` = Caddy's internal CA (no public ACME), right for a home/LAN box.
+# From THIS machine: https://platform.localhost (localhost is auto-trusted).
+# From other LAN devices: change the site address to this machine's name/IP and
+# import Caddy's root CA (see deploy/README.md); or use http://platform.localhost
+# for quick, trust-free testing.
+
+{
+	local_certs
+}
+
+# platform.example.com is served over plain HTTP here on purpose: the public HTTPS
+# is terminated at Cloudflare's edge and reaches us through the cloudflared tunnel to
+# localhost:80, so this hop is loopback-only.
+http://platform.localhost, http://platform.example.com {
+	encode zstd gzip
+	reverse_proxy gateway:8700
+}

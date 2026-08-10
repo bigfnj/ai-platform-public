@@ -1,0 +1,12 @@
+.dialog{width:min(1500px,98vw)}
+.switch:before{content:"Choose your school level";flex-basis:100%;text-align:center;font-size:13px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#667087}
+.worksheetStage{display:grid;grid-template-columns:minmax(0,1fr) 250px;align-items:start}
+.worksheetCanvas{width:100%;height:auto;min-height:700px;overflow:visible;border-right:1px solid #dbe2ef;background:#e9edf4}
+.pdfPages{width:100%;background:#fff}
+.pdfPages canvas{display:block;width:100%;height:auto;margin:0 auto 14px;background:#fff;box-shadow:0 2px 8px #1f2a4420}
+.pdfError{margin:0;padding:40px;text-align:center;background:#fff;color:#5e6a82}.pdfError a{color:#506de8;font-weight:900}
+.answerDock{position:sticky;top:10px;width:100%;height:auto;max-height:90vh;overflow:auto;padding:16px;background:#f7f9fd}
+.answerDock>b,.answerDock>small{display:block}
+.answerDock label{margin-bottom:12px}
+@media(max-width:900px){.worksheetStage{grid-template-columns:1fr}.worksheetCanvas{border-right:0}.answerDock{position:static;max-height:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.answerDock>b,.answerDock>small{grid-column:1/-1}.answerDock label{margin:0}}
+@media(max-width:520px){.answerDock{grid-template-columns:1fr}}

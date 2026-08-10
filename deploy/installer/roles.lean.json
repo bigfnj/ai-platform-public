@@ -1,0 +1,10 @@
+{
+  "_comment": "Lean role map for an 8 GB-VRAM / no-media install (the installer copies this over services/broker/roles.json). Everything runs on gemma3:4b — it's small AND multimodal, so it covers @chat/@vision together — plus bge-m3 for embeddings. Two pulls, ~4.5 GB, fits 8 GB with headroom. The full 24 GB role map (mistral-small/qwen3.6/gemma3:27b/FLUX) lives in services/broker/roles.json.",
+  "chat": "gemma3:4b",
+  "chat-fast": "gemma3:4b",
+  "chat-large": "gemma3:4b",
+  "reasoning": "gemma3:4b",
+  "code": "gemma3:4b",
+  "vision": "gemma3:4b",
+  "embed": "bge-m3"
+}

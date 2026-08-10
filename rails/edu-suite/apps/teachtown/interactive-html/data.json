@@ -1,0 +1,88 @@
+{
+  "brand": {
+    "title": "✦ TeachTown Adventures",
+    "tagline": "Learn • Play • Grow"
+  },
+  "meta": {
+    "ELA": [
+      "📚",
+      "#ff6b6b"
+    ],
+    "Math": [
+      "🔢",
+      "#5b8def"
+    ],
+    "Science": [
+      "🔬",
+      "#40b983"
+    ],
+    "Social Studies": [
+      "🌎",
+      "#a56de2"
+    ]
+  },
+  "vocabIcons": {
+    "Malala": "👧🏽",
+    "education": "🏫",
+    "rights": "⚖️",
+    "leader": "🧭",
+    "triangle": "🔺",
+    "area": "📐",
+    "heat": "☀️",
+    "pharaoh": "👑",
+    "event": "🎬",
+    "evidence": "🔎",
+    "setting": "🏞️",
+    "plot": "🧩",
+    "rectangle": "▭",
+    "length": "📏",
+    "absorb": "🧽",
+    "nationalism": "🏳️",
+    "injured": "🩹",
+    "hospital": "🏥",
+    "coordinate": "📍",
+    "vertex": "🔸",
+    "polygon": "⬡",
+    "candidate": "🙋",
+    "ballot": "🗳️",
+    "election": "✅",
+    "theme": "💡",
+    "point of view": "👀",
+    "revise": "✏️",
+    "side length": "📏",
+    "coordinate plane": "🔲",
+    "space": "↔️",
+    "instrument": "🎸",
+    "musician": "🎵",
+    "influence": "✨",
+    "orally": "🗣️",
+    "right triangle": "📐",
+    "hypotenuse": "📏",
+    "balanced diet": "🥗",
+    "suffix": "🔤",
+    "denotation": "📖",
+    "paraphrase": "💬",
+    "inference": "🧠",
+    "congruent": "🟰",
+    "protein": "🥚",
+    "unification": "🤝",
+    "confederation": "🔗",
+    "etymology": "🌱",
+    "derivation": "➡️",
+    "summary": "📝",
+    "parallelogram": "▱",
+    "degree": "🌡️",
+    "imperialism": "🗺️",
+    "industrialization": "🏭",
+    "colony": "🏝️",
+    "hyperbole": "😲",
+    "metaphor": "🌉",
+    "simile": "🪞",
+    "idiom": "💭",
+    "connotation": "❤️",
+    "trapezoid": "⏢",
+    "base": "⬇️",
+    "leg": "🦵"
+  },
+  "units": {}
+}

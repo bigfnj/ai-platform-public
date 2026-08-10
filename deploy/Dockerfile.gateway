@@ -1,0 +1,34 @@
+# Platform gateway / shell host — slim, torch-free image.
+#
+# Serves the unified shell SPA + each app's federated remote bundle (mounted as
+# read-only volumes), reverse-proxies /<app>/api/* to the app backends, and owns
+# /api/platform/* (broker status for the top-bar widget). It never touches the GPU;
+# it reaches the native broker via host.docker.internal.
+#
+# Build from the platform repo root:  docker build -f deploy/Dockerfile.gateway .
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+        "fastapi>=0.111" "uvicorn[standard]>=0.30" "httpx>=0.27" \
+        "pydantic>=2.7" "pydantic-settings>=2.2" \
+        "sqlalchemy>=2.0" "pwdlib[argon2]>=0.2.1" \
+        "websockets>=13"
+
+WORKDIR /app
+COPY packages/platform_core/platform_core /app/packages/platform_core/platform_core
+COPY apps/platform/backend /app/apps/platform/backend
+
+# Frontend dists are MOUNTED at runtime (see docker-compose.yml), not baked in, so
+# a rebuild of either frontend doesn't require rebuilding this image.
+ENV PYTHONPATH=/app/apps/platform/backend:/app/packages/platform_core \
+    PLATFORM_BROKER_URL=http://host.docker.internal:11500 \
+    PLATFORM_APP_EDU_SUITE_URL=http://dashboard:8800 \
+    PLATFORM_APP_WORKSTATION_URL=http://workstation:8720 \
+    PLATFORM_FRONTEND_DIST=/app/shell-dist \
+    PLATFORM_EDU_SUITE_DIST=/app/edu-suite-dist \
+    PLATFORM_WORKSTATION_DIST=/app/workstation-dist \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8700
+CMD ["uvicorn", "platform_gateway_app.main:app", "--app-dir", "apps/platform/backend", \
+     "--host", "0.0.0.0", "--port", "8700"]

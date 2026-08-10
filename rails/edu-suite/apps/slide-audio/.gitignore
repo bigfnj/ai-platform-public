@@ -1,0 +1,27 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+output/
+*.wav
+voices/*.wav
+*.egg-info/
+dist/
+.python-version
+uv.lock
+
+# AI agent files — never track (local-only / extension-injected)
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.github/copilot-instructions.md
+.cursorrules
+.windsurfrules
+.clinerules
+.codex/
+AI_UNDERSTANDING/
+
+SESSION_*
+
+# Intake documents — runtime data (processed source decks), not source code
+intake/processed/*.pdf

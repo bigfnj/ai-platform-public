@@ -1,0 +1,20 @@
+# Caddy in front of the edu-suite dashboard.
+#
+# `local_certs` makes Caddy issue certificates from its own internal CA (no public
+# ACME), which is the right choice for a home/LAN box. The dashboard is served at
+# the site address below and reverse-proxied to the dashboard container.
+#
+# Access from THIS machine:  https://edu.localhost  (localhost is auto-trusted).
+# Access from OTHER LAN devices: change the site address to this machine's name or
+# IP (e.g. `edu.mybox.lan` or `https://192.168.1.50`) and import Caddy's root CA on
+# those devices (see deploy/README.md). For quick, trust-free testing, change the
+# site address to `http://edu.localhost` (plain HTTP, no cert).
+
+{
+	local_certs
+}
+
+edu.localhost {
+	encode zstd gzip
+	reverse_proxy dashboard:8800
+}

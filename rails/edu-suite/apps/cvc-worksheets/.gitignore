@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+assets/audio/*.wav
+assets/clipart/*.png
+assets/clipart/*.jpg
+assets/clipart/*.svg
+assets/generated/
+output/
+data/translation_cache.json
+uv.lock
