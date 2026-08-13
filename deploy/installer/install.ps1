@@ -28,9 +28,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root      = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # deploy/installer -> repo root
 $Installer = $PSScriptRoot
-$LogFile   = Join-Path $env:TEMP 'ai-platform-install.log'
-$DoneFile  = Join-Path $env:TEMP 'ai-platform-install.done'
-$FailFile  = Join-Path $env:TEMP 'ai-platform-install.fail'
+# $env:TEMP can be the 8.3 short form (C:\Users\JUSTIN~1.LOW\...), which fails to resolve on boxes
+# with 8.3 name generation disabled. USERPROFILE is the long form, so derive the temp base from it.
+$TempBase  = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
+if (-not (Test-Path $TempBase)) { $TempBase = $env:TEMP }
+$LogFile   = Join-Path $TempBase 'ai-platform-install.log'
+$DoneFile  = Join-Path $TempBase 'ai-platform-install.done'
+$FailFile  = Join-Path $TempBase 'ai-platform-install.fail'
 $DockerBin = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin'
 if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
 
@@ -138,7 +142,7 @@ U="$(getent passwd 1000 | cut -d: -f1)"; if [ -n "$U" ]; then usermod -aG docker
 if ! grep -qs systemd=true /etc/wsl.conf; then printf '[boot]\nsystemd=true\n' >> /etc/wsl.conf; fi
 systemctl enable --now docker 2>/dev/null || true
 '@
-  $tmp = Join-Path $env:TEMP 'ai-platform-docker-wsl.sh'
+  $tmp = Join-Path $TempBase 'ai-platform-docker-wsl.sh'
   [System.IO.File]::WriteAllText($tmp, ($sh -replace "`r`n", "`n"))
   & wsl.exe -u root bash (ConvertTo-WslPath $tmp)
   return ($LASTEXITCODE -eq 0)
