@@ -381,7 +381,7 @@ async def platform_models(user: User = Depends(require_user)) -> Any:
 async def platform_load(body: ModelBody, admin: User = Depends(require_admin)) -> Any:
     try:
         # Default to a 30m auto-unload (not pinned) so a manually loaded model
-        # doesn't camp VRAM forever — matches the tray's "Unload after" default.
+        # doesn't camp VRAM forever — a sensible default for a manually loaded model.
         return await app.state.broker.load(body.model, keep_alive="30m")
     except BrokerError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

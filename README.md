@@ -67,7 +67,6 @@ services/broker/          GPU / Model Broker, the only thing that touches the GP
 apps/platform/            Gateway (reverse proxy + auth + entitlements) + React shell host + Admin
 web/                      Shared @web-core design system (styles + AppShell + ModelWidget)
 rails/<name>/             The federated rail apps
-tools/broker-tray/        Windows tray control for the broker / Ollama
 deploy/                   docker-compose + Caddyfile + service-install + activate-model-roles.ps1
 docs/                     INSTALL.md (lean installer) + architecture.md
 ```

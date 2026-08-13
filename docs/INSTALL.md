@@ -43,6 +43,13 @@ self-elevates only for provisioning. *(Piping a remote script to `iex` runs what
 powershell -ExecutionPolicy Bypass -File deploy\installer\install.ps1
 ```
 
+Prefer to stay in the terminal? Add `-Console` for a colorful, in-terminal install — same flow,
+no window (this is also option 2 in the one-liner's menu):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\installer\install.ps1 -Console
+```
+
 - **Prerequisites** — the doctor shows ✓/✗; **Install missing** runs winget for the gaps.
 - **Super-admin** — set the username + password you'll log in with.
 - **Rails** — Admin (always) + Terminal Fun (default) + Recipe Book (optional; ships with a seed

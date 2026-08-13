@@ -97,8 +97,9 @@ function Show-Menu {
   Write-Host ''
   Write-Host '  ------------------------------------------------------------' -ForegroundColor DarkGray
   Write-Host '   1  Re-check prerequisites (doctor)'
-  Write-Host '   2  Install   (opens the guided installer window)'
-  Write-Host '   3  Open the install folder'
+  Write-Host '   2  Install in this terminal   (recommended)'
+  Write-Host '   3  Install with the desktop window (GUI)'
+  Write-Host '   4  Open the install folder'
   Write-Host '   Q  Quit'
   Write-Host '  ------------------------------------------------------------' -ForegroundColor DarkGray
 }
@@ -107,10 +108,11 @@ while ($run) {
   Show-Menu
   switch ((Read-Host '  Select').Trim().ToUpperInvariant()) {
     '1' { & powershell -NoProfile -ExecutionPolicy Bypass -File $Installer -Check }
-    '2' { Write-Head 'Launching the installer window (close it to return here)...'; & $Installer }
-    '3' { Start-Process explorer.exe $Dir }
+    '2' { & $Installer -Console }
+    '3' { Write-Head 'Launching the installer window (close it to return here)...'; & $Installer }
+    '4' { Start-Process explorer.exe $Dir }
     'Q' { $run = $false }
-    default { Write-Warn2 'Unrecognized choice - enter 1, 2, 3, or Q.' }
+    default { Write-Warn2 'Unrecognized choice - enter 1, 2, 3, 4, or Q.' }
   }
 }
 Write-Host ''

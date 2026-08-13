@@ -1,12 +1,13 @@
 <#
-  AI-Platform lean installer (GUI). Targets an 8 GB-VRAM Windows box with no HuggingFace token
-  and no media/image pipeline. Installs: the shell (admin) + Terminal Fun + optional Recipe Book,
-  on gemma3:4b + bge-m3, with the native broker/ollama NSSM services and BrokerTray.
+  AI-Platform lean installer. Targets an 8 GB-VRAM Windows box with no HuggingFace token and no
+  media/image pipeline. Installs: the shell (admin) + Terminal Fun + optional Recipe Book, on
+  gemma3:4b + bge-m3, with the native broker service (Ollama runs via its own app on :11434).
 
-  Run:   powershell -ExecutionPolicy Bypass -File install.ps1
-  Doctor only (no window): powershell -ExecutionPolicy Bypass -File install.ps1 -Check
+  Run (GUI window):  powershell -ExecutionPolicy Bypass -File install.ps1
+  Run in-terminal:   powershell -ExecutionPolicy Bypass -File install.ps1 -Console
+  Doctor only:       powershell -ExecutionPolicy Bypass -File install.ps1 -Check
 
-  Design: the window (this process, non-elevated) collects inputs and tails a log; the actual
+  Design: the front-end (this process, non-elevated) collects inputs and tails a log; the actual
   provisioning re-launches this script with -Provision, elevated, which writes progress to the
   shared log + a DONE/FAIL marker. (Start-Process -Verb RunAs can't redirect stdout, hence the
   file-based log.)
@@ -14,6 +15,7 @@
 [CmdletBinding()]
 param(
   [switch]$Check,                 # run the prereq doctor to the console and exit
+  [switch]$Console,               # run the whole install in this terminal (no GUI window)
   [switch]$Provision,             # internal: run the elevated provisioning steps
   [switch]$Force,                 # bypass the existing-install guard
   [string]$AdminUser,
@@ -151,13 +153,7 @@ function Invoke-Provision {
       if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed (see the log; if this is a credsStore error, run the compose step from an interactive elevated PowerShell in deploy\).' }
     }
 
-    # 5. install the BrokerTray (native tray control), best-effort
-    try {
-      $tray = Join-Path $Root 'tools\broker-tray\BrokerTray.exe'
-      if (Test-Path $tray) { Start-Process $tray | Out-Null; Write-Log 'launched BrokerTray.' }
-    } catch { Write-Log "tray: $($_.Exception.Message)" }
-
-    # 6. wait for the gateway
+    # 5. wait for the gateway
     Write-Log 'waiting for the gateway...'
     for ($i = 0; $i -lt 60; $i++) {
       try { Invoke-WebRequest 'http://localhost:1111/api/platform/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null; break } catch { Start-Sleep 2 }
@@ -171,6 +167,139 @@ function Invoke-Provision {
 }
 
 # ---------------------------------------------------------------------------
+# Console (no-window) installer - the same flow as the GUI, driven in the terminal.
+# ---------------------------------------------------------------------------
+function Invoke-ConsoleInstall {
+  function CW($text, $color = 'Gray') { Write-Host $text -ForegroundColor $color }
+  function Prereq($rs, $key) { $rs | Where-Object { $_.Key -eq $key } }
+  function HardReady($rs) { $d = Prereq $rs 'docker'; $o = Prereq $rs 'ollama'; return ($d -and $d.State -eq 'running' -and $o -and $o.Ok) }
+
+  function Banner {
+    try { Clear-Host } catch {}
+    CW ''
+    CW '  ==============================================================' 'DarkCyan'
+    CW '        A I - P L A T F O R M      lean install (terminal)' 'White'
+    CW '  ==============================================================' 'DarkCyan'
+    CW '   one GPU, one broker, a handful of rails. lets go.' 'DarkGray'
+  }
+
+  function Show-Doctor {
+    $rs = Test-Prereqs
+    CW ''
+    CW '  Prerequisites' 'Cyan'
+    foreach ($r in $rs) {
+      if ($r.Ok) { Write-Host '   [OK]  ' -ForegroundColor Green -NoNewline }
+      else { Write-Host '   [ - ] ' -ForegroundColor Yellow -NoNewline }
+      Write-Host ("{0,-22} {1}" -f $r.Name, $r.Detail)
+    }
+    return $rs
+  }
+
+  Banner
+  $rs = Show-Doctor
+
+  # 1. offer to install the missing, fixable prerequisites via winget
+  $missing = $rs | Where-Object { -not $_.Ok -and $_.Fix }
+  if ($missing) {
+    CW ''
+    CW ('  Missing: ' + (($missing | ForEach-Object { $_.Name }) -join ', ')) 'Yellow'
+    if ((Read-Host '  Install them now with winget? [Y/n]') -notmatch '^[Nn]') {
+      foreach ($p in $missing) {
+        CW "  installing $($p.Fix) (this can take several minutes)..." 'DarkCyan'
+        Start-Process winget -Wait -ArgumentList @('install', '--id', $p.Fix, '-e', '--accept-source-agreements', '--accept-package-agreements')
+      }
+      $rs = Show-Doctor
+    }
+  }
+
+  # 2. Docker must be RUNNING. If installed-but-stopped, launch Docker Desktop and spin-wait.
+  $d = Prereq $rs 'docker'
+  if ($d.State -eq 'missing') { CW ''; CW '  Docker Desktop is required and still not installed - aborting.' 'Red'; return }
+  if ($d.State -ne 'running') {
+    $dd = Get-DockerDesktopExe
+    if ($dd) { CW ''; CW '  Starting Docker Desktop - accept its license, then hang tight...' 'DarkCyan'; try { Start-Process $dd | Out-Null } catch {} }
+    else { CW ''; CW '  Start Docker Desktop and accept its license...' 'DarkCyan' }
+    $spin = '|', '/', '-', '\'; $i = 0; $deadline = (Get-Date).AddMinutes(15)
+    while ((Get-Date) -lt $deadline) {
+      $d = Prereq (Test-Prereqs) 'docker'
+      if ($d.State -eq 'running') { break }
+      Write-Host ("`r   {0}  waiting for the Docker engine...   " -f $spin[$i % 4]) -ForegroundColor DarkCyan -NoNewline
+      $i++; Start-Sleep -Milliseconds 700
+    }
+    if ($d.State -eq 'running') { Write-Host "`r   [OK]  Docker engine is up.                 " -ForegroundColor Green }
+    else { Write-Host "`r   [ - ] Docker engine did not come up.       " -ForegroundColor Yellow }
+  }
+
+  # 3. re-read; Ollama just needs to be installed (its own app serves :11434; provisioning verifies).
+  $rs = Test-Prereqs
+  if (-not (HardReady $rs)) {
+    CW ''
+    CW '  Not ready: need Docker running + Ollama installed. Fix those and re-run.' 'Red'
+    return
+  }
+  CW ''
+  CW '  All set - Docker is up and Ollama is installed.' 'Green'
+
+  # 4. existing-install guard
+  $ex = Test-ExistingInstall
+  if ($ex -and -not $Force) {
+    CW ''
+    CW "  An existing platform install was detected ($ex)." 'Red'
+    CW '  This installer refuses to touch it - run on a clean machine/VM (or pass -Force).' 'Red'
+    return
+  }
+
+  # 5. collect inputs
+  CW ''
+  CW '  Super-admin account' 'Cyan'
+  $u = Read-Host '   Username [admin]'; if (-not $u) { $u = 'admin' }
+  $pass = ''
+  while (-not $pass) {
+    $sec = Read-Host '   Password' -AsSecureString
+    $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($b)
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
+    if (-not $pass) { CW '   Password cannot be empty.' 'Yellow' }
+  }
+  CW ''
+  CW '  Rails: Admin shell (always) + Terminal Fun (default).' 'Cyan'
+  $withRecipe = (Read-Host '   Also install Recipe Book? [y/N]') -match '^[Yy]'
+  $enabled = @('terminal-fun'); if ($withRecipe) { $enabled += 'recipe-book' }
+
+  # 6. launch the elevated provisioning and tail its log, in color
+  CW ''
+  CW '  Provisioning (approve the UAC prompt)...' 'Cyan'
+  Set-Content -Path $LogFile -Value '' -Encoding utf8
+  Remove-Item $DoneFile, $FailFile -ErrorAction SilentlyContinue
+  $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
+    '-AdminUser', $u, '-AdminPass', $pass, '-EnabledApps', ($enabled -join ','))
+  if ($withRecipe) { $pargs += '-WithRecipeBook' }
+  Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
+
+  $pos = 0
+  while ($true) {
+    if (Test-Path $LogFile) {
+      $all = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
+      if ($all -and $all.Length -gt $pos) {
+        $chunk = $all.Substring($pos); $pos = $all.Length
+        foreach ($line in ($chunk -split "`r?`n")) {
+          if ($line) {
+            $col = 'Gray'
+            if ($line -match 'ERROR|failed') { $col = 'Red' }
+            elseif ($line -match 'DONE|up at') { $col = 'Green' }
+            elseif ($line -match 'pull|building|installing|waiting|ensuring|writing') { $col = 'DarkCyan' }
+            Write-Host "   $line" -ForegroundColor $col
+          }
+        }
+      }
+    }
+    if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://platform.localhost:1111  and log in.' 'Green'; break }
+    if (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red'; break }
+    Start-Sleep -Milliseconds 700
+  }
+}
+
+# ---------------------------------------------------------------------------
 # entrypoints
 # ---------------------------------------------------------------------------
 if ($Check) {
@@ -180,6 +309,7 @@ if ($Check) {
   if ($ex) { "`n[WARN] existing install detected: $ex (installer would refuse without -Force)" }
   return
 }
+if ($Console) { Invoke-ConsoleInstall; return }
 if ($Provision) { Invoke-Provision; return }
 
 # ---------------------------------------------------------------------------

@@ -213,7 +213,7 @@ class Broker:
             "jobs": self.gate.jobs(),
             # active is {op, model} while a media (image/tts) worker is running, else null.
             # Media models run in a short-lived subprocess and never show in Ollama's ps, so this
-            # is the only way a client (e.g. BrokerTray) can tell the GPU is busy on media.
+            # is the only way a client can tell the GPU is busy on media.
             "media": {"enabled": self.settings.media_enabled, "active": self._media_active},
         }
 
