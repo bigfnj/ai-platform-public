@@ -440,20 +440,39 @@ function Invoke-Provision {
       try { Invoke-WebRequest 'http://localhost:1111/api/platform/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null; break } catch { Start-Sleep 2 }
     }
 
-    # 6. WSL mode: keep the VM alive. WSL2 shuts an idle VM down (when no session is attached), which
+    # 6a. Podman mode: start the machine + the stack at logon. A Hyper-V machine does NOT idle-shut-down
+    # the way WSL2 does, so there is no keep-alive/`sleep infinity` hack here - just a normal startup
+    # script. Task Scheduler is Access-denied for non-elevated users on managed boxes, so this is a
+    # Startup-folder shortcut (always user-writable).
+    if ($RuntimeMode -eq 'podman') {
+      Write-Log 'installing a logon startup task (starts the podman machine + the stack)...'
+      try {
+        $startupPs1 = Join-Path $Installer 'platform-startup.ps1'
+        $startup = [Environment]::GetFolderPath('Startup')
+        $lnk = Join-Path $startup 'AI-Platform startup.lnk'
+        $ws = New-Object -ComObject WScript.Shell
+        $sc = $ws.CreateShortcut($lnk)
+        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $sc.Arguments = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$startupPs1`""
+        $sc.WindowStyle = 7
+        $sc.Description = 'Starts the podman machine and the AI-Platform stack at logon.'
+        $sc.Save()
+        Write-Log "startup shortcut installed: $lnk"
+      }
+      catch { Write-Log "startup-shortcut note ($($_.Exception.Message)); add it manually to keep the stack up across logons." }
+    }
+
+    # 6b. WSL mode: keep the VM alive. WSL2 shuts an idle VM down (when no session is attached), which
     # stops the containers; a logon-triggered `wsl --exec sleep infinity` holds it up. Registered as a
     # current-user task (no admin) and started now so the platform stays up this session too.
-    if ($DockerMode -eq 'wsl') {
+    if ($RuntimeMode -eq 'wsl') {
       # Keep the WSL VM alive across logons. Task Scheduler is often Access-denied for a non-elevated
       # user on managed boxes, so use a Startup-folder shortcut (always user-writable) that runs
       # deploy/installer/platform-startup.sh — it re-detects the WSL gateway IP, updates .env,
       # runs docker compose up -d, then sleeps forever to hold the VM up.
       Write-Log 'installing a logon keep-alive (holds the WSL VM + containers up)...'
       try {
-        # Convert Windows path to WSL mount path  (C:\foo\bar -> /mnt/c/foo/bar)
-        $drive  = $Root.Substring(0, 1).ToLower()
-        $rest   = $Root.Substring(2) -replace '\\', '/'
-        $wslScript = "/mnt/$drive$rest/deploy/installer/platform-startup.sh"
+        $wslScript = (ConvertTo-WslPath $Root) + '/deploy/installer/platform-startup.sh'
 
         $startup = [Environment]::GetFolderPath('Startup')
         $lnk = Join-Path $startup 'AI-Platform WSL keep-alive.lnk'
@@ -485,7 +504,7 @@ function Invoke-Provision {
 function Invoke-ConsoleInstall {
   function CW($text, $color = 'Gray') { Write-Host $text -ForegroundColor $color }
   function Prereq($rs, $key) { $rs | Where-Object { $_.Key -eq $key } }
-  function HardReady($rs) { $d = Prereq $rs 'docker'; $o = Prereq $rs 'ollama'; return ($d -and $d.State -eq 'running' -and $o -and $o.Ok) }
+  function HardReady($rs) { $d = Prereq $rs 'runtime'; $o = Prereq $rs 'ollama'; return ($d -and $d.State -eq 'running' -and $o -and $o.Ok) }
 
   function Banner {
     try { Clear-Host } catch {}
@@ -525,27 +544,31 @@ function Invoke-ConsoleInstall {
     }
   }
 
-  # 2. Docker must be RUNNING (Docker Desktop or the WSL2 engine). If missing: in WSL mode offer to
-  # install it; otherwise guide. If installed-but-stopped: start Desktop / the WSL daemon, spin-wait.
-  $d = Prereq $rs 'docker'
+  # 2. The container runtime must be RUNNING. If missing: create the podman machine, or offer to
+  # install Docker Engine into WSL2; otherwise guide. If installed-but-stopped: start it, spin-wait.
+  $d = Prereq $rs 'runtime'
   if ($d.State -eq 'missing') {
     if ($d.Mode -eq 'wsl') {
       CW ''; CW '  WSL2 is present but Docker Engine is not installed there.' 'Yellow'
       if ((Read-Host '  Install Docker Engine into WSL2 now? [Y/n]') -notmatch '^[Nn]') {
         CW '  installing Docker Engine into WSL2 (a few minutes)...' 'DarkCyan'
         Install-DockerInWsl | Out-Null
-        $rs = Show-Doctor; $d = Prereq $rs 'docker'
+        $rs = Show-Doctor; $d = Prereq $rs 'runtime'
       }
     }
     else {
-      CW ''; CW '  Docker is not available. Install Docker Desktop (where your org allows it) or set' 'Red'
-      CW '  up Docker on WSL2, then re-run. Aborting.' 'Red'; return
+      CW ''; CW '  No container runtime. Install Podman (winget install Podman.CLI - and see' 'Red'
+      CW '  docs/INSTALL.md for the Hyper-V prep) or Docker Desktop, then re-run. Aborting.' 'Red'; return
     }
   }
-  if ($d.State -eq 'missing') { CW '  Docker still not available - aborting.' 'Red'; return }
+  if ($d.State -eq 'missing') { CW '  Still no container runtime - aborting.' 'Red'; return }
   if ($d.State -ne 'running') {
     CW ''
-    if ($d.Mode -eq 'desktop') {
+    if ($d.Mode -eq 'podman') {
+      CW '  starting the podman machine (creates it on first run)...' 'DarkCyan'
+      Initialize-PodmanMachine | Out-Null
+    }
+    elseif ($d.Mode -eq 'desktop') {
       $dd = Get-DockerDesktopExe
       if ($dd) { CW '  starting Docker Desktop - accept its license, then hang tight...' 'DarkCyan'; try { Start-Process $dd | Out-Null } catch {} }
       else { CW '  start Docker Desktop and accept its license...' 'DarkCyan' }
@@ -553,25 +576,25 @@ function Invoke-ConsoleInstall {
     else { CW '  starting the WSL2 Docker daemon...' 'DarkCyan'; Start-DockerEngineWsl }
     $spin = '|', '/', '-', '\'; $i = 0; $deadline = (Get-Date).AddMinutes(15)
     while ((Get-Date) -lt $deadline) {
-      $d = Prereq (Test-Prereqs) 'docker'
+      $d = Prereq (Test-Prereqs) 'runtime'
       if ($d.State -eq 'running') { break }
-      Write-Host ("`r   {0}  waiting for the Docker engine...   " -f $spin[$i % 4]) -ForegroundColor DarkCyan -NoNewline
+      Write-Host ("`r   {0}  waiting for the container runtime...   " -f $spin[$i % 4]) -ForegroundColor DarkCyan -NoNewline
       $i++; Start-Sleep -Milliseconds 700
     }
-    if ($d.State -eq 'running') { Write-Host "`r   [OK]  Docker engine is up.                 " -ForegroundColor Green }
-    else { Write-Host "`r   [ - ] Docker engine did not come up.       " -ForegroundColor Yellow }
+    if ($d.State -eq 'running') { Write-Host "`r   [OK]  container runtime is up.              " -ForegroundColor Green }
+    else { Write-Host "`r   [ - ] container runtime did not come up.    " -ForegroundColor Yellow }
   }
 
   # 3. re-read; Ollama just needs to be installed (its own app serves :11434; provisioning verifies).
   $rs = Test-Prereqs
   if (-not (HardReady $rs)) {
     CW ''
-    CW '  Not ready: need Docker running + Ollama installed. Fix those and re-run.' 'Red'
+    CW '  Not ready: need a running container runtime + Ollama installed. Fix those and re-run.' 'Red'
     return
   }
-  $dmode = (Prereq $rs 'docker').Mode
+  $dmode = (Prereq $rs 'runtime').Mode
   CW ''
-  CW "  All set - Docker ($dmode) is up and Ollama is installed." 'Green'
+  CW "  All set - $dmode is up and Ollama is installed." 'Green'
 
   # 4. existing-install guard
   $ex = Test-ExistingInstall
@@ -613,7 +636,7 @@ function Invoke-ConsoleInstall {
   CW "  Full log: $LogFile" 'DarkGray'
   Set-Content -Path $LogFile -Value '' -Encoding utf8
   $script:AdminUser = $u; $script:AdminPass = $pass; $script:EnabledApps = ($enabled -join ',')
-  $script:DockerMode = $dmode; $script:WithRecipeBook = [bool]$withRecipe
+  $script:RuntimeMode = $dmode; $script:WithRecipeBook = [bool]$withRecipe
   Invoke-Provision
   if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://localhost:1111  and log in.' 'Green'; CW '  (use localhost - platform.localhost may be blocked by a managed-browser proxy)' 'DarkGray' }
   elseif (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red' }
@@ -694,9 +717,9 @@ $form.Controls.Add($log)
 
 $script:prereqs = @()
 $script:pendingInstall = $false     # user asked to install; waiting on the Docker engine to come up
-$script:dockerAnnounced = $false    # printed "Docker detected" once
+$script:runtimeAnnounced = $false    # printed "Docker detected" once
 $script:ollamaAnnounced = $false    # printed "Ollama detected" once
-$script:dockerLaunched = $false     # launched Docker Desktop once (after it appears installed)
+$script:runtimeLaunched = $false     # launched Docker Desktop once (after it appears installed)
 
 function Get-Prereq($key) { $script:prereqs | Where-Object { $_.Key -eq $key } }
 
@@ -704,7 +727,7 @@ function Get-Prereq($key) { $script:prereqs | Where-Object { $_.Key -eq $key } }
 # and an *installed* Ollama (the elevated provisioner starts Ollama's service and pulls models).
 # GPU / Python / disk stay soft (a skippable warning).
 function Test-HardReady {
-  $d = Get-Prereq 'docker'; $o = Get-Prereq 'ollama'
+  $d = Get-Prereq 'runtime'; $o = Get-Prereq 'ollama'
   return ($d -and $d.State -eq 'running' -and $o -and $o.Ok)
 }
 
@@ -724,7 +747,7 @@ function Start-Provisioning {
   Set-Content -Path $LogFile -Value '' -Encoding utf8
   $script:pos = 0
   $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
-    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','), '-DockerMode', (Get-Prereq 'docker').Mode)
+    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','), '-RuntimeMode', (Get-Prereq 'runtime').Mode)
   if ($chkRecipe.Checked) { $pargs += '-WithRecipeBook' }
   # Non-elevated subprocess: Invoke-Provision elevates only the broker-service step (its own UAC),
   # keeping WSL/Docker calls out of an elevated context (where wsl.exe hangs).
@@ -746,10 +769,10 @@ $script:watchTimer = New-Object Windows.Forms.Timer
 $script:watchTimer.Interval = 3000
 $script:watchTimer.Add_Tick({
     Refresh-Prereqs
-    $d = Get-Prereq 'docker'; $ol = Get-Prereq 'ollama'
+    $d = Get-Prereq 'runtime'; $ol = Get-Prereq 'ollama'
     # Docker finished installing in the background but its engine isn't up yet: launch it once.
-    if ($d -and $d.State -eq 'installed' -and -not $script:dockerLaunched) { $script:dockerLaunched = $true; Start-DockerDesktop }
-    if ($d -and $d.State -eq 'running' -and -not $script:dockerAnnounced) { $script:dockerAnnounced = $true; $log.AppendText("Docker detected.`r`n") }
+    if ($d -and $d.State -eq 'installed' -and -not $script:runtimeLaunched) { $script:runtimeLaunched = $true; Start-ContainerRuntime }
+    if ($d -and $d.State -eq 'running' -and -not $script:runtimeAnnounced) { $script:runtimeAnnounced = $true; $log.AppendText("Docker detected.`r`n") }
     if ($ol -and $ol.Ok -and -not $script:ollamaAnnounced) { $script:ollamaAnnounced = $true; $log.AppendText("Ollama detected.`r`n") }
     if (Test-HardReady) {
       if ($script:pendingInstall) {
@@ -765,8 +788,8 @@ $script:watchTimer.Add_Tick({
 Refresh-Prereqs
 
 # Bring the detected Docker runtime up: launch Docker Desktop, or start the WSL2 daemon.
-function Start-DockerDesktop {
-  $d = Get-Prereq 'docker'
+function Start-ContainerRuntime {
+  $d = Get-Prereq 'runtime'
   if ($d.Mode -eq 'desktop') {
     $dd = Get-DockerDesktopExe
     if ($dd) { $log.AppendText("starting Docker Desktop - accept its license, then wait for the engine...`r`n"); try { Start-Process $dd | Out-Null } catch {} }
@@ -794,12 +817,12 @@ $btnCheck.Add_Click({
 $btnFix.Add_Click({
     $missing = $script:prereqs | Where-Object { -not $_.Ok -and $_.Fix }
     if (-not $missing) { $log.AppendText("nothing to install - all fixable prerequisites are present.`r`n"); return }
-    $script:dockerLaunched = $false
+    $script:runtimeLaunched = $false
     foreach ($p in $missing) { Start-WingetInstall $p.Fix }
     Refresh-Prereqs
     if (-not (Test-HardReady)) {
-      $d = Get-Prereq 'docker'
-      if ($d -and $d.State -eq 'installed') { $script:dockerLaunched = $true; Start-DockerDesktop }
+      $d = Get-Prereq 'runtime'
+      if ($d -and $d.State -eq 'installed') { $script:runtimeLaunched = $true; Start-ContainerRuntime }
       $log.AppendText("watching for prerequisites (auto-continues once Docker + Ollama are ready)...`r`n")
       $script:watchTimer.Start()
     }
@@ -811,8 +834,8 @@ $btnFix.Add_Click({
 $btnInstall.Add_Click({
     if (-not $txtPass.Text) { [Windows.Forms.MessageBox]::Show('Set a super-admin password.', 'Installer'); return }
     Refresh-Prereqs
-    $d = Get-Prereq 'docker'; $o = Get-Prereq 'ollama'
-    $soft = $script:prereqs | Where-Object { -not $_.Ok -and $_.Key -notin @('docker', 'ollama') }
+    $d = Get-Prereq 'runtime'; $o = Get-Prereq 'ollama'
+    $soft = $script:prereqs | Where-Object { -not $_.Ok -and $_.Key -notin @('runtime', 'ollama') }
     if ($soft) { if ([Windows.Forms.MessageBox]::Show("Unmet prerequisites:`n" + (($soft | ForEach-Object { $_.Name }) -join ', ') + "`n`nContinue anyway?", 'Installer', 'YesNo') -ne 'Yes') { return } }
 
     if (Test-HardReady) { Start-Provisioning; return }
@@ -820,17 +843,17 @@ $btnInstall.Add_Click({
     # A hard prereq is missing / not up: install what's missing, launch Docker, then let the
     # watcher continue once BOTH the engine is running and Ollama is installed.
     $script:pendingInstall = $true
-    $script:dockerLaunched = $false
+    $script:runtimeLaunched = $false
     if ($d.State -eq 'missing') {
       if ($d.Mode -eq 'wsl') { $log.AppendText("installing Docker Engine into WSL2 (a few minutes)...`r`n"); Install-DockerInWsl | Out-Null }
       else { [Windows.Forms.MessageBox]::Show("Docker isn't available. Install Docker Desktop (where allowed) or set up Docker on WSL2, then re-run.", 'Installer'); $script:pendingInstall = $false; return }
     }
-    elseif ($d.State -eq 'installed') { $script:dockerLaunched = $true; Start-DockerDesktop }
+    elseif ($d.State -eq 'installed') { $script:runtimeLaunched = $true; Start-ContainerRuntime }
     if (-not $o.Ok) { Start-WingetInstall 'Ollama.Ollama' }
     $log.AppendText("waiting for Docker + Ollama; the install continues automatically once both are ready...`r`n")
     $script:watchTimer.Start()
   })
 
-$btnLaunch.Add_Click({ Start-Process 'http://platform.localhost:1111' })
+$btnLaunch.Add_Click({ Start-Process 'http://localhost:1111' })
 
 [void]$form.ShowDialog()
