@@ -253,7 +253,23 @@ function Invoke-Provision {
     for ($i = 0; $i -lt 60; $i++) {
       try { Invoke-WebRequest 'http://localhost:1111/api/platform/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null; break } catch { Start-Sleep 2 }
     }
-    Write-Log 'DONE. Platform is up at http://platform.localhost:1111'
+
+    # 6. WSL mode: keep the VM alive. WSL2 shuts an idle VM down (when no session is attached), which
+    # stops the containers; a logon-triggered `wsl --exec sleep infinity` holds it up. Registered as a
+    # current-user task (no admin) and started now so the platform stays up this session too.
+    if ($DockerMode -eq 'wsl') {
+      Write-Log 'registering a logon keep-alive (holds the WSL VM + containers up)...'
+      try {
+        $ka = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-WindowStyle Hidden -NoProfile -Command "wsl.exe --exec sleep infinity"'
+        $kt = New-ScheduledTaskTrigger -AtLogOn
+        Register-ScheduledTask -TaskName 'AI-Platform WSL keep-alive' -Action $ka -Trigger $kt -Force -Description 'Keeps the WSL2 VM (and AI-Platform containers) running.' | Out-Null
+        Start-ScheduledTask -TaskName 'AI-Platform WSL keep-alive' -ErrorAction SilentlyContinue
+        Write-Log 'keep-alive task registered + started.'
+      }
+      catch { Write-Log "keep-alive task could not be registered ($($_.Exception.Message)); the VM may idle-shutdown - create it manually if so." }
+    }
+
+    Write-Log 'DONE. Platform is up at http://localhost:1111  (use localhost; platform.localhost may be proxied on managed browsers).'
     New-Item -ItemType File -Path $DoneFile -Force | Out-Null
   } catch {
     Write-Log "ERROR: $($_.Exception.Message)"
@@ -397,7 +413,7 @@ function Invoke-ConsoleInstall {
   $script:AdminUser = $u; $script:AdminPass = $pass; $script:EnabledApps = ($enabled -join ',')
   $script:DockerMode = $dmode; $script:WithRecipeBook = [bool]$withRecipe
   Invoke-Provision
-  if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://platform.localhost:1111  and log in.' 'Green' }
+  if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://localhost:1111  and log in.' 'Green'; CW '  (use localhost - platform.localhost may be blocked by a managed-browser proxy)' 'DarkGray' }
   elseif (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red' }
   else { CW ''; CW '  Provisioning ended without a clear result - check the log at:' 'Yellow'; CW "  $LogFile" 'Yellow' }
 }
