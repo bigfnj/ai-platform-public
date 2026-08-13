@@ -78,5 +78,5 @@ The broker runs as a native Windows service; the shell and rails run in Docker. 
 ```bash
 # rebuild just the changed service (avoid a bare full-stack up, which churns the NAT):
 docker compose up -d --build --no-deps <service>
-# local: http://platform.localhost:1111
+# local: http://localhost:1111  (podman: docker-compose up -d; docker: docker compose up -d)
 ```

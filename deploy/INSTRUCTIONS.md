@@ -112,7 +112,7 @@ Then:
   running the broker in your logged-on session instead.
 
 **Ollama note:** if Ollama already starts on boot, disable that first (Task Manager
-→ Startup apps → Ollama → Disable) or run the script with `-InstallOllama:$false`,
+→ Startup apps → Ollama → Disable) or run the script with `-SkipOllama`,
 or you'll get two servers fighting over port 11434.
 
 ## Users & access (multi-tenant)

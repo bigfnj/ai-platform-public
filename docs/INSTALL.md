@@ -69,8 +69,9 @@ powershell -ExecutionPolicy Bypass -File deploy\installer\install.ps1 -Console
 
 Doctor only, no window: `powershell -File deploy\installer\install.ps1 -Check`.
 
-When it finishes, the browser opens `http://platform.localhost:1111`; log in with the
-super-admin you set.
+When it finishes, the browser opens `http://localhost:1111`; log in with the
+super-admin you set. (Note: `platform.localhost` is intercepted by some corporate proxies —
+use the plain `localhost` form.)
 
 ## Safety
 
@@ -82,8 +83,8 @@ guard; don't, unless you know why.)
 ## What it builds (under `deploy/installer/`)
 
 - `install.ps1` — the GUI + doctor + elevated provisioning.
-- `install-native.ps1` — broker venv + `platform-broker` NSSM service (parameterized; `-InstallOllama`
-  defaults on for the full stack, but the lean installer passes `-InstallOllama:$false` and relies on
+- `install-native.ps1` — broker venv + `platform-broker` NSSM service (parameterized; `-SkipOllama`
+  skips the Ollama NSSM service install; the lean installer passes `-SkipOllama` and relies on
   the Ollama app's own :11434 autostart).
 - `Dockerfile.gateway.bundled` (in `deploy/`) — multi-stage image that **bakes** the shell +
   chosen rail frontends in (no host Node, no runtime bind-mounts).
