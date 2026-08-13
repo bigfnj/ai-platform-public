@@ -11,7 +11,8 @@
 #Requires -RunAsAdministrator
 param(
   [Parameter(Mandatory = $true)][string]$PlatformRoot,
-  [switch]$SkipOllama            # skip the Ollama NSSM service (lean install: Ollama runs as its own app)
+  [switch]$SkipOllama,           # skip the Ollama NSSM service (lean install: Ollama runs as its own app)
+  [switch]$OpenWslFirewall       # add the inbound allow-rule so WSL2 containers can reach broker/ollama
 )
 $ErrorActionPreference = 'Stop'
 
@@ -75,6 +76,22 @@ Install-Svc 'platform-broker' $BrokerPy `
 if (-not $SkipOllama) {
   Install-Svc 'ollama' $OllamaExe 'serve' (Split-Path $OllamaExe) `
     @("OLLAMA_MODELS=$UserProfile\.ollama\models")
+}
+
+# --- 4b. WSL firewall: let WSL2 containers reach the native broker/ollama ----
+# WSL Docker mode only: the WSL2 subnet must be allowed inbound to :11500/:11434, else the rail
+# containers (and the gateway) can't reach the native broker. Scoped to the private 172.16/12 range
+# (covers whatever WSL/docker subnet gets assigned), not the LAN/internet. Idempotent.
+if ($OpenWslFirewall) {
+  $fwName = 'AI-Platform: WSL -> broker/ollama'
+  if (Get-NetFirewallRule -DisplayName $fwName -ErrorAction SilentlyContinue) {
+    Write-Host "firewall rule already present: $fwName"
+  }
+  else {
+    New-NetFirewallRule -DisplayName $fwName -Direction Inbound -Action Allow -Protocol TCP `
+      -LocalPort 11500, 11434 -RemoteAddress 172.16.0.0/12 -Profile Any | Out-Null
+    Write-Host "firewall rule added: $fwName (TCP 11500,11434 from 172.16.0.0/12)"
+  }
 }
 
 # --- 5. start + report ------------------------------------------------------

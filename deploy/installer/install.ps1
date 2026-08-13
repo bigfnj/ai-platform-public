@@ -203,6 +203,7 @@ function Invoke-Provision {
     # on :11434 - no second server; the full 24 GB stack keeps the Ollama NSSM service.)
     Write-Log 'installing the native broker service (approve the UAC prompt that appears)...'
     $nativeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Installer 'install-native.ps1'), '-PlatformRoot', $Root, '-SkipOllama')
+    if ($DockerMode -eq 'wsl') { $nativeArgs += '-OpenWslFirewall' }   # WSL containers need inbound :11500/:11434
     $np = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList $nativeArgs
     if ($np.ExitCode -ne 0) { throw "install-native.ps1 failed (exit $($np.ExitCode)); see deploy\logs\platform-broker.err.log" }
 

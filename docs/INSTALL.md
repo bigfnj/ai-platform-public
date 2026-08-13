@@ -27,12 +27,9 @@ there's no media pipeline. Recipe icons ship pre-rendered in the seed.
 otherwise the **Docker Engine inside WSL2** — handy where Docker Desktop is blocked or paid. In WSL
 mode it drives `wsl docker compose`, points each container's `host.docker.internal` at the Windows
 host so the rails reach the native broker, and can install the engine into WSL for you if it's
-missing. One caveat there: a one-time **Windows Firewall** allow-rule may be needed so WSL containers
-can reach the broker/Ollama on `:11500` / `:11434`:
-
-```powershell
-New-NetFirewallRule -DisplayName "AI-Platform: WSL -> broker/ollama" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 11500,11434 -RemoteAddress 172.16.0.0/12 -Profile Any
-```
+missing, and (WSL mode) adds the **Windows Firewall** inbound allow-rule for `:11500` / `:11434`
+(scoped to the private WSL/Docker range) during the elevated broker-service step — so the containers
+can reach the native broker/Ollama with no manual step.
 
 ## Run it
 
