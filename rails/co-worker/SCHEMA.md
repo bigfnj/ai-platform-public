@@ -1,0 +1,285 @@
+# Co-Worker item schema
+
+The contract between the **harvest process** (Claude co-work scheduled tasks) and the
+**Co-Worker rail**. Both sides must agree on this file.
+
+**Schema version: 2**
+
+> **What changed in v2 (2026-08-11).** v1 stamped filenames with the clock, so re-running a
+> loop wrote a second copy of every finding instead of replacing it — one double-run
+> permanently doubled that period's cards. v2 makes item ids **deterministic**, so a rerun
+> overwrites itself. Also added: `period` (grouping that doesn't collide), retention and
+> pruning, a stated `related` policy, and persisted triage state.
+>
+> **v2.1 (2026-08-12).** Closed the two remaining duplication paths and bounded growth:
+> `teams` moved from a day period to a **week** period (its 30-day rolling window
+> re-surfaced the same dangling commitments under a new id on every new run date);
+> replace-set was widened to **every period a run covers**, not just one; slug reuse was
+> made mandatory; and retention split into two tiers so the dashboard window can stay
+> short while history stays long. **Any loop may now be re-run any number of times per day
+> without producing a duplicate.**
+
+## Two artifacts per run
+
+Each harvest loop emits **both**:
+
+| Artifact | Path | Consumer |
+|---|---|---|
+| Narrative markdown | `inbox/<source>/*.md` | Humans, and the dashboard's drill-through modal |
+| Item JSON | `inbox/*.json` (**flat**) | The rail — one file per finding, rendered as a card |
+
+The backend globs **`inbox/*.json` — flat, non-recursive** (`main.py: inbox_list`). Markdown
+lives one level down in per-source subfolders, which is what keeps it invisible to that glob.
+Never nest JSON items in subfolders; they will not be found.
+
+`inbox/archive/` holds pruned items. Also invisible to the flat glob — that's the point.
+
+## Filenames — deterministic. This is the idempotency mechanism.
+
+```
+<period>_<source>_<slug>.json
+
+2026W33_calendar_conflict-thu-triple-book.json
+20260811_email_vpn-tunnel-andy-mack.json
+2026W33_teams_dangling-vpn-answer-brooke.json
+2026W33_insights_reactor-not-initiator.json
+```
+
+**No clock time in the filename.** The id is a function of *what the finding is*, not *when
+the run happened*. Two runs over the same period produce the same id for the same finding and
+the second overwrites the first.
+
+| Source | `<period>` | Format |
+|---|---|---|
+| `calendar` | ISO week of the Monday | `2026W33` |
+| `insights` | ISO week of the Monday | `2026W33` |
+| `email` | the day the item's email **arrived** | `20260811` |
+| `teams` | ISO week of the run | `2026W33` |
+
+**Pick the period so that everything a run can re-discover lands in the same period.**
+That is the whole trick. `email` keys on the day the mail *arrived*, not the run date, so an
+email surfaced by both today's and tomorrow's run keeps one id. `teams` keys on the week, not
+the run date, because its 30-day window re-surfaces the same dangling commitment every time
+it runs. Get this wrong and re-runs duplicate no matter how stable the slug is.
+
+- `<source>` is always one of `calendar` \| `email` \| `teams` \| `insights` — **the source,
+  never the type.** A `noise` item from the email loop is `..._email_...`, not `..._noise_...`.
+- `<slug>` — short, stable, kebab-case, descriptive of the finding. **Stability matters:**
+  the same finding next run should produce the same slug so it overwrites rather than
+  duplicating. Describe the finding, not the date (`conflict-thu-triple-book`, not
+  `conflict-aug-13`).
+- **No colons** — illegal in Windows filenames.
+- The filename stem becomes `_id` and is used by `GET /api/inbox/{id}`, which rejects ids
+  containing `/`, `\`, or a leading `.`. Keep stems alphanumeric plus `-` and `_`.
+
+### Replace-set semantics — required
+
+A run **owns every period it covers**, and publishes the complete, current set for those
+periods. Concretely, before writing anything:
+
+1. Work out the full list of periods this run covers. Usually one. The email loop covers two
+   when its window spans yesterday and today.
+2. For each covered period `<p>`, **delete every existing `<p>_<source>_*.json`.**
+3. Write this run's complete set.
+
+Overwriting alone is not enough: if this run finds fewer issues than the last, the resolved
+ones would linger forever as stale cards. Deleting periods you did **not** cover is equally
+wrong — that is another loop's or another day's data.
+
+### Slug reuse — required
+
+Before step 2, **read the ids you are about to delete and reuse them.** If a finding is the
+same finding as last run, it must get the same slug. Free-associating a new slug for an
+unchanged finding is the single easiest way to reintroduce duplicates the moment the
+replace-set window moves, and it orphans the item's triage state in `.state.json`.
+
+Sorting is by file mtime (newest first), which continues to work because overwriting updates
+mtime.
+
+### The idempotency contract
+
+Taken together: **running any loop N times in a row produces exactly the same set of files as
+running it once.** Every loop is safe to run manually, at any hour, as many times as you like.
+If a re-run changes the file *count* for a period it covers, something above was skipped.
+
+## Fields
+
+Backend injects `_id`, `_file`, `_mtime`, and `_status` on read — never write those.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `schema` | int | ✅ | Always `2`. The frontend warns loudly on a version it doesn't know. |
+| `type` | string | ✅ | See type table below. |
+| `source` | string | ✅ | `calendar` \| `email` \| `teams` \| `insights` |
+| `period` | string | ✅ | Matches the filename's `<period>`. Group on this for trend deltas — **not** on `run`. |
+| `title` | string | ✅ | Short. Card headline. Under ~80 chars. |
+| `why` | string | ✅ | **One line: why this matters.** Required on every item, no exceptions. |
+| `body` | string | ✅ | Summary. Markdown-lite: headings, `**bold**`, `` `code` ``, `- ` bullets, `|` tables, `>` quotes all render. Keep it a summary — `doc` carries the long form. |
+| `priority` | int | ✅ | `1`–`5`, **1 is highest**. Drives default sort. See priority rules. |
+| `client` | bool | ✅ | Is this client work? Client outranks internal, always. |
+| `when` | string\|null | ✅ | ISO-8601 **with offset** for the thing itself. Null if not time-anchored. |
+| `due` | string\|null | ✅ | ISO-8601 with offset if action is owed by a deadline, else null. |
+| `from` | string\|null | ✅ | Person or entity. Display name over email address. |
+| `run` | string | ✅ | `<source>-YYYY-MM-DD` — the execution that last wrote this item. Provenance only; **do not group on it**, two runs the same day collide. |
+| `doc` | string\|null | ✅ | Relative path to the narrative markdown, e.g. `calendar/2026-08-17-week.md`. Served by `GET /api/doc/{path}` and opened in the dashboard's drill-through modal. |
+| `tags` | string[] | — | Freeform labels. Defaults `[]`. |
+| `links` | object[] | — | `[{ "label": "Open in Outlook", "url": "https://…" }]`. Real Graph `webLink` values, copied verbatim. |
+| `related` | string[] | — | Other **co-worker item `_id`s**. See the `related` policy below. |
+| `thread_id` | string\|null | — | Groups items from one conversation or series. |
+| `evidence` | string\|null | — | Where the claim came from. **Required on every `insight`.** |
+
+**Timezone rule:** every datetime carries an explicit offset. Justin is US Pacific: `-07:00`
+during PDT (Mar–Nov), `-08:00` during PST (Nov–Mar). Graph returns UTC; the harvest converts
+and writes the correct offset for that date. `tools/validate_inbox.py` enforces this.
+
+### `related` policy
+
+`related` holds **co-worker item ids only** — the filename stem of another `.json` in this
+inbox. It must **never** contain a Microsoft Graph message id, event id, or `itemid`. Graph
+ids look like `AAkBOQAICN73O3ysgAAuAAAAAB2EAxG…`, resolve to nothing, and are silently
+dropped.
+
+- To link **out** to the source system → `links` with the Graph `webLink`.
+- To link **across** the harvest → `related` with item ids.
+
+**Cross-source edges** are welcome from any loop — they're the most valuable kind — but they
+must **resolve**. Because ids are deterministic you cannot guess another loop's slug, so
+before writing a cross-source ref, **list `inbox/*.json` and use a real id.** An unresolved
+ref means it was guessed, and it fails silently.
+
+If you want to note a connection you can't address, say so in `body` as prose. Never invent
+an id. The **`insights` loop reads every item** and is responsible for adding the cross-source
+edges the other loops missed.
+
+## Types
+
+| `type` | Meaning | Typical source |
+|---|---|---|
+| `meeting` | A meeting needing attention or prep | calendar |
+| `agenda-draft` | Drafted agenda for a meeting Justin owns that had none | calendar |
+| `conflict` | Scheduling collision, with a recommendation | calendar |
+| `prep` | Prep material or agenda surfaced from someone else's invite | calendar |
+| `email` | An email ranked for response | email |
+| `dangling` | A commitment Justin made and never closed ("let me check…") | teams |
+| `follow-up` | Something owed to someone | any |
+| `reminder` | Time-anchored nudge | any |
+| `fyi` | Context, no action | any |
+| `noise` | Spam, or a thread he's cc'd on but not engaged in | email, teams |
+| `insight` | An observed pattern, trend or habit | teams, insights |
+| `recommendation` | A concrete suggested change | insights, email |
+
+## Priority rules
+
+Justin's stated ordering: **client work is #1. Internal may be important, but never as
+important as client.** Encoded so the ranking can be critiqued over time:
+
+| Priority | Meaning |
+|---|---|
+| `1` | Client, and blocking or time-critical — a client is waiting, or a decision point is imminent |
+| `2` | Client, needs action this week |
+| `3` | Internal, needs action — or a dropped commitment of any kind |
+| `4` | Internal, informational; broadcast meetings; low-stakes FYIs |
+| `5` | Noise — spam, passive cc, anything safely ignorable |
+
+A `dangling` item is never worse than `3` regardless of source: an unanswered promise is a
+credibility problem.
+
+## Triage state
+
+`PATCH /api/inbox/{id}` with `{"status": "open" | "done" | "dismissed"}`.
+
+State is stored in a **sidecar** file, `inbox/.state.json`, mapping item id → status. Harvest
+output files are never mutated, so a rerun can freely overwrite an item without destroying
+triage. Because ids are deterministic, state survives reruns and attaches to the right item.
+
+The backend merges it in as `_status` on read (defaulting to `open`). Items whose id no longer
+exists are garbage-collected from the sidecar by `tools/prune_inbox.py`.
+
+## Retention and pruning — two tiers
+
+Items accumulate: the email loop alone runs daily. `tools/prune_inbox.py` enforces two
+separate windows, because "how many cards should the dashboard show" and "how much history
+should we keep" are different questions and one number cannot answer both.
+
+```
+inbox/*.json          tier 1 — the DASHBOARD window (short, actionable now)
+   │  ACTIVE_DAYS
+   ▼
+inbox/archive/*.json  tier 2 — the HISTORY window (long, feeds trend deltas)
+   │  RETENTION_DAYS
+   ▼
+   deleted
+```
+
+| Source | Tier 1 — on the dashboard | Tier 2 — kept in `archive/` |
+|---|---|---|
+| `email` | 7 days | 30 days |
+| `calendar` | 7 days (current week) | 26 weeks |
+| `teams` | 14 days | 26 weeks |
+| `insights` | 14 days | 26 weeks |
+
+Anything with `_status: "done"` or `"dismissed"` is archived after 7 days regardless of source.
+
+Tier 1 is what keeps `inbox/` from flooding — the flat glob only ever sees roughly one to two
+periods per source, so the root count is bounded and flat over time no matter how long the
+system runs. Tier 2 is the actual data-retention policy, and it terminates: the archive is not
+a landfill.
+
+**Every loop runs the pruner at the end of its own run.** Not just `insights` — that made
+pruning depend on one loop staying healthy. It is idempotent and cheap, so running it four
+times a week costs nothing and means clutter cannot accumulate if a loop is paused. There is
+no separate cleanup task to remember, and nothing to maintain.
+
+Archived items remain readable on disk; the insights loop reads `inbox/archive/` when
+computing long-range trends.
+
+## Example
+
+```json
+{
+  "schema": 2,
+  "type": "conflict",
+  "source": "calendar",
+  "period": "2026W33",
+  "title": "Thursday 11:00a is triple-booked",
+  "why": "The 15-minute client status call is the one that actually needs you; the other two are a broadcast and your own focus block.",
+  "body": "Three events collide Thu Aug 13, 11:00a PT:\n\n- **Project Status Update** (11:00–11:15, tentative) — client delivery accountability\n- **Org All-Hands** (11:00–11:50) — ~250-person broadcast\n- **HeadsDown** (11:00–12:00) — your own focus block\n\nTake the client call, drop the broadcast, reclaim the rest.",
+  "priority": 2,
+  "client": true,
+  "when": "2026-08-13T11:00:00-07:00",
+  "due": null,
+  "from": "Alex Rivera",
+  "run": "calendar-2026-08-17",
+  "doc": "calendar/2026-08-17-week.md",
+  "tags": ["conflict", "acme-program", "headsdown"],
+  "links": [{ "label": "Open in Outlook", "url": "https://outlook.office.com/owa/?itemid=…" }],
+  "related": ["2026W33_calendar_headsdown-breached"],
+  "thread_id": "project-status",
+  "evidence": null
+}
+```
+
+## Rules for the harvest process
+
+1. **Every item needs a `why`.** No exceptions.
+2. **Deterministic ids. Reuse existing slugs, then delete the prior set for every period you
+   cover, then write.** This is what stops the dashboard filling with duplicates, and it is
+   what makes a loop safe to run several times a day.
+3. **One item per finding**, not one per run. The card grid wants many small cards. Target
+   8–25 items. Don't paste a whole brief into one `body` — summarize and set `doc`.
+4. **Never touch another source's items**, and never delete `inbox/archive/`.
+5. **Label inference as inference** in `body`, with the basis in `evidence`.
+6. **Run `tools/validate_inbox.py` after writing.** If it reports errors, fix them — the
+   backend skips malformed files with only a log warning, so a broken item vanishes silently.
+7. **Then run `tools/prune_inbox.py`.** Every loop, every run. Retention is not somebody
+   else's job.
+
+## Validation
+
+```bash
+python rails/co-worker/tools/validate_inbox.py            # exits non-zero on error
+python rails/co-worker/tools/prune_inbox.py --dry-run     # show what would be archived
+```
+
+`GET /api/healthz` reports `inbox_items` (valid) alongside `skipped` (malformed), and the
+dashboard surfaces a warning when `skipped > 0` — so silent breakage becomes visible.

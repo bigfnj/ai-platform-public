@@ -18,6 +18,10 @@ CLAUDE.local.md
 deploy/workstation-keys/
 # transient deploy/job logs (foldin/rehydrate/etc.) — operational output, not tracked
 deploy/*.log
+# co-worker harvest output — real email/calendar/Teams intelligence: client names, colleague
+# names, ticket ids, and the learned org context in CONTEXT.md. THIS REPO IS PUBLIC.
+# Machine-local runtime data only; never commit.
+data/
 
 # Node / web (future)
 node_modules/

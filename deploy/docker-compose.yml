@@ -236,6 +236,29 @@ services:
       - "8850"
     restart: always
 
+  co-worker:                     # Co-Worker — email/calendar/Teams intelligence inbox.
+    # Pure data-display rail: no model slots. An external harvest process (a Claude
+    # co-work scheduled task running on the Windows host) drops JSON items into the
+    # inbox; this backend reads and forwards them. See rails/co-worker/SCHEMA.md.
+    build:
+      context: ../rails/co-worker   # uses co-worker/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: co-worker-backend:latest
+    environment:
+      CO_WORKER_INBOX_DIR: /data/inbox
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Bind-mount the Windows-side inbox so the harvest process (running on the host)
+      # can write files this container reads. CO_WORKER_INBOX_MOUNT is the WSL-style
+      # path to it (see deploy/.env). Falls back to a named volume if unset, which
+      # yields an empty dashboard rather than a startup failure.
+      - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
+    expose:
+      - "8860"
+    restart: always
+
   gateway:                       # shell host + reverse proxy
     build:
       context: ..
@@ -326,3 +349,4 @@ volumes:
   iep_db:         # IEP app job/event DB (separate from edu-suite — student PII isolation)
   iep_cache:      # IEP app cache
   terminal_fun_data:  # terminal-fun per-user save/resume state (NetHack + Crawl)
+  co_worker_inbox:    # fallback drop-zone when CO_WORKER_INBOX_MOUNT is unset (empty dashboard)
