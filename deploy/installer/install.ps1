@@ -154,6 +154,7 @@ systemctl enable --now docker 2>/dev/null || true
 function Write-Log($m) {
   $line = "{0}  {1}" -f (Get-Date -Format 'HH:mm:ss'), $m
   Add-Content -Path $LogFile -Value $line -Encoding utf8
+  Write-Host "  $line" -ForegroundColor DarkCyan   # echo live (console runs this in-process); harmless in the GUI's hidden subprocess
 }
 
 function Invoke-Provision {
@@ -177,12 +178,15 @@ function Invoke-Provision {
     }
     Write-Log 'config written.'
 
-    # 2. native broker service only (media off). We deliberately DO NOT register an Ollama service:
-    # the winget-installed Ollama app owns :11434 via its own login autostart, so there is no second
-    # server to fight over the port. (The full 24 GB headless stack keeps the Ollama NSSM service.)
-    Write-Log 'installing the native broker service (Ollama runs via its own app on :11434)...'
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Installer 'install-native.ps1') -PlatformRoot $Root -SkipOllama *>> $LogFile
-    if ($LASTEXITCODE -ne 0) { throw 'install-native.ps1 failed' }
+    # 2. native broker service. This is the ONLY step that needs admin (registering the LocalSystem
+    # NSSM service), so we elevate JUST this and keep the rest of provisioning non-elevated - `wsl.exe`
+    # deadlocks when invoked from an elevated process, so the WSL/Docker steps below must NOT be
+    # elevated. install-native has no wsl calls, so elevating it is safe. (Ollama runs via its own app
+    # on :11434 - no second server; the full 24 GB stack keeps the Ollama NSSM service.)
+    Write-Log 'installing the native broker service (approve the UAC prompt that appears)...'
+    $nativeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Installer 'install-native.ps1'), '-PlatformRoot', $Root, '-SkipOllama')
+    $np = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList $nativeArgs
+    if ($np.ExitCode -ne 0) { throw "install-native.ps1 failed (exit $($np.ExitCode)); see deploy\logs\platform-broker.err.log" }
 
     # 3. make sure the Ollama app is serving on :11434 (it usually auto-starts right after the winget
     # install; launch it if not), then pull the lean models into the user's model store.
@@ -197,7 +201,7 @@ function Invoke-Provision {
     Write-Log 'Ollama is up.'
     foreach ($m in @('gemma3:4b', 'bge-m3')) {
       Write-Log "ollama pull $m ..."
-      & ollama pull $m *>> $LogFile
+      & ollama pull $m 2>&1 | Tee-Object -FilePath $LogFile -Append
     }
 
     # 4. bundled compose via the detected Docker runtime. WSL mode: build from /mnt/c and reach the
@@ -210,7 +214,7 @@ function Invoke-Provision {
       $cargs = @('docker', 'compose', '--env-file', $envA, '-f', $compA)
       if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
       $cargs += @('up', '-d', '--build')
-      & wsl.exe @cargs *>> $LogFile
+      & wsl.exe @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
     }
     else {
       $envA = Join-Path $Root 'deploy\.env'
@@ -218,7 +222,7 @@ function Invoke-Provision {
       $cargs = @('compose', '--env-file', $envA, '-f', $compA)
       if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
       $cargs += @('up', '-d', '--build')
-      & docker @cargs *>> $LogFile
+      & docker @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
     }
     if ($LASTEXITCODE -ne 0) { throw "docker compose up failed ($DockerMode mode; see the log)." }
 
@@ -355,37 +359,18 @@ function Invoke-ConsoleInstall {
   $withRecipe = (Read-Host '   Also install Recipe Book? [y/N]') -match '^[Yy]'
   $enabled = @('terminal-fun'); if ($withRecipe) { $enabled += 'recipe-book' }
 
-  # 6. launch the elevated provisioning and tail its log, in color
+  # 6. Provision IN THIS (non-elevated) process, so WSL/Docker steps don't hang. Invoke-Provision
+  # elevates ONLY the broker-service step (its own UAC prompt); everything else runs here and streams
+  # live via Write-Log / Tee-Object (no hidden window, so you can see it's not stuck).
   CW ''
-  CW '  Provisioning (approve the UAC prompt)...' 'Cyan'
+  CW '  Provisioning (a UAC prompt will appear for the broker service)...' 'Cyan'
   Set-Content -Path $LogFile -Value '' -Encoding utf8
-  Remove-Item $DoneFile, $FailFile -ErrorAction SilentlyContinue
-  $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
-    '-AdminUser', $u, '-AdminPass', $pass, '-EnabledApps', ($enabled -join ','), '-DockerMode', $dmode)
-  if ($withRecipe) { $pargs += '-WithRecipeBook' }
-  Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
-
-  $pos = 0
-  while ($true) {
-    if (Test-Path $LogFile) {
-      $all = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
-      if ($all -and $all.Length -gt $pos) {
-        $chunk = $all.Substring($pos); $pos = $all.Length
-        foreach ($line in ($chunk -split "`r?`n")) {
-          if ($line) {
-            $col = 'Gray'
-            if ($line -match 'ERROR|failed') { $col = 'Red' }
-            elseif ($line -match 'DONE|up at') { $col = 'Green' }
-            elseif ($line -match 'pull|building|installing|waiting|ensuring|writing') { $col = 'DarkCyan' }
-            Write-Host "   $line" -ForegroundColor $col
-          }
-        }
-      }
-    }
-    if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://platform.localhost:1111  and log in.' 'Green'; break }
-    if (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red'; break }
-    Start-Sleep -Milliseconds 700
-  }
+  $script:AdminUser = $u; $script:AdminPass = $pass; $script:EnabledApps = ($enabled -join ',')
+  $script:DockerMode = $dmode; $script:WithRecipeBook = [bool]$withRecipe
+  Invoke-Provision
+  if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://platform.localhost:1111  and log in.' 'Green' }
+  elseif (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red' }
+  else { CW ''; CW '  Provisioning ended without a clear result - check the log at:' 'Yellow'; CW "  $LogFile" 'Yellow' }
 }
 
 # ---------------------------------------------------------------------------
@@ -494,7 +479,9 @@ function Start-Provisioning {
   $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
     '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','), '-DockerMode', (Get-Prereq 'docker').Mode)
   if ($chkRecipe.Checked) { $pargs += '-WithRecipeBook' }
-  Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
+  # Non-elevated subprocess: Invoke-Provision elevates only the broker-service step (its own UAC),
+  # keeping WSL/Docker calls out of an elevated context (where wsl.exe hangs).
+  Start-Process powershell -WindowStyle Hidden -ArgumentList $pargs
   $timer = New-Object Windows.Forms.Timer; $timer.Interval = 800
   $timer.Add_Tick({
       if (Test-Path $LogFile) {
