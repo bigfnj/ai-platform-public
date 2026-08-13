@@ -1,9 +1,9 @@
 # Installing AI-Platform (lean)
 
-A one-window GUI installer that stands up a **lean** platform on a modest box: the **admin
-shell** + **Terminal Fun** + optional **Recipe Book**, running on two small Ollama models
-(`gemma3:4b` + `bge-m3`) with **no HuggingFace token and no image/TTS pipeline**. It's designed
-for an **8 GB-VRAM** Windows machine.
+A one-command installer (a colorful in-terminal flow, or a GUI window) that stands up a **lean**
+platform on a modest box: the **admin shell** + **Terminal Fun** + optional **Recipe Book**, running
+on two small Ollama models (`gemma3:4b` + `bge-m3`) with **no HuggingFace token and no image/TTS
+pipeline**. It's designed for an **8 GB-VRAM** Windows machine.
 
 > The full 24 GB stack (all rails, FLUX/XTTS media, Cloudflare exposure) is a separate, manual
 > setup documented in `CLAUDE.md` / `CLAUDE.local.md`. This installer deliberately targets a
@@ -15,13 +15,24 @@ for an **8 GB-VRAM** Windows machine.
 |---|---|---|
 | Windows 10/11 | | |
 | **NVIDIA GPU ≥ 8 GB** + driver | the AI models run here | — |
-| **Docker Desktop** (running) | the shell + rail containers | winget |
-| **Ollama** | the LLM host (native service) | winget |
+| **Docker** — Docker Desktop *or* Docker Engine in WSL2 | runs the shell + rail containers | winget / WSL |
+| **Ollama** | the LLM host (native on Windows) | winget |
 | **Python 3.11+** | the torch-free broker venv only | winget |
 | ~20 GB free disk | images + two models | — |
 
 No Node.js is needed — the frontends are built inside the Docker image. No HuggingFace token —
 there's no media pipeline. Recipe icons ship pre-rendered in the seed.
+
+**Docker runtime (dual).** The installer auto-detects and uses **Docker Desktop** if it's installed,
+otherwise the **Docker Engine inside WSL2** — handy where Docker Desktop is blocked or paid. In WSL
+mode it drives `wsl docker compose`, points each container's `host.docker.internal` at the Windows
+host so the rails reach the native broker, and can install the engine into WSL for you if it's
+missing. One caveat there: a one-time **Windows Firewall** allow-rule may be needed so WSL containers
+can reach the broker/Ollama on `:11500` / `:11434`:
+
+```powershell
+New-NetFirewallRule -DisplayName "AI-Platform: WSL -> broker/ollama" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 11500,11434 -RemoteAddress 172.16.0.0/12 -Profile Any
+```
 
 ## Run it
 
