@@ -99,18 +99,28 @@ List `inbox\*.json` for each period you cover. For any finding that is the same 
 last run, **reuse its exact slug.** Inventing a fresh slug for an unchanged finding is the
 easiest way to create a duplicate, and it orphans that item's triage state.
 
-**Step 3 — delete the prior set for every period you cover.**
+**Step 3 — write this run's complete set. Write before you delete.**
 
-Delete every `<period>_<source>_*.json` for each covered period. Only your own source, only
-periods you cover. Overwriting alone is not enough: findings that have since been resolved
-would linger forever as stale cards.
-
-**Step 4 — write this run's complete set.**
+Because ids are deterministic, writing a finding that already exists overwrites it in place.
+So write everything first, then remove only what's left over.
 
 Filenames are `<period>_<source>_<slug>.json`. No clock time, no colons, stem limited to
 letters, digits, `-` and `_`. `<source>` is the source — `email`, `calendar`, `teams`,
 `insights` — **never the type**. `<slug>` describes the finding, not the date
-(`conflict-thu-triple-book`, not `conflict-aug-13`).
+(`conflict-wed-double-book`, not `conflict-aug-13`).
+
+**Step 4 — delete the leftovers.**
+
+For each period you cover, delete every `<period>_<source>_*.json` that **you did not just
+write**. Only your own source, only periods you cover. Overwriting alone is not enough:
+findings that have since been resolved would linger forever as stale cards.
+
+**The order matters, and it is not cosmetic.** Deleting first opens a window where the period
+is empty on disk. If the run dies inside that window — throttle, token expiry, a permission
+prompt, a crash — the period stays empty, the dashboard shows nothing for it, and no alarm
+anywhere fires. Writing first makes the worst case a *superset*: some resolved findings linger
+one extra cycle and the next run clears them. **Stale and visible always beats empty and
+silent**, because a human notices a stale card and nobody notices an absence.
 
 **The contract this produces: running any loop N times in a row leaves exactly the same files
 as running it once.** Every loop is safe to run manually, at any hour, as often as you like.
@@ -164,15 +174,31 @@ Both tools are Python and run in the Linux shell, where the repo is bind-mounted
 hardcode it** — discover the mount instead:
 
 ```bash
-AI=$(ls -d /sessions/*/mnt/ai-platform 2>/dev/null | head -1)
+# Exactly one mount, or stop. `| head -1` silently takes the first of several, which
+# validates and prunes a DIFFERENT tree while reporting success — a clean run you never had.
+MOUNTS=$(ls -d /sessions/*/mnt/ai-platform 2>/dev/null)
+COUNT=$(printf '%s' "$MOUNTS" | grep -c .)
+
+if [ "$COUNT" -ne 1 ]; then
+    echo "expected exactly 1 ai-platform mount, found $COUNT:" >&2
+    printf '%s\n' "$MOUNTS" >&2
+    exit 1
+fi
+
+AI="$MOUNTS"
 INBOX="$AI/data/co-worker/inbox"
+
+# Prove it is the tree you just wrote to before trusting either tool's verdict.
+test -f "$AI/rails/co-worker/SCHEMA.md" || { echo "mount is not the ai-platform repo" >&2; exit 1; }
 
 python3 "$AI/rails/co-worker/tools/validate_inbox.py" --inbox "$INBOX"
 python3 "$AI/rails/co-worker/tools/prune_inbox.py"    --inbox "$INBOX"
 ```
 
-If `$AI` comes back empty the folder is not connected — say so plainly and stop, rather than
-reporting a clean run you did not verify.
+Zero mounts means the folder is not connected. More than one means it is ambiguous, and
+picking wrong is worse than not running: you would report a clean validation of a tree your
+items are not in. **In both cases say so plainly and stop** — never report a clean run you did
+not verify.
 
 Note the split: **Read/Write/Edit use the Windows paths** (`C:\Users\justin.lowe\ai-platform\…`)
 because they run on the host. **Bash uses the `/sessions/…` mount.** The same file has two
