@@ -108,8 +108,8 @@ while ($run) {
   Show-Menu
   switch ((Read-Host '  Select').Trim().ToUpperInvariant()) {
     '1' { & powershell -NoProfile -ExecutionPolicy Bypass -File $Installer -Check }
-    '2' { & $Installer -Console }
-    '3' { Write-Head 'Launching the installer window (close it to return here)...'; & $Installer }
+    '2' { & powershell -NoProfile -ExecutionPolicy Bypass -File $Installer -Console }
+    '3' { Write-Head 'Launching the installer window (close it to return here)...'; & powershell -NoProfile -ExecutionPolicy Bypass -File $Installer }
     '4' { Start-Process explorer.exe $Dir }
     'Q' { $run = $false }
     default { Write-Warn2 'Unrecognized choice - enter 1, 2, 3, 4, or Q.' }
