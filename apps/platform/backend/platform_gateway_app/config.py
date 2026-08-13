@@ -8,6 +8,10 @@ ports so the gateway runs from a clean checkout.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
+
+from pydantic import field_validator
+from pydantic_settings import NoDecode
 
 from platform_core import PlatformSettings
 
@@ -44,8 +48,16 @@ class GatewaySettings(PlatformSettings):
     ollama_url: str = "http://127.0.0.1:11434"
 
     # Apps that are integrated (proxied /api + served federated bundle). Others in the
-    # catalog show on the rail as 'soon' but aren't reachable.
-    enabled_apps: tuple[str, ...] = ("edu-suite", "iep", "recipe-book", "bouquet", "workstation", "terminal-fun", "ai-playground")
+    # catalog show on the rail as 'soon' but aren't reachable. Accepts a comma-separated env string
+    # (PLATFORM_ENABLED_APPS=terminal-fun,recipe-book); NoDecode stops pydantic-settings from trying
+    # to JSON-decode the env value first (which errors on a bare comma list), so the validator splits.
+    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "bouquet", "workstation", "terminal-fun", "ai-playground")
+
+    @field_validator("enabled_apps", mode="before")
+    @classmethod
+    def _parse_enabled_apps(cls, v):
+        if isinstance(v, str): return tuple(x.strip() for x in v.split(",") if x.strip())
+        return v
 
     # Built frontend remotes (module-federation), each served at /<app>/. Host-native
     # paths by default (the apps build alongside the GPU layer); env-overridable so the
