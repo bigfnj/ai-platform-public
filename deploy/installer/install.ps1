@@ -121,7 +121,23 @@ function Invoke-Provision {
     if ($WithRecipeBook) { $composeArgs += @('--profile', 'recipe-book') }
     Write-Log 'building + starting containers (first build takes several minutes)...'
     & docker compose @composeArgs up -d --build *>> $LogFile
-    if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed' }
+    if ($LASTEXITCODE -ne 0) {
+      # Retry without the docker credential helper. Docker Desktop's `credsStore: desktop` can fail
+      # ("logon session does not exist") when compose runs in this hidden/elevated context, even for
+      # anonymous public base-image pulls (node/python/caddy). Reuse the current docker context so
+      # the daemon connection is unchanged; only the credential helper is dropped.
+      Write-Log 'compose failed; retrying without the docker credential helper (anonymous public pulls)...'
+      $ctx = $null
+      $srcCfg = Join-Path $env:USERPROFILE '.docker\config.json'
+      if (Test-Path $srcCfg) { try { $ctx = (Get-Content $srcCfg -Raw | ConvertFrom-Json).currentContext } catch {} }
+      $cfgDir = Join-Path $env:TEMP 'ai-platform-dockercfg'
+      New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
+      $json = if ($ctx) { "{`"currentContext`": `"$ctx`"}" } else { '{}' }
+      Set-Content -Path (Join-Path $cfgDir 'config.json') -Value $json -Encoding ascii
+      $env:DOCKER_CONFIG = $cfgDir
+      & docker compose @composeArgs up -d --build *>> $LogFile
+      if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed (see the log; if this is a credsStore error, run the compose step from an interactive elevated PowerShell in deploy\).' }
+    }
 
     # 5. install the BrokerTray (native tray control), best-effort
     try {
@@ -217,6 +233,7 @@ $script:prereqs = @()
 $script:pendingInstall = $false     # user asked to install; waiting on the Docker engine to come up
 $script:dockerAnnounced = $false    # printed "Docker detected" once
 $script:ollamaAnnounced = $false    # printed "Ollama detected" once
+$script:dockerLaunched = $false     # launched Docker Desktop once (after it appears installed)
 
 function Get-Prereq($key) { $script:prereqs | Where-Object { $_.Key -eq $key } }
 
@@ -265,6 +282,8 @@ $script:watchTimer.Interval = 3000
 $script:watchTimer.Add_Tick({
     Refresh-Prereqs
     $d = Get-Prereq 'docker'; $ol = Get-Prereq 'ollama'
+    # Docker finished installing in the background but its engine isn't up yet: launch it once.
+    if ($d -and $d.State -eq 'installed' -and -not $script:dockerLaunched) { $script:dockerLaunched = $true; Start-DockerDesktop }
     if ($d -and $d.State -eq 'running' -and -not $script:dockerAnnounced) { $script:dockerAnnounced = $true; $log.AppendText("Docker detected.`r`n") }
     if ($ol -and $ol.Ok -and -not $script:ollamaAnnounced) { $script:ollamaAnnounced = $true; $log.AppendText("Ollama detected.`r`n") }
     if (Test-HardReady) {
@@ -288,6 +307,14 @@ function Start-DockerDesktop {
   else { $log.AppendText("Docker installed. Launch Docker Desktop and accept its license to start the engine.`r`n") }
 }
 
+# Kick off a winget install WITHOUT blocking the UI thread. The watcher polls for completion via
+# the prereq re-check, so the window stays responsive during a multi-minute Docker download.
+function Start-WingetInstall($id) {
+  $log.AppendText("winget install $id (running in the background; this can take several minutes)...`r`n")
+  try { Start-Process winget -ArgumentList @('install', '--id', $id, '-e', '--accept-source-agreements', '--accept-package-agreements') | Out-Null }
+  catch { $log.AppendText("  could not launch winget for ${id}: $($_.Exception.Message)`r`n") }
+}
+
 # Re-check: manual refresh; if both hard prereqs are ready and an install was queued, continue now.
 $btnCheck.Add_Click({
     Refresh-Prereqs
@@ -299,15 +326,13 @@ $btnCheck.Add_Click({
 $btnFix.Add_Click({
     $missing = $script:prereqs | Where-Object { -not $_.Ok -and $_.Fix }
     if (-not $missing) { $log.AppendText("nothing to install - all fixable prerequisites are present.`r`n"); return }
-    foreach ($p in $missing) {
-      $log.AppendText("winget install $($p.Fix)...`r`n")
-      Start-Process winget -ArgumentList @('install', '--id', $p.Fix, '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
-    }
+    $script:dockerLaunched = $false
+    foreach ($p in $missing) { Start-WingetInstall $p.Fix }
     Refresh-Prereqs
     if (-not (Test-HardReady)) {
       $d = Get-Prereq 'docker'
-      if ($d -and $d.State -ne 'running') { Start-DockerDesktop }
-      $log.AppendText("watching for Docker + Ollama to come up (auto-continues when detected)...`r`n")
+      if ($d -and $d.State -eq 'installed') { $script:dockerLaunched = $true; Start-DockerDesktop }
+      $log.AppendText("watching for prerequisites (auto-continues once Docker + Ollama are ready)...`r`n")
       $script:watchTimer.Start()
     }
   })
@@ -327,17 +352,10 @@ $btnInstall.Add_Click({
     # A hard prereq is missing / not up: install what's missing, launch Docker, then let the
     # watcher continue once BOTH the engine is running and Ollama is installed.
     $script:pendingInstall = $true
-    if ($d.State -eq 'missing') {
-      $log.AppendText("winget install Docker.DockerDesktop...`r`n")
-      Start-Process winget -ArgumentList @('install', '--id', 'Docker.DockerDesktop', '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
-    }
-    if (-not $o.Ok) {
-      $log.AppendText("winget install Ollama.Ollama...`r`n")
-      Start-Process winget -ArgumentList @('install', '--id', 'Ollama.Ollama', '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
-    }
-    Refresh-Prereqs
-    $d = Get-Prereq 'docker'
-    if ($d.State -ne 'running') { Start-DockerDesktop }
+    $script:dockerLaunched = $false
+    if ($d.State -eq 'missing') { Start-WingetInstall 'Docker.DockerDesktop' }
+    elseif ($d.State -eq 'installed') { $script:dockerLaunched = $true; Start-DockerDesktop }
+    if (-not $o.Ok) { Start-WingetInstall 'Ollama.Ollama' }
     $log.AppendText("waiting for Docker + Ollama; the install continues automatically once both are ready...`r`n")
     $script:watchTimer.Start()
   })
