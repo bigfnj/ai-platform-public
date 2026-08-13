@@ -140,8 +140,14 @@ Full field table is in `SCHEMA.md`. The rules that get broken most:
   into the archive when your period ages out. Re-check every id; drop the ones that no longer
   resolve.
 - **Prefer durable targets.** Point `related` at a finding that stays true, not at one whose
-  whole purpose is to be resolved. Referencing a "no output produced yet" item guarantees a
-  broken edge the moment somebody produces the output.
+  whole purpose is to be resolved. Referencing a "no output produced yet" item, or any
+  `dangling`, guarantees a broken edge the moment somebody produces the output. Point at the
+  `insight` describing the habit, not at the instance of it.
+- **Never delete an item another loop points at.** Slug reuse cuts both ways: if a finding of
+  yours is resolved but carries inbound refs, keep the slug and rewrite the body to describe
+  the resolution. Renaming a resolved finding creates exactly the stranded ref the rule above
+  exists to prevent. Verified 2026-08-12: three stranded refs arose and all three cleared by
+  re-derivation alone, so no further contract change is required.
 - **One item per finding**, target 8–25 small cards. Don't paste the whole brief into one
   `body` — summarize and point `doc` at the markdown.
 

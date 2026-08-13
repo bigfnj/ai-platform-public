@@ -3,7 +3,7 @@
 Routes:
   GET   /api/healthz      liveness + valid/skipped item counts
   GET   /api/inbox        list harvested items (newest first) + malformed-file report
-                          ?period=2026W33 narrows to one grouping period
+                          ?period=2026W33 / ?source=teams narrow the set
   GET   /api/archive      pruned items, same shape — where trend history lives
   GET   /api/inbox/{id}   fetch a single item by its filename stem
   PATCH /api/inbox/{id}   set triage status (open | done | dismissed)
@@ -118,7 +118,9 @@ def _item_files(d: Path | None = None) -> list[Path]:
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def _collect(d: Path, period: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def _collect(
+    d: Path, period: str | None = None, source: str | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """Read every item in `d`, returning (items, skipped). Malformed files are reported,
     never silently dropped — a card that vanishes without explanation is the failure mode
     this rail most needs to avoid."""
@@ -132,8 +134,11 @@ def _collect(d: Path, period: str | None = None) -> tuple[list[dict[str, Any]], 
             _log.warning("skipping %s: %s", f.name, exc)
             skipped.append({"file": f.name, "error": str(exc)})
             continue
-        if period is None or str(item.get("period") or "") == period:
-            items.append(item)
+        if period is not None and str(item.get("period") or "") != period:
+            continue
+        if source is not None and str(item.get("source") or "") != source:
+            continue
+        items.append(item)
     return items, skipped
 
 
@@ -165,6 +170,7 @@ def healthz() -> dict[str, Any]:
 @app.get("/api/inbox")
 def inbox_list(
     period: str | None = None,
+    source: str | None = None,
     x_platform_user: str = Header(default="?"),
 ) -> dict[str, Any]:
     """All items, newest-first by mtime, with malformed files reported not hidden.
@@ -178,12 +184,13 @@ def inbox_list(
     if not d.exists():
         return {"items": [], "skipped": [], "periods": [], "inbox_dir": str(d)}
 
-    items, skipped = _collect(d, period)
+    items, skipped = _collect(d, period, source)
     all_periods = sorted({str(i.get("period")) for i in _collect(d)[0] if i.get("period")}, reverse=True)
     return {
         "items": items,
         "skipped": skipped,
         "period": period,
+        "source": source,
         "periods": all_periods,
         "inbox_dir": str(d),
     }
@@ -192,6 +199,7 @@ def inbox_list(
 @app.get("/api/archive")
 def archive_list(
     period: str | None = None,
+    source: str | None = None,
     x_platform_user: str = Header(default="?"),
 ) -> dict[str, Any]:
     """Pruned items, same shape as /api/inbox. This is where trend history lives.
@@ -204,12 +212,13 @@ def archive_list(
     if not d.exists():
         return {"items": [], "skipped": [], "periods": [], "archive_dir": str(d)}
 
-    items, skipped = _collect(d, period)
+    items, skipped = _collect(d, period, source)
     all_periods = sorted({str(i.get("period")) for i in _collect(d)[0] if i.get("period")}, reverse=True)
     return {
         "items": items,
         "skipped": skipped,
         "period": period,
+        "source": source,
         "periods": all_periods,
         "archive_dir": str(d),
     }

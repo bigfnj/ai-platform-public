@@ -26,6 +26,15 @@ The contract between the **harvest process** (Claude co-work scheduled tasks) an
 > `conflict` can name what collides and which one wins. **All four are optional and
 > additive** — `schema` stays `2` and every existing item remains valid. Backend adds
 > `?period=` on `/api/inbox` and a new `/api/archive`, so trend history is reachable.
+>
+> **v2.3 (2026-08-12).** All four loops independently asked for the same three things after
+> their first v2.2 run, which is the signal this responds to. `verification` states how the
+> source was actually read — the distinction that let a `summary`-derived finding be published
+> looking identical to a verified one. `metrics` gains `n`, `direction`, `target` and a
+> per-measurement `confidence`: sample size and "which way is good" were both falling back to
+> prose, and **the rail cannot render a trend arrow without `direction`**, since a rising
+> number is good for throughput and bad for latency. `series` lets a calendar item say the
+> commitment expires on its own. Still additive; `schema` stays `2`.
 
 ## Two artifacts per run
 
@@ -138,6 +147,8 @@ Backend injects `_id`, `_file`, `_mtime`, and `_status` on read — never write 
 | `metrics` | object[] | — | Quantities behind the claim. See **Measurements**. |
 | `confidence` | string\|null | — | `high` \| `medium` \| `low`. See **Confidence**. |
 | `competing` | object[] | — | What collides, for `conflict` items. See **Conflicts**. |
+| `verification` | string\|null | — | How the source was actually read. See **Verification**. |
+| `series` | object\|null | — | Recurrence, for `calendar` items. See **Series**. |
 
 **Timezone rule:** every datetime carries an explicit offset. Justin is US Pacific: `-07:00`
 during PDT (Mar–Nov), `-08:00` during PST (Nov–Mar). Graph returns UTC; the harvest converts
@@ -203,7 +214,11 @@ Any number behind a claim goes here instead of being written into `evidence` as 
 | `label` | string | ✅ | What was measured. |
 | `value` | number | ✅ | The measurement. A real number, not a string. |
 | `unit` | string\|null | — | `hours`, `days`, `%`, `count`… Null when the label carries it. |
-| `prev` | number\|null | — | Same measurement last period. **This is where a trend delta lives** — the rail computes the direction, so never write "up from 6.2" in prose. |
+| `prev` | number\|null | — | Same measurement last period. **This is where a trend delta lives** — the rail computes the delta, so never write "up from 6.2" in prose. Null on the first period means *baseline*, not missing. |
+| `n` | int\|null | — | Sample size. `median 36.5s` over 6 observations is a different claim than over 600, and without this the distinction falls back to prose. |
+| `direction` | string\|null | — | `up-good` \| `down-good` \| `neutral`. **Which way is better.** The rail cannot colour a trend arrow without it — a rising number is good for throughput and bad for latency, and nothing else in the item says which. |
+| `target` | number\|null | — | The value this should reach, when one exists. Lets the rail show distance-to-goal rather than a bare number. |
+| `confidence` | string\|null | — | Per-measurement `high` \| `medium` \| `low`. Item-level `confidence` is too coarse when one item carries a directly-measured number alongside an inherited one. |
 
 `evidence` stays prose and explains *where the number came from*. `metrics` carries the number
 itself. An `insight` that quantifies anything should populate both.
@@ -242,6 +257,43 @@ contenders exist only inside `body` prose can't be rendered, counted, or acted o
 | `verdict` | string\|null | — | `take` \| `drop` \| `defer` \| `delegate`. Exactly one entry should be `take`. |
 
 `why` still carries the one-line reasoning. `competing` carries the structure.
+
+### Verification — how you actually read the source
+
+```json
+"verification": "full-read"
+```
+
+| Value | Meaning |
+|---|---|
+| `full-read` | You read the underlying messages or events end-to-end. |
+| `summary` | You worked from a search result, preview, or digest — not the source itself. |
+| `inferred` | You reasoned to this without reading the source at all. |
+
+Omit it only when the distinction genuinely doesn't apply.
+
+**This field exists because of a specific failure.** A `dangling` was published claiming a
+commitment had hung for 14 days; an end-to-end read later showed it had been delivered and
+read within 11 minutes. The run had exhausted its read quota and built the finding from a
+search summary — a `summary` finding presented identically to a `full-read` one, with the
+caveat narrated in `evidence` where nothing could act on it.
+
+A `summary` or `inferred` finding is still worth publishing. One that *looks* verified is not.
+Pair it with `confidence`, and put the reason in `evidence`.
+
+### Series — `series`
+
+For `calendar` items about a recurring commitment:
+
+```json
+"series": { "recurrence": "weekly", "series_end": "2026-08-25T00:00:00-07:00", "occurrences": 3 }
+```
+
+| Key | Type | Required | Notes |
+|---|---|---|---|
+| `recurrence` | string | ✅ | `daily` \| `weekly` \| `biweekly` \| `monthly` \| `irregular`. |
+| `series_end` | string\|null | — | ISO-8601 with offset when the series stops on its own. A forum that expires by itself needs no intervention, and nothing else in the item can say so. |
+| `occurrences` | int\|null | — | Meetings remaining in the window. |
 
 ## Types
 

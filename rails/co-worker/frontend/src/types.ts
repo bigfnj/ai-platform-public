@@ -47,9 +47,28 @@ export interface Metric {
   value: number
   unit?: string | null
   prev?: number | null
+  /** Sample size — `median 36.5s` over 6 observations is a different claim than over 600. */
+  n?: number | null
+  /** Which way is better. Without it a trend arrow can't be coloured: a rising number is
+   *  good for throughput and bad for latency, and nothing else in the item says which. */
+  direction?: MetricDirection | null
+  target?: number | null
+  confidence?: Confidence | null
 }
 
+export type MetricDirection = 'up-good' | 'down-good' | 'neutral'
+
 export type Confidence = 'high' | 'medium' | 'low'
+
+/** How the source was actually read. `summary`/`inferred` findings are worth publishing;
+ *  ones that merely *look* verified are not. */
+export type Verification = 'full-read' | 'summary' | 'inferred'
+
+export interface Series {
+  recurrence: 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'irregular'
+  series_end?: string | null
+  occurrences?: number | null
+}
 
 /** One side of a `conflict`. Exactly one entry should carry verdict 'take'. */
 export interface Competing {
@@ -72,9 +91,19 @@ export function relatedEdges(item: Item): { id: string; rel: RelType }[] {
     .filter((e): e is { id: string; rel: RelType } => Boolean(e.id))
 }
 
-/** Signed delta vs the previous period, or null when there's no baseline. */
+/** Signed delta vs the previous period, or null when there's no baseline.
+ *  Null means "first period — this IS the baseline", not "missing". */
 export function metricDelta(m: Metric): number | null {
   return typeof m.prev === 'number' ? m.value - m.prev : null
+}
+
+/** Whether a delta is an improvement, given the metric's own sense of direction.
+ *  Returns null when there's no baseline or no stated direction — the caller should
+ *  render the arrow neutral rather than guess. */
+export function deltaIsGood(m: Metric): boolean | null {
+  const d = metricDelta(m)
+  if (d === null || d === 0 || !m.direction || m.direction === 'neutral') return null
+  return m.direction === 'up-good' ? d > 0 : d < 0
 }
 
 /** Backend-injected fields are prefixed with `_` and are always present on read. */
@@ -106,6 +135,8 @@ export interface Item {
   metrics?: Metric[]
   confidence?: Confidence | null
   competing?: Competing[]
+  verification?: Verification | null
+  series?: Series | null
 
   /** Anything the harvest adds that this frontend doesn't know about yet. */
   [key: string]: unknown

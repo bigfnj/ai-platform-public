@@ -40,6 +40,10 @@ REQUIRED = [
 REL_TYPES = {"relates-to", "answers", "derives-from", "duplicates", "supersedes", "blocks"}
 CONFIDENCE = {"high", "medium", "low"}
 VERDICTS = {"take", "drop", "defer", "delegate"}
+# v2.3
+VERIFICATION = {"full-read", "summary", "inferred"}
+DIRECTIONS = {"up-good", "down-good", "neutral"}
+RECURRENCE = {"daily", "weekly", "biweekly", "monthly", "irregular"}
 
 ISO_OFFSET = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}([+-]\d{2}):(\d{2})$")
 GRAPH_ID = re.compile(r"^AA[A-Za-z0-9+/=_%-]{20,}$")
@@ -248,6 +252,43 @@ def validate(inbox: Path, quiet: bool = False) -> int:
             p = m.get("prev")
             if p is not None and (isinstance(p, bool) or not isinstance(p, (int, float))):
                 err(f"metric {m.get('label')!r} prev must be a number or null, got {p!r}")
+            n = m.get("n")
+            if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
+                err(f"metric {m.get('label')!r} n must be a positive integer, got {n!r}")
+            dirn = m.get("direction")
+            if dirn is not None and dirn not in DIRECTIONS:
+                err(f"metric {m.get('label')!r} direction must be one of {sorted(DIRECTIONS)}, got {dirn!r}")
+            tgt = m.get("target")
+            if tgt is not None and (isinstance(tgt, bool) or not isinstance(tgt, (int, float))):
+                err(f"metric {m.get('label')!r} target must be a number or null, got {tgt!r}")
+            mconf = m.get("confidence")
+            if mconf is not None and mconf not in CONFIDENCE:
+                err(f"metric {m.get('label')!r} confidence must be one of {sorted(CONFIDENCE)}, got {mconf!r}")
+            # A delta the rail can't orient is a number with an arrow it must leave grey.
+            if m.get("prev") is not None and dirn is None:
+                warn(f"metric {m.get('label')!r} has prev but no direction — trend arrow can't be oriented")
+
+        # --- verification / series (v2.3) -----------------------------------
+        ver = d.get("verification")
+        if ver is not None and ver not in VERIFICATION:
+            err(f"verification must be one of {sorted(VERIFICATION)} or null, got {ver!r}")
+        if ver in ("summary", "inferred") and not str(d.get("evidence") or "").strip():
+            warn(f"verification is {ver!r} but evidence is empty — say what wasn't read")
+
+        series = d.get("series")
+        if series is not None:
+            if not isinstance(series, dict):
+                err("series must be an object")
+            else:
+                rec = series.get("recurrence")
+                if rec not in RECURRENCE:
+                    err(f"series recurrence must be one of {sorted(RECURRENCE)}, got {rec!r}")
+                se = series.get("series_end")
+                if se is not None and not ISO_OFFSET.match(str(se)):
+                    err(f"series series_end must be ISO-8601 with offset, got {se!r}")
+                occ = series.get("occurrences")
+                if occ is not None and (isinstance(occ, bool) or not isinstance(occ, int) or occ < 0):
+                    err(f"series occurrences must be a non-negative integer, got {occ!r}")
 
         # --- confidence ---------------------------------------------------
         conf = d.get("confidence")
