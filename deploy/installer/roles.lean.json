@@ -6,5 +6,13 @@
   "reasoning": "gemma3:4b",
   "code": "gemma3:4b",
   "vision": "gemma3:4b",
-  "embed": "bge-m3"
+  "embed": "bge-m3",
+  "edu": "gemma3:4b",
+  "iep": "gemma3:4b",
+  "recipe": "gemma3:4b",
+  "recipe-vision": "gemma3:4b",
+  "bouquet-vision": "gemma3:4b",
+  "bouquet-writer": "gemma3:4b",
+  "terminal-fun": "gemma3:4b",
+  "ai-playground": "gemma3:4b"
 }

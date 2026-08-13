@@ -467,7 +467,9 @@ def _apply_grant(u: User, submitted: list[str], grantable: set[str]) -> None:
 @app.get("/api/platform/admin/users")
 def admin_list_users(admin: User = Depends(require_admin), db: OrmSession = Depends(get_db)) -> dict[str, Any]:
     users = db.execute(select(User).order_by(User.username)).scalars().unique().all()
-    return {"users": [_user_out(u) for u in users], "catalog": APP_CATALOG,
+    enabled = set(app.state.settings.enabled_apps)
+    catalog = [a for a in APP_CATALOG if a["id"] in enabled]
+    return {"users": [_user_out(u) for u in users], "catalog": catalog,
             "grantable": sorted(_grantable(db, admin))}
 
 
