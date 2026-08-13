@@ -46,6 +46,12 @@ $DoneFile  = Join-Path $TempBase 'ai-platform-install.done'
 $FailFile  = Join-Path $TempBase 'ai-platform-install.fail'
 $DockerBin = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin'
 if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
+# Podman installs per-user to %LOCALAPPDATA%\Programs\Podman and adds itself to the USER PATH; the
+# winget shim for docker-compose.exe lands in WinGet\Links. Neither is visible to a shell that was
+# already open when they were installed, so prepend both (same trick as $DockerBin above).
+foreach ($dir in @((Join-Path $env:LOCALAPPDATA 'Programs\Podman'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'))) {
+  if ((Test-Path $dir) -and ($env:Path -notlike "*$dir*")) { $env:Path = "$dir;$env:Path" }
+}
 
 # ---------------------------------------------------------------------------
 # Prereq doctor
@@ -787,10 +793,16 @@ $script:watchTimer.Add_Tick({
 
 Refresh-Prereqs
 
-# Bring the detected Docker runtime up: launch Docker Desktop, or start the WSL2 daemon.
+# Bring the detected runtime up: start the podman machine, launch Docker Desktop, or start the
+# WSL2 Docker daemon.
 function Start-ContainerRuntime {
   $d = Get-Prereq 'runtime'
-  if ($d.Mode -eq 'desktop') {
+  if ($d.Mode -eq 'podman') {
+    $log.AppendText("starting the podman machine (created on first run; Hyper-V init needs admin)...`r`n")
+    # Off the UI thread would be nicer, but machine start is quick and the watcher re-polls anyway.
+    Initialize-PodmanMachine | Out-Null
+  }
+  elseif ($d.Mode -eq 'desktop') {
     $dd = Get-DockerDesktopExe
     if ($dd) { $log.AppendText("starting Docker Desktop - accept its license, then wait for the engine...`r`n"); try { Start-Process $dd | Out-Null } catch {} }
     else { $log.AppendText("start Docker Desktop and accept its license to start the engine.`r`n") }
@@ -845,8 +857,9 @@ $btnInstall.Add_Click({
     $script:pendingInstall = $true
     $script:runtimeLaunched = $false
     if ($d.State -eq 'missing') {
-      if ($d.Mode -eq 'wsl') { $log.AppendText("installing Docker Engine into WSL2 (a few minutes)...`r`n"); Install-DockerInWsl | Out-Null }
-      else { [Windows.Forms.MessageBox]::Show("Docker isn't available. Install Docker Desktop (where allowed) or set up Docker on WSL2, then re-run.", 'Installer'); $script:pendingInstall = $false; return }
+      if ($d.Mode -eq 'podman') { $log.AppendText("creating + starting the podman machine...`r`n"); Start-ContainerRuntime }
+      elseif ($d.Mode -eq 'wsl') { $log.AppendText("installing Docker Engine into WSL2 (a few minutes)...`r`n"); Install-DockerInWsl | Out-Null }
+      else { [Windows.Forms.MessageBox]::Show("No container runtime. Install Podman (winget install Podman.CLI) or Docker Desktop, then re-run.", 'Installer'); $script:pendingInstall = $false; return }
     }
     elseif ($d.State -eq 'installed') { $script:runtimeLaunched = $true; Start-ContainerRuntime }
     if (-not $o.Ok) { Start-WingetInstall 'Ollama.Ollama' }
