@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getJSON, patchJSON } from './api'
 import { renderInline, renderMarkdown } from './markdown'
+import BriefView from './BriefView'
 import {
   SCHEMA_VERSION,
   SOURCES,
@@ -298,7 +299,10 @@ export default function CoWorkerModule() {
   const [patchErr, setPatchErr] = useState('')
   const [docPath, setDocPath] = useState<string | null>(null)
 
-  const [view, setView] = useState<'inbox' | 'archive'>('inbox')
+  const [view, setView] = useState<'brief' | 'inbox' | 'archive'>('brief')
+  // Triage state lives here, not in the items array, so the brief and the card grid
+  // stay in sync when you resolve something from either one.
+  const [triaged, setTriaged] = useState<Record<string, Status>>({})
   const [period, setPeriod] = useState<string | null>(null)
   const [periods, setPeriods] = useState<string[]>([])
   const [source, setSource] = useState<Source | 'all'>('all')
@@ -315,10 +319,18 @@ export default function CoWorkerModule() {
     const endpoint = view === 'archive' ? '/api/archive' : '/api/inbox'
     getJSON<InboxResponse>(endpoint)
       .then((d) => {
-        setItems(Array.isArray(d.items) ? d.items : [])
+        const list = Array.isArray(d.items) ? d.items : []
+        setItems(list)
         setSkipped(Array.isArray(d.skipped) ? d.skipped : [])
         setInboxDir(d.inbox_dir || d.archive_dir || '')
         setPeriods(Array.isArray(d.periods) ? d.periods : [])
+        // Server state wins on load, but keep any id we already know about so a
+        // resolve made from the brief isn't forgotten when the grid loads later.
+        setTriaged((cur) => {
+          const next = { ...cur }
+          for (const i of list) next[i._id] = i._status
+          return next
+        })
         setLoading(false)
       })
       .catch((e) => {
@@ -327,20 +339,36 @@ export default function CoWorkerModule() {
       })
   }, [view])
 
+  // The brief view needs triage state without loading the whole grid.
   useEffect(() => {
-    load()
-  }, [load])
+    if (view !== 'brief') {
+      load()
+      return
+    }
+    getJSON<InboxResponse>('/api/inbox')
+      .then((d) => {
+        const list = Array.isArray(d.items) ? d.items : []
+        setTriaged((cur) => {
+          const next = { ...cur }
+          for (const i of list) next[i._id] = i._status
+          return next
+        })
+      })
+      .catch(() => { /* the brief still renders; triage marks just won't show */ })
+  }, [view, load])
 
   const setStatus = useCallback((id: string, status: Status) => {
     setPatchErr('')
     // Optimistic: triage should feel instant. Roll back and explain if the write fails.
-    const prev = items
+    const prevTriaged = triaged[id] ?? 'open'
+    setTriaged((cur) => ({ ...cur, [id]: status }))
     setItems((cur) => cur.map((i) => (i._id === id ? { ...i, _status: status } : i)))
     patchJSON<{ _id: string; _status: Status }>(`/api/inbox/${id}`, { status }).catch((e) => {
-      setItems(prev)
+      setTriaged((cur) => ({ ...cur, [id]: prevTriaged }))
+      setItems((cur) => cur.map((i) => (i._id === id ? { ...i, _status: prevTriaged } : i)))
       setPatchErr(String(e instanceof Error ? e.message : e))
     })
-  }, [items])
+  }, [triaged])
 
   const drift = useMemo(
     () => items.filter((i) => typeof i.schema === 'number' && i.schema !== SCHEMA_VERSION).length,
@@ -409,10 +437,16 @@ export default function CoWorkerModule() {
         <span className="cw-spacer" />
         <div className="cw-view-toggle">
           <button
+            className={'cw-tab' + (view === 'brief' ? ' on' : '')}
+            onClick={() => setView('brief')}
+          >
+            🎯 Brief
+          </button>
+          <button
             className={'cw-tab' + (view === 'inbox' ? ' on' : '')}
             onClick={() => { setView('inbox'); setPeriod(null) }}
           >
-            Inbox
+            All items
           </button>
           <button
             className={'cw-tab' + (view === 'archive' ? ' on' : '')}
@@ -421,10 +455,18 @@ export default function CoWorkerModule() {
             Archive
           </button>
         </div>
-        <button className="cw-btn primary" onClick={load} disabled={loading}>
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        {view !== 'brief' && (
+          <button className="cw-btn primary" onClick={load} disabled={loading}>
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        )}
       </header>
+
+      {patchErr && <div className="cw-err">Triage change didn't save: {patchErr}</div>}
+
+      {view === 'brief' && <BriefView triaged={triaged} onStatus={setStatus} />}
+
+      {view !== 'brief' && <>
 
       {err && (
         <div className="cw-err">
@@ -433,8 +475,6 @@ export default function CoWorkerModule() {
           Is the <code>co-worker</code> service up on :8860?
         </div>
       )}
-
-      {patchErr && <div className="cw-err">Triage change didn't save: {patchErr}</div>}
 
       {skipped.length > 0 && (
         <div className="cw-err">
@@ -603,6 +643,8 @@ export default function CoWorkerModule() {
           ))}
         </div>
       )}
+
+      </>}
 
       {docPath && <DocModal path={docPath} onClose={() => setDocPath(null)} />}
     </div>

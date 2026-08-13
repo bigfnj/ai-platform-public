@@ -183,6 +183,69 @@ export interface DocResponse {
   mtime: number
 }
 
+// --- executive brief (the landing view) -------------------------------------
+
+export type BriefCategory = 'client' | 'dangling' | 'missed' | 'agenda-gap' | 'other'
+
+export type Urgency = 'today' | 'this-week' | 'soon'
+
+/** One curated action. `id` points at an inbox item so triage round-trips. */
+export interface AttentionItem {
+  id: string
+  category: BriefCategory
+  headline: string
+  urgency: Urgency
+  why?: string
+}
+
+export interface Brief {
+  exists: boolean
+  stale: boolean
+  generated?: string
+  period?: string
+  items_considered?: number
+  items_triaged?: number
+  attention: AttentionItem[]
+  client_pulse?: string
+  dangling?: string[]
+  missed?: string[]
+  agenda_gaps?: string[]
+  suppressed?: number
+  synthesis_note?: string | null
+  age_hours?: number
+  _mtime?: number
+  message?: string
+}
+
+export interface BriefStatus {
+  running: boolean
+  last_started?: number | null
+  last_finished?: number | null
+  last_error?: string | null
+}
+
+export const CATEGORY_META: Record<BriefCategory, { label: string; icon: string; tone: string }> = {
+  client: { label: 'Client', icon: '🤝', tone: 'critical' },
+  dangling: { label: 'You promised', icon: '🪢', tone: 'critical' },
+  missed: { label: 'Waiting on you', icon: '📬', tone: 'warning' },
+  'agenda-gap': { label: 'No agenda', icon: '📋', tone: 'warning' },
+  other: { label: 'Other', icon: '•', tone: 'neutral' },
+}
+
+export const URGENCY_META: Record<Urgency, { label: string; rank: number }> = {
+  today: { label: 'Today', rank: 0 },
+  'this-week': { label: 'This week', rank: 1 },
+  soon: { label: 'Soon', rank: 2 },
+}
+
+/** Sort by urgency, then by the category priority the user actually cares about. */
+export function attentionRank(a: AttentionItem): number {
+  const u = URGENCY_META[a.urgency]?.rank ?? 3
+  const catOrder: BriefCategory[] = ['client', 'dangling', 'missed', 'agenda-gap', 'other']
+  const c = catOrder.indexOf(a.category)
+  return u * 10 + (c === -1 ? 9 : c)
+}
+
 // --- display metadata -------------------------------------------------------
 
 export const SOURCES: { id: Source; label: string; icon: string }[] = [

@@ -9,6 +9,25 @@ export async function getJSON<T>(path: string): Promise<T> {
   return r.json()
 }
 
+export async function postJSON<T>(path: string, body?: unknown): Promise<T> {
+  const r = await fetch(BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!r.ok) {
+    let detail = `${path} -> ${r.status}`
+    try {
+      const j = await r.json()
+      if (j?.detail) detail = String(j.detail)
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail)
+  }
+  return r.json()
+}
+
 export async function patchJSON<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(BASE + path, {
     method: 'PATCH',

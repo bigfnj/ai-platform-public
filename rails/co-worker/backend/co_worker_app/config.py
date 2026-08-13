@@ -26,5 +26,10 @@ class Settings(BaseSettings):
     # bind-mount or copy files. Set CO_WORKER_INBOX_DIR to override.
     inbox_dir: str = "/data/inbox"
 
+    # Broker connection for executive brief synthesis.
+    # CO_WORKER_BROKER_URL / CO_WORKER_BROKER_AUTH_TOKEN override at runtime.
+    broker_url: str = "http://host.docker.internal:11500"
+    broker_auth_token: str = ""
+
 
 settings = Settings()

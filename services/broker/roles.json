@@ -14,5 +14,6 @@
   "bouquet-writer": "gemma3:4b",
   "terminal-fun": "gemma3:4b",
   "ai-playground": "gemma3:4b",
+  "co-worker-synthesis": "gemma3:4b",
   "recipe-icon": "flux-schnell"
 }

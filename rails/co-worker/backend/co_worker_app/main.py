@@ -8,6 +8,14 @@ Routes:
   GET   /api/inbox/{id}   fetch a single item by its filename stem
   PATCH /api/inbox/{id}   set triage status (open | done | dismissed)
   GET   /api/doc/{path}   fetch a narrative markdown brief from an inbox subfolder
+  GET   /api/brief        the synthesized executive brief (curated, <=10 action items)
+  POST  /api/brief/refresh  queue a re-synthesis (returns immediately)
+  GET   /api/brief/status   whether a synthesis run is in flight
+
+The brief is the LANDING VIEW: 147 raw items are not actionable, so a synthesis pass
+(frontier model via the broker) reduces them to what actually needs attention this week.
+The raw card grid remains available as a second tab. Synthesis writes inbox/brief.json;
+this backend only ever reads that file — no model call happens on the read path.
 
 The inbox drop-zone is a directory of JSON files written by an external harvest process
 (Claude co-work scheduled tasks reading email + calendar + Teams). Each file is one
@@ -31,6 +39,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Literal
 
@@ -46,6 +55,7 @@ app = FastAPI(title="Co-Worker", version="0.2.0")
 
 STATE_FILE = ".state.json"
 ARCHIVE_DIR = "archive"
+BRIEF_FILE = "brief.json"
 VALID_STATUS = ("open", "done", "dismissed")
 DOC_SUFFIXES = (".md", ".markdown")
 
@@ -108,13 +118,18 @@ def _item_files(d: Path | None = None) -> list[Path]:
 
     Dotfiles are excluded: `.state.json` matches `*.json` and is valid JSON, so without
     this it gets served as a phantom 46th item. Found by the test suite, not in prod.
+    `brief.json` is excluded for the same reason but is NOT a dotfile — the synthesis
+    output lives beside the items and would otherwise render as an extra card.
 
     Pass a directory to read a different set (e.g. archive/); defaults to the live inbox.
     """
     d = d if d is not None else _inbox()
     if not d.exists():
         return []
-    files = [p for p in d.glob("*.json") if not p.name.startswith(".")]
+    files = [
+        p for p in d.glob("*.json")
+        if not p.name.startswith(".") and p.name != BRIEF_FILE
+    ]
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
@@ -222,6 +237,59 @@ def archive_list(
         "periods": all_periods,
         "archive_dir": str(d),
     }
+
+
+@app.get("/api/brief")
+def brief_get(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
+    """The synthesized executive brief — the landing view.
+
+    Pure file read. `stale` is advisory: the frontend colours the age signal and
+    offers a refresh, but a stale brief is still far more useful than 147 cards.
+    """
+    p = _inbox() / BRIEF_FILE
+    if not p.exists():
+        return {
+            "exists": False,
+            "stale": True,
+            "attention": [],
+            "message": "No brief yet — run a synthesis pass to generate one.",
+        }
+    try:
+        brief = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(brief, dict):
+            raise ValueError("brief must be a JSON object")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"malformed brief.json: {exc}") from exc
+
+    brief["exists"] = True
+    brief["_mtime"] = p.stat().st_mtime
+    age_h = (time.time() - p.stat().st_mtime) / 3600
+    brief["age_hours"] = round(age_h, 1)
+    brief["stale"] = age_h > 12
+    return brief
+
+
+@app.post("/api/brief/refresh")
+def brief_refresh(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
+    """Queue a synthesis run. Returns immediately — poll /api/brief/status.
+
+    Refuses rather than queues when a run is already in flight: two concurrent
+    passes would race on brief.json and waste a model call.
+    """
+    from co_worker_app.synthesize import get_status, synthesize_background
+
+    started = synthesize_background(_inbox())
+    if not started:
+        raise HTTPException(status_code=409, detail="a synthesis run is already in progress")
+    return {"started": True, **get_status()}
+
+
+@app.get("/api/brief/status")
+def brief_status(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
+    """Whether a synthesis run is in flight, plus the last run's outcome."""
+    from co_worker_app.synthesize import get_status
+
+    return get_status()
 
 
 @app.get("/api/inbox/{item_id}")
