@@ -59,6 +59,9 @@ services:
     image: co-worker-backend:latest
     environment:
       CO_WORKER_INBOX_DIR: /data/inbox
+      # Executive-brief synthesis calls the broker on the @co-worker-synthesis role.
+      CO_WORKER_BROKER_URL: http://host.docker.internal:11500
+      CO_WORKER_BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:

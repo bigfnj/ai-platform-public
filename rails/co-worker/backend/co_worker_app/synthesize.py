@@ -17,8 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 import threading
 import time
 import urllib.error
@@ -27,11 +25,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from co_worker_app.atomicio import write_json
+
 _log = logging.getLogger("co-worker.synthesize")
 
 BROKER_ROLE = "co-worker-synthesis"
 BRIEF_FILE = "brief.json"
 STATE_FILE = ".state.json"
+
+# Context budget for the items payload, in characters (~4 chars/token).
+# The local role is a small model on a modest GPU: a full week of items with bodies
+# runs ~245K chars (~61K tokens), which silently truncates and yields an empty brief.
+# So we drop bodies, clip prose, and cut lowest-value items first until we fit.
+ITEMS_CHAR_BUDGET = 48_000
+WHY_CLIP = 220
+TITLE_CLIP = 160
+NUM_CTX = 32_768
 
 # --- concurrency guard -------------------------------------------------------
 
@@ -67,6 +76,59 @@ No markdown code fences. If you cannot produce valid JSON, return {"error": "syn
 """
 
 
+def _triage_sort_key(item: dict) -> tuple:
+    """Cut order when we don't fit: keep clients, then real priorities, then recency.
+
+    Noise and FYIs go first — they were never going to make the attention list, and
+    spending context on them is what pushes a genuine client thread out of the window.
+    """
+    noise = 1 if item.get("type") in ("noise", "fyi") else 0
+    client = 0 if item.get("client") else 1
+    prio = item.get("priority")
+    prio = prio if isinstance(prio, (int, float)) else 9
+    mtime = item.get("_mtime") or 0
+    return (noise, client, prio, -float(mtime))
+
+
+def _condense(items: list[dict], state: dict[str, str]) -> list[dict]:
+    """Unresolved items, stripped to decision-relevant fields, within the char budget.
+
+    `body` is dropped entirely: it is ~48% of the payload and `title` + `why` already
+    carry the signal the ranking needs. A model that sees 147 titles beats one that
+    sees 35 full bodies and never learns the other 112 exist.
+    """
+    KEEP = ("_id", "type", "source", "priority", "title", "why", "from",
+            "when", "due", "client", "period")
+
+    live = [
+        item for item in items
+        if state.get(str(item.get("_id", "")), "open") not in ("done", "dismissed")
+    ]
+    live.sort(key=_triage_sort_key)
+
+    out: list[dict] = []
+    used = 0
+    for item in live:
+        row = {k: item[k] for k in KEEP if k in item and item[k] is not None}
+        if isinstance(row.get("why"), str) and len(row["why"]) > WHY_CLIP:
+            row["why"] = row["why"][:WHY_CLIP] + "…"
+        if isinstance(row.get("title"), str) and len(row["title"]) > TITLE_CLIP:
+            row["title"] = row["title"][:TITLE_CLIP] + "…"
+        cost = len(json.dumps(row, separators=(",", ":"), default=str))
+        if used + cost > ITEMS_CHAR_BUDGET:
+            break
+        out.append(row)
+        used += cost
+
+    if len(out) < len(live):
+        _log.warning(
+            "synthesis: context budget trimmed %d of %d unresolved items "
+            "(lowest-priority/noise dropped first)",
+            len(live) - len(out), len(live),
+        )
+    return out
+
+
 def _build_prompt(
     items: list[dict],
     state: dict[str, str],
@@ -80,14 +142,7 @@ def _build_prompt(
         if state.get(str(i.get("_id", "")), "open") in ("done", "dismissed")
     )
 
-    # Condense to fields the model needs — keeps context tight (~100 tokens/item)
-    KEEP = ("_id", "type", "source", "priority", "title", "why", "from",
-            "when", "due", "client", "period", "tags", "evidence", "body")
-    unresolved = [
-        {k: item[k] for k in KEEP if k in item and item[k] is not None}
-        for item in items
-        if state.get(str(item.get("_id", "")), "open") not in ("done", "dismissed")
-    ]
+    unresolved = _condense(items, state)
 
     schema_example = json.dumps({
         "generated": now_iso,
@@ -96,10 +151,10 @@ def _build_prompt(
         "items_triaged": n_triaged,
         "attention": [
             {
-                "id": "<_id of an inbox item>",
-                "category": "client|dangling|missed|agenda-gap|other",
+                "id": "<_id copied verbatim from an inbox item below>",
+                "category": "client",
                 "headline": "<direct instruction — what to do and why urgent>",
-                "urgency": "today|this-week|soon",
+                "urgency": "today",
                 "why": "<one sentence: consequence of not acting>",
             }
         ],
@@ -120,6 +175,12 @@ Today is {today}. Period: {period}.
 
 Produce a JSON executive brief with this EXACT schema:
 {schema_example}
+
+Field value rules — the example above shows ONE example value per field, not the choices:
+- "category" must be EXACTLY ONE of: client, dangling, missed, agenda-gap, other
+- "urgency" must be EXACTLY ONE of: today, this-week, soon
+- Never emit a pipe-separated list. Choose the single best value.
+- "id" must be copied verbatim from an item's "_id" below, or triage cannot round-trip.
 
 Attention list rules:
 - MAX 10 items, ordered by urgency: today → this-week → soon
@@ -144,15 +205,24 @@ Unresolved inbox items ({len(unresolved)} items):
 # --- broker call -------------------------------------------------------------
 
 def _call_broker(prompt: str, broker_url: str, auth_token: str) -> str:
-    url = f"{broker_url.rstrip('/')}/v1/chat/completions"
+    """POST /v1/chat. The broker is Ollama-native, NOT OpenAI-compatible:
+    sampling params live under `options` (num_predict, not max_tokens), the role
+    needs an `@` prefix to resolve via roles.json, and the reply is Ollama's
+    {"message": {"content": ...}} shape. `format: json` constrains decoding to
+    valid JSON, which matters a lot on a small local model."""
+    url = f"{broker_url.rstrip('/')}/v1/chat"
     payload = json.dumps({
-        "model": BROKER_ROLE,
+        "model": f"@{BROKER_ROLE}",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.15,
-        "max_tokens": 2048,
+        "format": "json",
+        "options": {
+            "temperature": 0.15,
+            "num_predict": 2048,
+            "num_ctx": NUM_CTX,
+        },
     }).encode("utf-8")
 
     headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -161,12 +231,18 @@ def _call_broker(prompt: str, broker_url: str, auth_token: str) -> str:
 
     req = urllib.request.Request(url, data=payload, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
+        with urllib.request.urlopen(req, timeout=600) as resp:
             data = json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"broker HTTP {exc.code}: {body[:400]}") from exc
-    return data["choices"][0]["message"]["content"]
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"broker unreachable at {url}: {exc.reason}") from exc
+
+    content = (data.get("message") or {}).get("content", "") or ""
+    if not content.strip():
+        raise RuntimeError(f"broker returned no content: {str(data)[:300]}")
+    return content
 
 
 def _extract_json(text: str) -> dict:
@@ -186,6 +262,67 @@ def _extract_json(text: str) -> dict:
 
 
 # --- item loading ------------------------------------------------------------
+
+CATEGORIES = ("client", "dangling", "missed", "agenda-gap", "other")
+URGENCIES = ("today", "this-week", "soon")
+
+
+def _pick_enum(value: Any, allowed: tuple[str, ...], default: str) -> str:
+    """Coerce a model-supplied enum to a legal value.
+
+    Small models like to echo the schema placeholder back ("client|dangling|missed"),
+    which would render as a garbage chip. Take the first legal token we recognise.
+    """
+    s = str(value or "").strip().lower()
+    if s in allowed:
+        return s
+    for a in allowed:                      # "client|dangling" -> "client"
+        if a in s:
+            return a
+    return default
+
+
+def _normalize(brief: dict, valid_ids: set[str]) -> dict:
+    """Make the model's output safe to render, and report what was unusable."""
+    clean: list[dict] = []
+    dropped = 0
+    for raw in brief.get("attention") or []:
+        if not isinstance(raw, dict):
+            dropped += 1
+            continue
+        item_id = str(raw.get("id") or "").strip()
+        headline = str(raw.get("headline") or "").strip()
+        if not headline:
+            dropped += 1
+            continue
+        # An id that doesn't resolve means the triage buttons would silently no-op.
+        # Keep the insight, but flag it so the UI can hide the controls.
+        resolved = item_id in valid_ids
+        clean.append({
+            "id": item_id,
+            "category": _pick_enum(raw.get("category"), CATEGORIES, "other"),
+            "urgency": _pick_enum(raw.get("urgency"), URGENCIES, "soon"),
+            "headline": headline,
+            "why": str(raw.get("why") or "").strip() or None,
+            "unresolved_id": not resolved,
+        })
+        if not resolved:
+            _log.warning("synthesis: attention id %r not found in inbox", item_id)
+
+    brief["attention"] = clean[:10]
+    if dropped:
+        brief["malformed_attention"] = dropped
+
+    for key in ("dangling", "missed", "agenda_gaps"):
+        v = brief.get(key)
+        brief[key] = [str(x).strip() for x in v if str(x).strip()] if isinstance(v, list) else []
+
+    for key in ("client_pulse", "synthesis_note"):
+        v = brief.get(key)
+        brief[key] = str(v).strip() if isinstance(v, str) and v.strip() else None
+
+    return brief
+
 
 def _load_inbox(inbox: Path) -> tuple[list[dict], dict[str, str]]:
     items: list[dict] = []
@@ -246,7 +383,7 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     raw = _call_broker(prompt, settings.broker_url, settings.broker_auth_token)
     _log.info("synthesis: broker returned %d chars", len(raw))
 
-    brief = _extract_json(raw)
+    brief = _normalize(_extract_json(raw), {str(i.get("_id")) for i in items})
 
     # Guarantee required top-level keys regardless of model compliance
     brief.setdefault("generated", now_iso)
@@ -259,16 +396,18 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     brief.setdefault("attention", [])
     brief.setdefault("suppressed", 0)
 
-    # Atomic write
-    p = inbox / BRIEF_FILE
-    fd, tmp = tempfile.mkstemp(dir=str(inbox), prefix=".brief-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(brief, f, indent=2)
-        os.replace(tmp, str(p))
-    except Exception:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    # How much the local model actually saw. A trimmed run is a real caveat on the
+    # brief's completeness, so it travels with the brief rather than living in a log.
+    sent = len(_condense(items, state))
+    unresolved_total = sum(
+        1 for i in items
+        if state.get(str(i.get("_id", "")), "open") not in ("done", "dismissed")
+    )
+    brief["items_read"] = sent
+    if sent < unresolved_total:
+        brief["truncated"] = unresolved_total - sent
+
+    write_json(inbox / BRIEF_FILE, brief)
 
     _log.info(
         "synthesis: wrote brief.json (%d attention items, %d suppressed)",

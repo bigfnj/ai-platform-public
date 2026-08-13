@@ -351,6 +351,7 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 
 .cw-att-acts { display: flex; gap: 5px; flex: none; align-items: flex-start; }
 .cw-att-acts .cw-tri { padding: 4px 9px; }
+.cw-att-noid { font-size: 13px; color: var(--p2); cursor: help; padding: 3px 4px; }
 
 .cw-brief-foot {
   font-size: 11.5px; color: var(--mut); text-align: center;

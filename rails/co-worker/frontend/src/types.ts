@@ -195,7 +195,9 @@ export interface AttentionItem {
   category: BriefCategory
   headline: string
   urgency: Urgency
-  why?: string
+  why?: string | null
+  /** The id didn't match an inbox item — triage would no-op, so it's not offered. */
+  unresolved_id?: boolean
 }
 
 export interface Brief {
@@ -215,6 +217,10 @@ export interface Brief {
   age_hours?: number
   _mtime?: number
   message?: string
+  /** How many items actually reached the model. */
+  items_read?: number
+  /** Set when the context budget forced items to be dropped. */
+  truncated?: number
 }
 
 export interface BriefStatus {

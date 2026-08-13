@@ -49,8 +49,12 @@ function AttentionRow({
         {um && <span className={`cw-urg ${a.urgency}`}>{um.label}</span>}
       </div>
       <div className="cw-att-acts">
-        {resolved ? (
-          <button className="cw-tri" onClick={() => onStatus(a.id, 'open')}>↩</button>
+        {a.unresolved_id ? (
+          <span className="cw-att-noid" title={`No inbox item matches "${a.id}" — triage unavailable`}>
+            ⚠
+          </span>
+        ) : resolved ? (
+          <button className="cw-tri" onClick={() => onStatus(a.id, 'open')} title="Reopen">↩</button>
         ) : (
           <>
             <button className="cw-tri done" onClick={() => onStatus(a.id, 'done')} title="Mark done">✓</button>
@@ -168,6 +172,16 @@ export default function BriefView({
 
       {note && <div className={busy ? 'cw-note' : 'cw-err'}>{note}</div>}
       {err && <div className="cw-err">Couldn't load the brief: {err}</div>}
+
+      {brief?.truncated ? (
+        <div className="cw-note">
+          <strong>Partial pass.</strong> The local model's context window only fit{' '}
+          {brief.items_read} of {(brief.items_read ?? 0) + brief.truncated} unresolved items —
+          the {brief.truncated} dropped were the lowest-priority and noise-typed ones. For a
+          complete synthesis, have the co-work harvest task write the brief instead (see{' '}
+          <code>BRIEF_SCHEMA.md</code>).
+        </div>
+      ) : null}
 
       {loading && <p className="cw-sub" style={{ padding: '0 4px' }}>Loading brief…</p>}
 

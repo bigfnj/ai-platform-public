@@ -37,8 +37,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -46,6 +44,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from co_worker_app.atomicio import write_json
 from co_worker_app.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -85,17 +84,9 @@ def _load_state() -> dict[str, str]:
 
 
 def _save_state(state: dict[str, str]) -> None:
-    """Atomic write — a torn state file would lose every triage decision at once."""
-    d = _inbox()
-    d.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(d), prefix=".state-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, sort_keys=True)
-        os.replace(tmp, str(_state_path()))
-    except Exception:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    """Persist triage state. See atomicio: the inbox is often a 9p bind mount, where
+    rename-over-existing fails, so the writer degrades rather than erroring out."""
+    write_json(_state_path(), state, sort_keys=True)
 
 
 # --- item reading ----------------------------------------------------------

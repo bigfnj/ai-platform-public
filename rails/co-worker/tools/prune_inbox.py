@@ -98,6 +98,28 @@ def period_to_date(period: str) -> dt.date | None:
     return None
 
 
+def _write_state(path: Path, state: dict[str, str]) -> None:
+    """Write the triage sidecar as atomically as the filesystem allows.
+
+    Mirrors backend/co_worker_app/atomicio.py — this tool is standalone (no backend
+    import), so the fallback is duplicated rather than shared. The inbox is often a
+    9p bind mount, where rename-over-an-existing-file raises EPERM.
+    """
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.stem}-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, sort_keys=True)
+        try:
+            os.replace(tmp, str(path))
+        except OSError:
+            if not path.exists():
+                raise
+            path.unlink()
+            os.replace(tmp, str(path))
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
 def load_state(inbox: Path) -> dict[str, str]:
     p = inbox / STATE_FILE
     if not p.exists():
@@ -301,15 +323,7 @@ def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: boo
             if not dry_run:
                 for s in stale:
                     state.pop(s, None)
-                p = inbox / STATE_FILE
-                fd, tmp = tempfile.mkstemp(dir=str(inbox), prefix=".state-", suffix=".tmp")
-                try:
-                    with os.fdopen(fd, "w", encoding="utf-8") as f:
-                        json.dump(state, f, indent=2, sort_keys=True)
-                    os.replace(tmp, str(p))
-                except Exception:
-                    Path(tmp).unlink(missing_ok=True)
-                    raise
+                _write_state(inbox / STATE_FILE, state)
 
     print()
     print("dry run - nothing changed" if dry_run else "done")
