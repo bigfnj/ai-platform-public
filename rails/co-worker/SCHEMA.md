@@ -18,6 +18,14 @@ The contract between the **harvest process** (Claude co-work scheduled tasks) an
 > made mandatory; and retention split into two tiers so the dashboard window can stay
 > short while history stays long. **Any loop may now be re-run any number of times per day
 > without producing a duplicate.**
+>
+> **v2.2 (2026-08-12).** Gave structure to reasoning that previously had to be smuggled
+> through prose: typed `related` edges (a recommendation and the habit it answers are no
+> longer merely "related"), `metrics` with `prev` so a measurement and its trend delta have
+> a home outside `evidence`, `confidence` instead of hedging inline, and `competing` so a
+> `conflict` can name what collides and which one wins. **All four are optional and
+> additive** — `schema` stays `2` and every existing item remains valid. Backend adds
+> `?period=` on `/api/inbox` and a new `/api/archive`, so trend history is reachable.
 
 ## Two artifacts per run
 
@@ -39,10 +47,10 @@ Never nest JSON items in subfolders; they will not be found.
 ```
 <period>_<source>_<slug>.json
 
-2026W33_calendar_conflict-thu-triple-book.json
+2026W33_calendar_conflict-wed-double-book.json
 20260811_email_vpn-tunnel-access-request.json
 2026W33_teams_dangling-vpn-answer-owed.json
-2026W33_insights_reactor-not-initiator.json
+2026W33_insights_meeting-load-climbing.json
 ```
 
 **No clock time in the filename.** The id is a function of *what the finding is*, not *when
@@ -66,7 +74,7 @@ it runs. Get this wrong and re-runs duplicate no matter how stable the slug is.
   never the type.** A `noise` item from the email loop is `..._email_...`, not `..._noise_...`.
 - `<slug>` — short, stable, kebab-case, descriptive of the finding. **Stability matters:**
   the same finding next run should produce the same slug so it overwrites rather than
-  duplicating. Describe the finding, not the date (`conflict-thu-triple-book`, not
+  duplicating. Describe the finding, not the date (`conflict-wed-double-book`, not
   `conflict-aug-13`).
 - **No colons** — illegal in Windows filenames.
 - The filename stem becomes `_id` and is used by `GET /api/inbox/{id}`, which rejects ids
@@ -124,9 +132,12 @@ Backend injects `_id`, `_file`, `_mtime`, and `_status` on read — never write 
 | `doc` | string\|null | ✅ | Relative path to the narrative markdown, e.g. `calendar/2026-08-17-week.md`. Served by `GET /api/doc/{path}` and opened in the dashboard's drill-through modal. |
 | `tags` | string[] | — | Freeform labels. Defaults `[]`. |
 | `links` | object[] | — | `[{ "label": "Open in Outlook", "url": "https://…" }]`. Real Graph `webLink` values, copied verbatim. |
-| `related` | string[] | — | Other **co-worker item `_id`s**. See the `related` policy below. |
+| `related` | (string\|object)[] | — | Other **co-worker item `_id`s**, optionally typed. See the `related` policy below. |
 | `thread_id` | string\|null | — | Groups items from one conversation or series. |
 | `evidence` | string\|null | — | Where the claim came from. **Required on every `insight`.** |
+| `metrics` | object[] | — | Quantities behind the claim. See **Measurements**. |
+| `confidence` | string\|null | — | `high` \| `medium` \| `low`. See **Confidence**. |
+| `competing` | object[] | — | What collides, for `conflict` items. See **Conflicts**. |
 
 **Timezone rule:** every datetime carries an explicit offset. Justin is US Pacific: `-07:00`
 during PDT (Mar–Nov), `-08:00` during PST (Nov–Mar). Graph returns UTC; the harvest converts
@@ -150,6 +161,87 @@ ref means it was guessed, and it fails silently.
 If you want to note a connection you can't address, say so in `body` as prose. Never invent
 an id. The **`insights` loop reads every item** and is responsible for adding the cross-source
 edges the other loops missed.
+
+#### Typed edges
+
+A bare string is an untyped edge and stays valid forever. To say *how* two items relate, use
+an object instead — mixing both forms in one list is fine:
+
+```json
+"related": [
+  "2026W33_calendar_focus-block-breached",
+  { "id": "2026W33_teams_insight-open-loop-pattern", "rel": "answers" }
+]
+```
+
+| `rel` | Meaning |
+|---|---|
+| `relates-to` | Default. Same as a bare string. |
+| `answers` | This item is the remedy for that one. A recommendation → the habit it fixes. |
+| `derives-from` | This was computed from that — an insight from the items it generalizes. |
+| `duplicates` | Same finding surfaced by another loop. |
+| `supersedes` | This replaces that, which is now stale. |
+| `blocks` | That can't proceed until this does. |
+
+The distinction that matters: **a recommendation and the habit it addresses are not merely
+"related."** Untyped, the only thing connecting them is prose describing the link — which is
+formatting standing in for structure.
+
+### Measurements — `metrics`
+
+Any number behind a claim goes here instead of being written into `evidence` as a sentence.
+
+```json
+"metrics": [
+  { "label": "median first response", "value": 19.5, "unit": "hours", "prev": 6.2 },
+  { "label": "commitments older than 14d", "value": 4, "unit": null, "prev": 2 }
+]
+```
+
+| Key | Type | Required | Notes |
+|---|---|---|---|
+| `label` | string | ✅ | What was measured. |
+| `value` | number | ✅ | The measurement. A real number, not a string. |
+| `unit` | string\|null | — | `hours`, `days`, `%`, `count`… Null when the label carries it. |
+| `prev` | number\|null | — | Same measurement last period. **This is where a trend delta lives** — the rail computes the direction, so never write "up from 6.2" in prose. |
+
+`evidence` stays prose and explains *where the number came from*. `metrics` carries the number
+itself. An `insight` that quantifies anything should populate both.
+
+### Confidence
+
+```json
+"confidence": "medium"
+```
+
+`high` \| `medium` \| `low`, or omit it when the claim is a plain observation. Use it instead
+of hedging inline — "this may be" and "roughly" in a `body` are caveats the rail can't read,
+so they can't be filtered, sorted, or surfaced. State the caveat's *reason* in `evidence`.
+
+An `insight` marked `low` is still worth writing; an unmarked wrong one is not.
+
+### Conflicts — `competing`
+
+For `conflict` items: name what actually collides and which one wins. A conflict whose
+contenders exist only inside `body` prose can't be rendered, counted, or acted on.
+
+```json
+"competing": [
+  { "label": "Project Status Update", "ref": null, "start": "2026-08-13T11:00:00-07:00",
+    "end": "2026-08-13T11:15:00-07:00", "verdict": "take" },
+  { "label": "Org All-Hands", "ref": null, "start": "2026-08-13T11:00:00-07:00",
+    "end": "2026-08-13T11:50:00-07:00", "verdict": "drop" }
+]
+```
+
+| Key | Type | Required | Notes |
+|---|---|---|---|
+| `label` | string | ✅ | The event name. |
+| `ref` | string\|null | — | A co-worker item id if one exists for it. Never a Graph id. |
+| `start` / `end` | string\|null | — | ISO-8601 with offset, same rule as `when`. |
+| `verdict` | string\|null | — | `take` \| `drop` \| `defer` \| `delegate`. Exactly one entry should be `take`. |
+
+`why` still carries the one-line reasoning. `competing` carries the structure.
 
 ## Types
 
@@ -250,9 +342,9 @@ computing long-range trends.
   "type": "conflict",
   "source": "calendar",
   "period": "2026W33",
-  "title": "Thursday 11:00a is triple-booked",
+  "title": "Wednesday 11:00a is double-booked",
   "why": "The 15-minute client status call is the one that actually needs you; the other two are a broadcast and your own focus block.",
-  "body": "Three events collide Thu Aug 13, 11:00a PT:\n\n- **Project Status Update** (11:00–11:15, tentative) — client delivery accountability\n- **Org All-Hands** (11:00–11:50) — ~250-person broadcast\n- **HeadsDown** (11:00–12:00) — your own focus block\n\nTake the client call, drop the broadcast, reclaim the rest.",
+  "body": "Three events collide Thu Aug 13, 11:00a PT:\n\n- **Project Status Update** (11:00–11:15, tentative) — client delivery accountability\n- **Org All-Hands** (11:00–11:50) — ~250-person broadcast\n- **Focus Block** (11:00–12:00) — your own focus block\n\nTake the client call, drop the broadcast, reclaim the rest.",
   "priority": 2,
   "client": true,
   "when": "2026-08-13T11:00:00-07:00",
@@ -260,9 +352,9 @@ computing long-range trends.
   "from": "Alex Rivera",
   "run": "calendar-2026-08-17",
   "doc": "calendar/2026-08-17-week.md",
-  "tags": ["conflict", "acme-program", "headsdown"],
+  "tags": ["conflict", "acme-program", "focus-block"],
   "links": [{ "label": "Open in Outlook", "url": "https://outlook.office.com/owa/?itemid=…" }],
-  "related": ["2026W33_calendar_headsdown-breached"],
+  "related": ["2026W33_calendar_focus-block-breached"],
   "thread_id": "project-status",
   "evidence": null
 }

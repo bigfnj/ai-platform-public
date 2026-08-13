@@ -3,6 +3,8 @@
 Routes:
   GET   /api/healthz      liveness + valid/skipped item counts
   GET   /api/inbox        list harvested items (newest first) + malformed-file report
+                          ?period=2026W33 narrows to one grouping period
+  GET   /api/archive      pruned items, same shape — where trend history lives
   GET   /api/inbox/{id}   fetch a single item by its filename stem
   PATCH /api/inbox/{id}   set triage status (open | done | dismissed)
   GET   /api/doc/{path}   fetch a narrative markdown brief from an inbox subfolder
@@ -101,17 +103,38 @@ def _read_item(path: Path, state: dict[str, str] | None = None) -> dict[str, Any
     return data
 
 
-def _item_files() -> list[Path]:
+def _item_files(d: Path | None = None) -> list[Path]:
     """Flat glob only — markdown lives in subfolders, archive/ is excluded by design.
 
     Dotfiles are excluded: `.state.json` matches `*.json` and is valid JSON, so without
     this it gets served as a phantom 46th item. Found by the test suite, not in prod.
+
+    Pass a directory to read a different set (e.g. archive/); defaults to the live inbox.
     """
-    d = _inbox()
+    d = d if d is not None else _inbox()
     if not d.exists():
         return []
     files = [p for p in d.glob("*.json") if not p.name.startswith(".")]
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def _collect(d: Path, period: str | None = None) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Read every item in `d`, returning (items, skipped). Malformed files are reported,
+    never silently dropped — a card that vanishes without explanation is the failure mode
+    this rail most needs to avoid."""
+    state = _load_state()
+    items: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for f in _item_files(d):
+        try:
+            item = _read_item(f, state)
+        except Exception as exc:
+            _log.warning("skipping %s: %s", f.name, exc)
+            skipped.append({"file": f.name, "error": str(exc)})
+            continue
+        if period is None or str(item.get("period") or "") == period:
+            items.append(item)
+    return items, skipped
 
 
 # --- routes ----------------------------------------------------------------
@@ -141,24 +164,55 @@ def healthz() -> dict[str, Any]:
 
 @app.get("/api/inbox")
 def inbox_list(
+    period: str | None = None,
     x_platform_user: str = Header(default="?"),
 ) -> dict[str, Any]:
-    """All items, newest-first by mtime, with malformed files reported not hidden."""
+    """All items, newest-first by mtime, with malformed files reported not hidden.
+
+    `?period=2026W33` narrows to one grouping period. Computing a trend delta otherwise
+    means pulling every item and grouping client-side, which gets worse as archive grows.
+    `periods` always lists what's available so a caller can drive a picker without a
+    second request.
+    """
     d = _inbox()
     if not d.exists():
-        return {"items": [], "skipped": [], "inbox_dir": str(d)}
+        return {"items": [], "skipped": [], "periods": [], "inbox_dir": str(d)}
 
-    state = _load_state()
-    items: list[dict[str, Any]] = []
-    skipped: list[dict[str, str]] = []
-    for f in _item_files():
-        try:
-            items.append(_read_item(f, state))
-        except Exception as exc:
-            _log.warning("skipping %s: %s", f.name, exc)
-            skipped.append({"file": f.name, "error": str(exc)})
+    items, skipped = _collect(d, period)
+    all_periods = sorted({str(i.get("period")) for i in _collect(d)[0] if i.get("period")}, reverse=True)
+    return {
+        "items": items,
+        "skipped": skipped,
+        "period": period,
+        "periods": all_periods,
+        "inbox_dir": str(d),
+    }
 
-    return {"items": items, "skipped": skipped, "inbox_dir": str(d)}
+
+@app.get("/api/archive")
+def archive_list(
+    period: str | None = None,
+    x_platform_user: str = Header(default="?"),
+) -> dict[str, Any]:
+    """Pruned items, same shape as /api/inbox. This is where trend history lives.
+
+    The pruner moves items out of the dashboard window into archive/, so without this
+    route that history sits on disk unreachable — you can see this week but never
+    compare it to last.
+    """
+    d = _inbox() / ARCHIVE_DIR
+    if not d.exists():
+        return {"items": [], "skipped": [], "periods": [], "archive_dir": str(d)}
+
+    items, skipped = _collect(d, period)
+    all_periods = sorted({str(i.get("period")) for i in _collect(d)[0] if i.get("period")}, reverse=True)
+    return {
+        "items": items,
+        "skipped": skipped,
+        "period": period,
+        "periods": all_periods,
+        "archive_dir": str(d),
+    }
 
 
 @app.get("/api/inbox/{item_id}")

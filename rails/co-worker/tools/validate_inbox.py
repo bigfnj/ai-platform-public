@@ -35,6 +35,11 @@ REQUIRED = [
     "schema", "type", "source", "period", "title", "why", "body",
     "priority", "client", "when", "due", "from", "run", "doc",
 ]
+# Optional structured fields (v2.2). All additive — an item written before these existed
+# stays valid, so no rewrite is ever forced by adding one.
+REL_TYPES = {"relates-to", "answers", "derives-from", "duplicates", "supersedes", "blocks"}
+CONFIDENCE = {"high", "medium", "low"}
+VERDICTS = {"take", "drop", "defer", "delegate"}
 
 ISO_OFFSET = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}([+-]\d{2}):(\d{2})$")
 GRAPH_ID = re.compile(r"^AA[A-Za-z0-9+/=_%-]{20,}$")
@@ -206,7 +211,19 @@ def validate(inbox: Path, quiet: bool = False) -> int:
             if not str(link.get("url") or "").startswith("https://"):
                 err(f"link url must be https, got {link.get('url')!r}")
 
-        for ref in d.get("related") or []:
+        # `related` accepts a bare id (untyped) or {"id": ..., "rel": ...}. Both forms
+        # coexist; a bare string stays valid so existing items never need rewriting.
+        for entry in d.get("related") or []:
+            if isinstance(entry, dict):
+                ref = entry.get("id")
+                rel = entry.get("rel", "relates-to")
+                if rel not in REL_TYPES:
+                    err(f"related rel {rel!r} is not one of {sorted(REL_TYPES)}")
+                if not ref:
+                    err("related object is missing its id")
+                    continue
+            else:
+                ref = entry
             if GRAPH_ID.match(str(ref)):
                 err(f"related contains a Microsoft Graph id ({str(ref)[:24]}…) — "
                     "use `links` for Graph webLinks; `related` takes co-worker item ids")
@@ -214,6 +231,60 @@ def validate(inbox: Path, quiet: bool = False) -> int:
                 warn(f"related -> {ref!r} does not resolve (archived, or written by another loop)")
             elif ref == stem:
                 warn("related references itself")
+
+        # --- metrics ------------------------------------------------------
+        metrics = d.get("metrics")
+        if metrics is not None and not isinstance(metrics, list):
+            err("metrics must be a list")
+        for m in metrics or []:
+            if not isinstance(m, dict):
+                err("metrics entries must be objects")
+                continue
+            if not str(m.get("label") or "").strip():
+                err("a metric is missing its label")
+            v = m.get("value")
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                err(f"metric {m.get('label')!r} value must be a number, got {v!r}")
+            p = m.get("prev")
+            if p is not None and (isinstance(p, bool) or not isinstance(p, (int, float))):
+                err(f"metric {m.get('label')!r} prev must be a number or null, got {p!r}")
+
+        # --- confidence ---------------------------------------------------
+        conf = d.get("confidence")
+        if conf is not None and conf not in CONFIDENCE:
+            err(f"confidence must be one of {sorted(CONFIDENCE)} or null, got {conf!r}")
+
+        # --- competing (conflict items) ------------------------------------
+        competing = d.get("competing")
+        if competing is not None and not isinstance(competing, list):
+            err("competing must be a list")
+        takes = 0
+        for c in competing or []:
+            if not isinstance(c, dict):
+                err("competing entries must be objects")
+                continue
+            if not str(c.get("label") or "").strip():
+                err("a competing entry is missing its label")
+            verdict = c.get("verdict")
+            if verdict is not None and verdict not in VERDICTS:
+                err(f"competing verdict must be one of {sorted(VERDICTS)} or null, got {verdict!r}")
+            if verdict == "take":
+                takes += 1
+            cref = c.get("ref")
+            if cref and GRAPH_ID.match(str(cref)):
+                err(f"competing ref is a Graph id ({str(cref)[:24]}…) — use a co-worker item id")
+            elif cref and cref not in ids:
+                warn(f"competing ref -> {cref!r} does not resolve")
+            for k in ("start", "end"):
+                if c.get(k) and not ISO_OFFSET.match(str(c[k])):
+                    err(f"competing {k} must be ISO-8601 with offset, got {c[k]!r}")
+        if competing:
+            if takes == 0:
+                warn("competing has no entry marked verdict 'take' — no winner declared")
+            elif takes > 1:
+                err(f"competing has {takes} entries marked 'take'; exactly one should win")
+        if d.get("type") == "conflict" and not competing:
+            warn("conflict item has no `competing` — the colliding events are prose only")
 
         # Cross-source edges are allowed from any loop, but they must resolve. A loop can
         # only construct another loop's id by reading the inbox first, so an unresolved

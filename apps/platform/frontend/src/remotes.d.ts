@@ -35,3 +35,8 @@ declare module 'ai_playground/module' {
   const AiPlaygroundModule: ComponentType
   export default AiPlaygroundModule
 }
+declare module 'co_worker/module' {
+  import type { ComponentType } from 'react'
+  const CoWorkerModule: ComponentType
+  export default CoWorkerModule
+}

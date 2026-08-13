@@ -29,6 +29,54 @@ export interface ItemLink {
   url: string
 }
 
+/** How two items relate (schema v2.2). A bare string in `related` means 'relates-to'. */
+export type RelType =
+  | 'relates-to'
+  | 'answers'
+  | 'derives-from'
+  | 'duplicates'
+  | 'supersedes'
+  | 'blocks'
+
+export type RelatedRef = string | { id: string; rel?: RelType }
+
+/** A quantity behind a claim. `prev` is the same measure last period — the delta is
+ *  computed here rather than written into prose by the harvest. */
+export interface Metric {
+  label: string
+  value: number
+  unit?: string | null
+  prev?: number | null
+}
+
+export type Confidence = 'high' | 'medium' | 'low'
+
+/** One side of a `conflict`. Exactly one entry should carry verdict 'take'. */
+export interface Competing {
+  label: string
+  ref?: string | null
+  start?: string | null
+  end?: string | null
+  verdict?: 'take' | 'drop' | 'defer' | 'delegate' | null
+}
+
+/** Normalizes both `related` forms to objects so callers don't branch on type. */
+export function relatedEdges(item: Item): { id: string; rel: RelType }[] {
+  const raw = Array.isArray(item.related) ? item.related : []
+  return raw
+    .map((r) =>
+      typeof r === 'string'
+        ? { id: r, rel: 'relates-to' as RelType }
+        : { id: r?.id, rel: (r?.rel ?? 'relates-to') as RelType },
+    )
+    .filter((e): e is { id: string; rel: RelType } => Boolean(e.id))
+}
+
+/** Signed delta vs the previous period, or null when there's no baseline. */
+export function metricDelta(m: Metric): number | null {
+  return typeof m.prev === 'number' ? m.value - m.prev : null
+}
+
 /** Backend-injected fields are prefixed with `_` and are always present on read. */
 export interface Item {
   _id: string
@@ -52,9 +100,12 @@ export interface Item {
   doc?: string | null
   tags?: string[]
   links?: ItemLink[]
-  related?: string[]
+  related?: RelatedRef[]
   thread_id?: string | null
   evidence?: string | null
+  metrics?: Metric[]
+  confidence?: Confidence | null
+  competing?: Competing[]
 
   /** Anything the harvest adds that this frontend doesn't know about yet. */
   [key: string]: unknown
@@ -69,7 +120,13 @@ export interface SkippedFile {
 export interface InboxResponse {
   items: Item[]
   skipped: SkippedFile[]
+  /** Echo of the ?period= filter, null when unfiltered. */
+  period?: string | null
+  /** Every period present, newest first — drives a period picker without a second call. */
+  periods?: string[]
   inbox_dir: string
+  /** Present on /api/archive instead of inbox_dir. */
+  archive_dir?: string
 }
 
 export interface DocResponse {

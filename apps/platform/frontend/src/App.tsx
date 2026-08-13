@@ -14,6 +14,7 @@ const BouquetModule = lazy(() => import('bouquet/module'))
 const WorkstationModule = lazy(() => import('workstation/module'))
 const TerminalFunModule = lazy(() => import('terminal_fun/module'))
 const AiPlaygroundModule = lazy(() => import('ai_playground/module'))
+const CoWorkerModule = lazy(() => import('co_worker/module'))
 
 const STATUS_MS = 5000
 
@@ -269,6 +270,18 @@ export default function App() {
         }
       >
         <AiPlaygroundModule />
+      </Suspense>
+    )
+  } else if (activeEntry?.id === 'co-worker') {
+    content = (
+      <Suspense
+        fallback={
+          <div className="module">
+            <div className="card"><div className="empty">Loading Co-Worker…</div></div>
+          </div>
+        }
+      >
+        <CoWorkerModule />
       </Suspense>
     )
   } else if (activeEntry) {
