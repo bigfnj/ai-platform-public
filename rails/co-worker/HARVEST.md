@@ -10,6 +10,41 @@ Paths below are relative to `C:\Users\justin.lowe\ai-platform\`.
 
 ---
 
+## Scope — what you write, and what you never write
+
+**You produce data. You do not build the rail.**
+
+| | |
+|---|---|
+| ✅ Yours | `data\co-worker\` — item JSON, markdown briefs, `CONTEXT.md`, loop working-state (e.g. `inbox\teams\chat-registry.json`) |
+| ✅ Yours | This file and `SCHEMA.md` — your operating manual and contract, subject to the naming rule below |
+| ❌ Never | `rails\co-worker\frontend\` and `rails\co-worker\backend\` — the rail's source |
+| ❌ Never | Anything else under `rails\`, `apps\`, `deploy\`, or `services\` |
+
+The dashboard is built and reviewed on the host, where it can be rendered in a browser and
+checked against real items. **You cannot reach the backend or load the page from your
+sandbox** — so you cannot verify any UI change you make, and an unverifiable change to a
+rendering surface is worse than no change. A previous session wrote a full dashboard this
+way; it never rendered once.
+
+If a finding needs something the rail can't express — a new field, an endpoint, a different
+display — **say so in your report-back (§6). Propose it; don't implement it.** That is a
+faster path to it existing than writing code nobody can run.
+
+### Real names never leave `data\`
+
+**`data\` is gitignored. Everything under `rails\` is committed to a PUBLIC repository.**
+
+That asymmetry is the whole rule. Inside `data\` write real names, accounts, and ticket ids
+freely — that is the point of the harvest, and it never leaves the machine. But when you edit
+this file or `SCHEMA.md`, **every example must be invented**: no real person, client, account,
+ticket id, or internal URL, including inside a filename example or a slug.
+
+This has been violated twice. A worked example was copied verbatim from a live item, and
+filename examples used two colleagues' names as slugs — both reached a public repo. Write
+`20260811_email_vpn-tunnel-access-request.json`, never a real person's name; `Alex Rivera`,
+never a real sender.
+
 ## 1. Memory first — non-negotiable
 
 **Read `data\co-worker\CONTEXT.md` before anything else.**
@@ -160,3 +195,6 @@ Close the run by presenting the markdown file, then stating:
 - how many JSON items were written, and for which periods
 - the validator result and the pruner's archived/expired counts
 - anything appended to CONTEXT.md
+- **any rail change you'd want** — a field the schema lacks, an endpoint you needed, a way
+  these findings would read better on screen. One line each. You know the shape of the data
+  better than anyone; you just don't build the surface that shows it.
