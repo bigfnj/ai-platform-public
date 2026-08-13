@@ -35,7 +35,10 @@ export type RelType =
   | 'answers'
   | 'derives-from'
   | 'duplicates'
+  /** That was true and has been overtaken. */
   | 'supersedes'
+  /** That was wrong and is withdrawn — an admission, not routine staleness. */
+  | 'retracts'
   | 'blocks'
 
 export type RelatedRef = string | { id: string; rel?: RelType }
@@ -54,7 +57,14 @@ export interface Metric {
   direction?: MetricDirection | null
   target?: number | null
   confidence?: Confidence | null
+  /** Whether the number moved or the earlier count was wrong. A `correction` must never
+   *  render as a trend arrow — that reports improvement where we simply measured badly. */
+  kind?: MetricKind | null
+  /** Per-measurement verification; a synthesis item mixes computed and inherited numbers. */
+  verification?: Verification | null
 }
+
+export type MetricKind = 'movement' | 'correction'
 
 export type MetricDirection = 'up-good' | 'down-good' | 'neutral'
 
@@ -98,12 +108,19 @@ export function metricDelta(m: Metric): number | null {
 }
 
 /** Whether a delta is an improvement, given the metric's own sense of direction.
- *  Returns null when there's no baseline or no stated direction — the caller should
- *  render the arrow neutral rather than guess. */
+ *  Returns null when there's no baseline, no stated direction, or the change is a
+ *  correction — the caller renders those neutral rather than guessing. */
 export function deltaIsGood(m: Metric): boolean | null {
+  if (isCorrection(m)) return null
   const d = metricDelta(m)
   if (d === null || d === 0 || !m.direction || m.direction === 'neutral') return null
   return m.direction === 'up-good' ? d > 0 : d < 0
+}
+
+/** A restatement of a bad count, not movement over time. Render as "was X", never as an
+ *  arrow: an arrow here claims improvement that never happened. */
+export function isCorrection(m: Metric): boolean {
+  return m.kind === 'correction'
 }
 
 /** Backend-injected fields are prefixed with `_` and are always present on read. */

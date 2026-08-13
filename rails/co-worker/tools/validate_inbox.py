@@ -37,13 +37,16 @@ REQUIRED = [
 ]
 # Optional structured fields (v2.2). All additive — an item written before these existed
 # stays valid, so no rewrite is ever forced by adding one.
-REL_TYPES = {"relates-to", "answers", "derives-from", "duplicates", "supersedes", "blocks"}
+REL_TYPES = {"relates-to", "answers", "derives-from", "duplicates", "supersedes",
+             "retracts", "blocks"}
 CONFIDENCE = {"high", "medium", "low"}
 VERDICTS = {"take", "drop", "defer", "delegate"}
 # v2.3
 VERIFICATION = {"full-read", "summary", "inferred"}
 DIRECTIONS = {"up-good", "down-good", "neutral"}
 RECURRENCE = {"daily", "weekly", "biweekly", "monthly", "irregular"}
+# v2.4
+METRIC_KINDS = {"movement", "correction"}
 
 ISO_OFFSET = re.compile(r"^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}([+-]\d{2}):(\d{2})$")
 GRAPH_ID = re.compile(r"^AA[A-Za-z0-9+/=_%-]{20,}$")
@@ -253,8 +256,8 @@ def validate(inbox: Path, quiet: bool = False) -> int:
             if p is not None and (isinstance(p, bool) or not isinstance(p, (int, float))):
                 err(f"metric {m.get('label')!r} prev must be a number or null, got {p!r}")
             n = m.get("n")
-            if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 1):
-                err(f"metric {m.get('label')!r} n must be a positive integer, got {n!r}")
+            if n is not None and (isinstance(n, bool) or not isinstance(n, int) or n < 0):
+                err(f"metric {m.get('label')!r} n must be a non-negative integer, got {n!r}")
             dirn = m.get("direction")
             if dirn is not None and dirn not in DIRECTIONS:
                 err(f"metric {m.get('label')!r} direction must be one of {sorted(DIRECTIONS)}, got {dirn!r}")
@@ -264,8 +267,15 @@ def validate(inbox: Path, quiet: bool = False) -> int:
             mconf = m.get("confidence")
             if mconf is not None and mconf not in CONFIDENCE:
                 err(f"metric {m.get('label')!r} confidence must be one of {sorted(CONFIDENCE)}, got {mconf!r}")
+            kind = m.get("kind")
+            if kind is not None and kind not in METRIC_KINDS:
+                err(f"metric {m.get('label')!r} kind must be one of {sorted(METRIC_KINDS)}, got {kind!r}")
+            mver = m.get("verification")
+            if mver is not None and mver not in VERIFICATION:
+                err(f"metric {m.get('label')!r} verification must be one of {sorted(VERIFICATION)}, got {mver!r}")
             # A delta the rail can't orient is a number with an arrow it must leave grey.
-            if m.get("prev") is not None and dirn is None:
+            # A correction is exempt: it is rendered as a restatement, not a trend.
+            if m.get("prev") is not None and dirn is None and kind != "correction":
                 warn(f"metric {m.get('label')!r} has prev but no direction — trend arrow can't be oriented")
 
         # --- verification / series (v2.3) -----------------------------------

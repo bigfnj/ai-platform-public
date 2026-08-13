@@ -35,6 +35,16 @@ The contract between the **harvest process** (Claude co-work scheduled tasks) an
 > prose, and **the rail cannot render a trend arrow without `direction`**, since a rising
 > number is good for throughput and bad for latency. `series` lets a calendar item say the
 > commitment expires on its own. Still additive; `schema` stays `2`.
+>
+> **v2.4 (2026-08-12) — the freeze.** Four fields, each earned by something that happened in
+> the v2.3 cycle rather than anticipated. `metrics[].kind` separates a **correction** from a
+> **movement**: `prev` renders as a directional arrow, so a recount displayed as a trend
+> actively misreports improvement — five retractions landed in one cycle with nowhere to say
+> they were retractions. `metrics[].n` now accepts `0`, because "0 of ~125 channels reachable"
+> is a real denominator. `metrics[].verification` mirrors per-measurement `confidence`, since
+> a synthesis item mixes computed numbers with inherited ones. And `retracts` joins the rel
+> types, because `supersedes` means "now stale" while two withdrawn findings were "proved
+> wrong" — different admissions. Still additive; `schema` stays `2`.
 
 ## Two artifacts per run
 
@@ -191,8 +201,14 @@ an object instead — mixing both forms in one list is fine:
 | `answers` | This item is the remedy for that one. A recommendation → the habit it fixes. |
 | `derives-from` | This was computed from that — an insight from the items it generalizes. |
 | `duplicates` | Same finding surfaced by another loop. |
-| `supersedes` | This replaces that, which is now stale. |
+| `supersedes` | This replaces that, which is now **stale** — it was true, and has been overtaken. |
+| `retracts` | This withdraws that, which was **wrong** — published on a mistaken reading, not overtaken by events. |
 | `blocks` | That can't proceed until this does. |
+
+`supersedes` and `retracts` are not interchangeable. "No longer current" and "should never have
+been published" are different claims about a finding, and only the second is an admission. Two
+false `dangling` items were withdrawn in one cycle; both would have read as routine staleness
+under `supersedes`.
 
 The distinction that matters: **a recommendation and the habit it addresses are not merely
 "related."** Untyped, the only thing connecting them is prose describing the link — which is
@@ -215,13 +231,36 @@ Any number behind a claim goes here instead of being written into `evidence` as 
 | `value` | number | ✅ | The measurement. A real number, not a string. |
 | `unit` | string\|null | — | `hours`, `days`, `%`, `count`… Null when the label carries it. |
 | `prev` | number\|null | — | Same measurement last period. **This is where a trend delta lives** — the rail computes the delta, so never write "up from 6.2" in prose. Null on the first period means *baseline*, not missing. |
-| `n` | int\|null | — | Sample size. `median 36.5s` over 6 observations is a different claim than over 600, and without this the distinction falls back to prose. |
+| `n` | int\|null | — | Sample size. `median 36.5s` over 6 observations is a different claim than over 600, and without this the distinction falls back to prose. **`0` is legal and meaningful** — "0 of ~125 channels reachable" is a real denominator, distinct from omitting `n` because nothing was counted. |
+| `kind` | string\|null | — | `movement` (default) \| `correction`. **Whether the number changed because reality moved or because the earlier measurement was wrong.** See below. |
+| `verification` | string\|null | — | Per-measurement `full-read` \| `summary` \| `inferred`, mirroring per-measurement `confidence`. A synthesis item routinely mixes a computed number with an inherited one. |
 | `direction` | string\|null | — | `up-good` \| `down-good` \| `neutral`. **Which way is better.** The rail cannot colour a trend arrow without it — a rising number is good for throughput and bad for latency, and nothing else in the item says which. |
 | `target` | number\|null | — | The value this should reach, when one exists. Lets the rail show distance-to-goal rather than a bare number. |
 | `confidence` | string\|null | — | Per-measurement `high` \| `medium` \| `low`. Item-level `confidence` is too coarse when one item carries a directly-measured number alongside an inherited one. |
 
 `evidence` stays prose and explains *where the number came from*. `metrics` carries the number
 itself. An `insight` that quantifies anything should populate both.
+
+#### `kind` — a correction is not a trend
+
+`prev` renders as a directional arrow, which asserts *movement over time*. When a figure
+changes because the earlier count was wrong, that arrow is a lie: it reports improvement where
+what actually happened is that we measured badly before.
+
+```json
+{ "label": "hedge closure", "value": 50.0, "unit": "%", "prev": 28.6,
+  "kind": "correction", "direction": "up-good",
+  "confidence": "high", "n": 5 }
+```
+
+- `movement` — default, and what you should assume. Reality changed between periods.
+- `correction` — the same underlying reality, recounted. The rail shows this as a restatement,
+  never as a trend arrow.
+
+**Set it whenever `prev` and `value` differ for any reason other than elapsed time.** Five
+retractions landed in a single cycle with nowhere to record that they were retractions; the
+only safe option was dropping them into prose, which is exactly the behaviour v2.2 and v2.3
+removed everywhere else.
 
 ### Confidence
 

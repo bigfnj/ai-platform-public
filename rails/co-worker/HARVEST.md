@@ -192,6 +192,12 @@ briefs on the same retention numbers. Retention lives in one table at the top of
 Your own brief is never at risk: it is dated today and still referenced by the items you just
 wrote, and the pruner refuses to delete a brief any surviving item points at.
 
+**The inverse case has no guard, so handle it yourself: a brief that no surviving item points
+at is not protected, but it is not deleted early either — it simply waits out
+`RETENTION_DAYS` carrying whatever it said. When your run repoints every one of your items at
+a new brief, delete the brief they used to point at in the same step. Never read a brief that
+no item references as current; check `doc` targets before trusting one.**
+
 Never delete `inbox\archive\` — it is where trend history lives.
 
 ## 6. Report back
