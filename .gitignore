@@ -28,3 +28,13 @@ dist/
 .DS_Store
 Thumbs.db
 *.swp
+
+# AI-assistant leftovers — keep agent context/memory/rules out of the public repo
+.claude/
+CLAUDE.md
+.cursor/
+.cursorrules
+.aider*
+.windsurfrules
+.github/copilot-instructions.md
+AGENTS.md
