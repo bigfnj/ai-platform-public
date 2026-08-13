@@ -18,7 +18,7 @@ services:
       TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
       TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma3:4b}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     tmpfs:
       - /tmp
     security_opt:
@@ -44,7 +44,7 @@ services:
       RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-bge-m3}
       RECIPE_BOOK_PRIMARY_USER: ${PLATFORM_ADMIN_USER:-admin}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - recipe_book_data:/srv/var
     expose:
@@ -65,7 +65,7 @@ services:
       PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
       PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - gateway_data:/data
     expose:

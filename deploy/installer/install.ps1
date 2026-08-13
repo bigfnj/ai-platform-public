@@ -21,6 +21,7 @@ param(
   [string]$AdminUser,
   [string]$AdminPass,
   [string]$EnabledApps,           # comma list, e.g. "terminal-fun,recipe-book"
+  [string]$DockerMode,            # internal: 'desktop' or 'wsl' (which docker runtime to drive)
   [switch]$WithRecipeBook
 )
 
@@ -38,16 +39,34 @@ if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
 # ---------------------------------------------------------------------------
 function Test-Prereqs {
   $r = @()
-  # Docker (State: missing | installed | running). Resolve the CLI by its known install path too,
-  # because a winget install done in THIS session isn't on our already-loaded PATH yet.
-  $dockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe'
-  $dockerCmd = if (Test-Path $dockerExe) { $dockerExe } elseif (Get-Command docker -ErrorAction SilentlyContinue) { 'docker' } else { $null }
-  $dockerState = 'missing'; $dockerDetail = 'not found'
-  if ($dockerCmd) {
-    $dockerState = 'installed'; $dockerDetail = 'installed, daemon not running'
-    try { & $dockerCmd version --format '{{.Server.Version}}' 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $dockerState = 'running'; $dockerDetail = 'engine running' } } catch {}
+  # Docker. Dual-runtime: prefer Docker Desktop on Windows if it's installed; otherwise use the
+  # Docker Engine inside WSL2 (Desktop is blocked/paid on some managed boxes). State: missing |
+  # installed (CLI present, daemon down) | running. Mode: desktop | wsl | none. Fix='' - Docker isn't
+  # auto-winget'd here; the installer sets it up per-mode (start Desktop, or install/start in WSL).
+  $dockerMode = 'none'; $dockerState = 'missing'; $dockerDetail = 'no Docker (Desktop or WSL2)'
+  $winDockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe'
+  $hasWinDocker = (Test-Path $winDockerExe) -or [bool](Get-Command docker -ErrorAction SilentlyContinue)
+  if ($hasWinDocker) {
+    $dockerMode = 'desktop'; $dockerState = 'installed'; $dockerDetail = 'Docker Desktop installed, engine not running'
+    & docker version 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) { $dockerState = 'running'; $dockerDetail = 'Docker Desktop engine running' }
   }
-  $r += [pscustomobject]@{ Key = 'docker'; Name = 'Docker Desktop'; Ok = ($dockerState -eq 'running'); Detail = $dockerDetail; Fix = 'Docker.DockerDesktop'; State = $dockerState }
+  else {
+    & wsl.exe -l -q 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $dockerMode = 'wsl'; $dockerDetail = 'WSL2 present, Docker Engine not installed'
+      & wsl.exe docker version 1>$null 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        $dockerState = 'running'; $ver = (& wsl.exe docker --version 2>$null)
+        $dockerDetail = if ($ver) { "WSL2: $($ver.ToString().Trim())" } else { 'WSL2 engine running' }
+      }
+      else {
+        & wsl.exe docker --version 1>$null 2>$null
+        if ($LASTEXITCODE -eq 0) { $dockerState = 'installed'; $dockerDetail = 'WSL2 Docker CLI present, daemon not running' }
+      }
+    }
+  }
+  $r += [pscustomobject]@{ Key = 'docker'; Name = 'Docker'; Ok = ($dockerState -eq 'running'); Detail = $dockerDetail; Fix = ''; State = $dockerState; Mode = $dockerMode }
   # NVIDIA GPU >= 8 GB
   $gpuOk = $false; $gpuDetail = 'no NVIDIA GPU detected'
   try {
@@ -71,18 +90,58 @@ function Test-Prereqs {
 
 function Test-ExistingInstall {
   if (Get-Service platform-broker -ErrorAction SilentlyContinue) { return 'platform-broker service exists' }
-  try { $ps = & docker ps --format '{{.Names}}' 2>$null; if ($ps -match 'platform-') { return 'platform-* containers are running' } } catch {}
+  try { $ps = & wsl.exe docker ps --format '{{.Names}}' 2>$null; if ($ps -match 'platform-') { return 'platform-* containers are running' } } catch {}
   if (Test-Path (Join-Path $Root 'deploy\.env')) { return 'deploy\.env already exists' }
   return $null
 }
 
-# Locate the Docker Desktop launcher (to start the engine after a fresh install; the winget
-# package installs it but the daemon only comes up after a manual first launch + license accept).
+# Locate the Docker Desktop launcher (to start its engine in desktop mode).
 function Get-DockerDesktopExe {
   foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
     if ($base) { $p = Join-Path $base 'Docker\Docker\Docker Desktop.exe'; if (Test-Path $p) { return $p } }
   }
   return $null
+}
+# Convert a Windows path (C:\a\b) to a WSL /mnt path (/mnt/c/a/b) so `wsl docker` can read it.
+function ConvertTo-WslPath($winPath) {
+  $p = ($winPath -replace '\\', '/')
+  if ($p -match '^([A-Za-z]):/(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2])" }
+  return $p
+}
+# The Windows host IP as seen from inside WSL (the default-route gateway). Dynamic across restarts,
+# so it must be detected at run time; containers use it as host.docker.internal to reach the broker.
+function Get-WslWindowsHost {
+  $route = (& wsl.exe sh -c "ip route show default" 2>$null | Select-Object -First 1)
+  if ($route -match 'via\s+(\d+\.\d+\.\d+\.\d+)') { return $Matches[1] }
+  return $null
+}
+# Ensure the WSL2 Docker daemon is running (systemd-managed; no Windows elevation needed).
+function Start-DockerEngineWsl { & wsl.exe -u root systemctl start docker 1>$null 2>$null }
+
+# Install Docker Engine + compose plugin into the default WSL2 distro (run as root inside WSL; no
+# Windows elevation needed). Used when WSL2 is present but Docker isn't. Returns $true on success.
+function Install-DockerInWsl {
+  $sh = @'
+#!/usr/bin/env bash
+set -e
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+. /etc/os-release
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" > /etc/apt/sources.list.d/docker.list
+apt-get update -qq
+apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+U="$(getent passwd 1000 | cut -d: -f1)"; if [ -n "$U" ]; then usermod -aG docker "$U" || true; fi
+if ! grep -qs systemd=true /etc/wsl.conf; then printf '[boot]\nsystemd=true\n' >> /etc/wsl.conf; fi
+systemctl enable --now docker 2>/dev/null || true
+'@
+  $tmp = Join-Path $env:TEMP 'ai-platform-docker-wsl.sh'
+  [System.IO.File]::WriteAllText($tmp, ($sh -replace "`r`n", "`n"))
+  & wsl.exe -u root bash (ConvertTo-WslPath $tmp)
+  return ($LASTEXITCODE -eq 0)
 }
 
 # ---------------------------------------------------------------------------
@@ -105,6 +164,13 @@ function Invoke-Provision {
     $tmpl = $tmpl.Replace('{{ADMIN_USER}}', $AdminUser).Replace('{{ADMIN_PASSWORD}}', $AdminPass).Replace('{{ENABLED_APPS}}', $EnabledApps)
     Set-Content -Path (Join-Path $Root 'deploy\.env') -Value $tmpl -Encoding utf8
     Copy-Item (Join-Path $Installer 'roles.lean.json') (Join-Path $Root 'services\broker\roles.json') -Force
+    if ($DockerMode -eq 'wsl') {
+      # WSL containers reach the native Windows broker via host.docker.internal = the WSL->Windows
+      # gateway IP (dynamic; detected now). Desktop mode needs nothing (host-gateway maps natively).
+      $winHost = Get-WslWindowsHost
+      if ($winHost) { Add-Content -Path (Join-Path $Root 'deploy\.env') -Value "WINDOWS_HOST=$winHost" -Encoding utf8; Write-Log "WINDOWS_HOST=$winHost (rails reach the native broker/ollama here)" }
+      else { Write-Log 'WARNING: could not detect the WSL->Windows host IP; containers may not reach the broker.' }
+    }
     Write-Log 'config written.'
 
     # 2. native broker service only (media off). We deliberately DO NOT register an Ollama service:
@@ -130,28 +196,27 @@ function Invoke-Provision {
       & ollama pull $m *>> $LogFile
     }
 
-    # 4. bundled compose: build + up (recipe-book only when chosen)
-    $composeArgs = @('--env-file', (Join-Path $Root 'deploy\.env'), '-f', (Join-Path $Installer 'docker-compose.installer.yml'))
-    if ($WithRecipeBook) { $composeArgs += @('--profile', 'recipe-book') }
-    Write-Log 'building + starting containers (first build takes several minutes)...'
-    & docker compose @composeArgs up -d --build *>> $LogFile
-    if ($LASTEXITCODE -ne 0) {
-      # Retry without the docker credential helper. Docker Desktop's `credsStore: desktop` can fail
-      # ("logon session does not exist") when compose runs in this hidden/elevated context, even for
-      # anonymous public base-image pulls (node/python/caddy). Reuse the current docker context so
-      # the daemon connection is unchanged; only the credential helper is dropped.
-      Write-Log 'compose failed; retrying without the docker credential helper (anonymous public pulls)...'
-      $ctx = $null
-      $srcCfg = Join-Path $env:USERPROFILE '.docker\config.json'
-      if (Test-Path $srcCfg) { try { $ctx = (Get-Content $srcCfg -Raw | ConvertFrom-Json).currentContext } catch {} }
-      $cfgDir = Join-Path $env:TEMP 'ai-platform-dockercfg'
-      New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-      $json = if ($ctx) { "{`"currentContext`": `"$ctx`"}" } else { '{}' }
-      Set-Content -Path (Join-Path $cfgDir 'config.json') -Value $json -Encoding ascii
-      $env:DOCKER_CONFIG = $cfgDir
-      & docker compose @composeArgs up -d --build *>> $LogFile
-      if ($LASTEXITCODE -ne 0) { throw 'docker compose up failed (see the log; if this is a credsStore error, run the compose step from an interactive elevated PowerShell in deploy\).' }
+    # 4. bundled compose via the detected Docker runtime. WSL mode: build from /mnt/c and reach the
+    # native broker via the injected WINDOWS_HOST. Desktop mode: native docker + host-gateway.
+    Write-Log "building + starting containers via docker ($DockerMode); first build takes several minutes..."
+    if ($DockerMode -eq 'wsl') {
+      Start-DockerEngineWsl
+      $envA = ConvertTo-WslPath (Join-Path $Root 'deploy\.env')
+      $compA = ConvertTo-WslPath (Join-Path $Installer 'docker-compose.installer.yml')
+      $cargs = @('docker', 'compose', '--env-file', $envA, '-f', $compA)
+      if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
+      $cargs += @('up', '-d', '--build')
+      & wsl.exe @cargs *>> $LogFile
     }
+    else {
+      $envA = Join-Path $Root 'deploy\.env'
+      $compA = Join-Path $Installer 'docker-compose.installer.yml'
+      $cargs = @('compose', '--env-file', $envA, '-f', $compA)
+      if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
+      $cargs += @('up', '-d', '--build')
+      & docker @cargs *>> $LogFile
+    }
+    if ($LASTEXITCODE -ne 0) { throw "docker compose up failed ($DockerMode mode; see the log)." }
 
     # 5. wait for the gateway
     Write-Log 'waiting for the gateway...'
@@ -212,13 +277,32 @@ function Invoke-ConsoleInstall {
     }
   }
 
-  # 2. Docker must be RUNNING. If installed-but-stopped, launch Docker Desktop and spin-wait.
+  # 2. Docker must be RUNNING (Docker Desktop or the WSL2 engine). If missing: in WSL mode offer to
+  # install it; otherwise guide. If installed-but-stopped: start Desktop / the WSL daemon, spin-wait.
   $d = Prereq $rs 'docker'
-  if ($d.State -eq 'missing') { CW ''; CW '  Docker Desktop is required and still not installed - aborting.' 'Red'; return }
+  if ($d.State -eq 'missing') {
+    if ($d.Mode -eq 'wsl') {
+      CW ''; CW '  WSL2 is present but Docker Engine is not installed there.' 'Yellow'
+      if ((Read-Host '  Install Docker Engine into WSL2 now? [Y/n]') -notmatch '^[Nn]') {
+        CW '  installing Docker Engine into WSL2 (a few minutes)...' 'DarkCyan'
+        Install-DockerInWsl | Out-Null
+        $rs = Show-Doctor; $d = Prereq $rs 'docker'
+      }
+    }
+    else {
+      CW ''; CW '  Docker is not available. Install Docker Desktop (where your org allows it) or set' 'Red'
+      CW '  up Docker on WSL2, then re-run. Aborting.' 'Red'; return
+    }
+  }
+  if ($d.State -eq 'missing') { CW '  Docker still not available - aborting.' 'Red'; return }
   if ($d.State -ne 'running') {
-    $dd = Get-DockerDesktopExe
-    if ($dd) { CW ''; CW '  Starting Docker Desktop - accept its license, then hang tight...' 'DarkCyan'; try { Start-Process $dd | Out-Null } catch {} }
-    else { CW ''; CW '  Start Docker Desktop and accept its license...' 'DarkCyan' }
+    CW ''
+    if ($d.Mode -eq 'desktop') {
+      $dd = Get-DockerDesktopExe
+      if ($dd) { CW '  starting Docker Desktop - accept its license, then hang tight...' 'DarkCyan'; try { Start-Process $dd | Out-Null } catch {} }
+      else { CW '  start Docker Desktop and accept its license...' 'DarkCyan' }
+    }
+    else { CW '  starting the WSL2 Docker daemon...' 'DarkCyan'; Start-DockerEngineWsl }
     $spin = '|', '/', '-', '\'; $i = 0; $deadline = (Get-Date).AddMinutes(15)
     while ((Get-Date) -lt $deadline) {
       $d = Prereq (Test-Prereqs) 'docker'
@@ -237,8 +321,9 @@ function Invoke-ConsoleInstall {
     CW '  Not ready: need Docker running + Ollama installed. Fix those and re-run.' 'Red'
     return
   }
+  $dmode = (Prereq $rs 'docker').Mode
   CW ''
-  CW '  All set - Docker is up and Ollama is installed.' 'Green'
+  CW "  All set - Docker ($dmode) is up and Ollama is installed." 'Green'
 
   # 4. existing-install guard
   $ex = Test-ExistingInstall
@@ -272,7 +357,7 @@ function Invoke-ConsoleInstall {
   Set-Content -Path $LogFile -Value '' -Encoding utf8
   Remove-Item $DoneFile, $FailFile -ErrorAction SilentlyContinue
   $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
-    '-AdminUser', $u, '-AdminPass', $pass, '-EnabledApps', ($enabled -join ','))
+    '-AdminUser', $u, '-AdminPass', $pass, '-EnabledApps', ($enabled -join ','), '-DockerMode', $dmode)
   if ($withRecipe) { $pargs += '-WithRecipeBook' }
   Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
 
@@ -403,7 +488,7 @@ function Start-Provisioning {
   Set-Content -Path $LogFile -Value '' -Encoding utf8
   $script:pos = 0
   $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
-    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','))
+    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','), '-DockerMode', (Get-Prereq 'docker').Mode)
   if ($chkRecipe.Checked) { $pargs += '-WithRecipeBook' }
   Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
   $timer = New-Object Windows.Forms.Timer; $timer.Interval = 800
@@ -441,12 +526,15 @@ $script:watchTimer.Add_Tick({
 
 Refresh-Prereqs
 
-# Launch Docker Desktop if present (its winget package installs it but the daemon only comes up
-# after a manual first launch + license accept). Emits the guidance note either way.
+# Bring the detected Docker runtime up: launch Docker Desktop, or start the WSL2 daemon.
 function Start-DockerDesktop {
-  $dd = Get-DockerDesktopExe
-  if ($dd) { $log.AppendText("launching Docker Desktop - accept its license / service agreement, then wait for the engine to start.`r`n"); try { Start-Process $dd | Out-Null } catch {} }
-  else { $log.AppendText("Docker installed. Launch Docker Desktop and accept its license to start the engine.`r`n") }
+  $d = Get-Prereq 'docker'
+  if ($d.Mode -eq 'desktop') {
+    $dd = Get-DockerDesktopExe
+    if ($dd) { $log.AppendText("starting Docker Desktop - accept its license, then wait for the engine...`r`n"); try { Start-Process $dd | Out-Null } catch {} }
+    else { $log.AppendText("start Docker Desktop and accept its license to start the engine.`r`n") }
+  }
+  else { $log.AppendText("starting the WSL2 Docker daemon (systemctl start docker)...`r`n"); Start-DockerEngineWsl }
 }
 
 # Kick off a winget install WITHOUT blocking the UI thread. The watcher polls for completion via
@@ -495,7 +583,10 @@ $btnInstall.Add_Click({
     # watcher continue once BOTH the engine is running and Ollama is installed.
     $script:pendingInstall = $true
     $script:dockerLaunched = $false
-    if ($d.State -eq 'missing') { Start-WingetInstall 'Docker.DockerDesktop' }
+    if ($d.State -eq 'missing') {
+      if ($d.Mode -eq 'wsl') { $log.AppendText("installing Docker Engine into WSL2 (a few minutes)...`r`n"); Install-DockerInWsl | Out-Null }
+      else { [Windows.Forms.MessageBox]::Show("Docker isn't available. Install Docker Desktop (where allowed) or set up Docker on WSL2, then re-run.", 'Installer'); $script:pendingInstall = $false; return }
+    }
     elseif ($d.State -eq 'installed') { $script:dockerLaunched = $true; Start-DockerDesktop }
     if (-not $o.Ok) { Start-WingetInstall 'Ollama.Ollama' }
     $log.AppendText("waiting for Docker + Ollama; the install continues automatically once both are ready...`r`n")
