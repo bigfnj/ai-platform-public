@@ -15,8 +15,9 @@ COPY web ./web
 COPY apps/platform/frontend ./apps/platform/frontend
 COPY rails/terminal-fun/frontend ./rails/terminal-fun/frontend
 COPY rails/recipe-book/frontend ./rails/recipe-book/frontend
+COPY rails/co-worker/frontend ./rails/co-worker/frontend
 RUN set -eux; \
-    for d in apps/platform/frontend rails/terminal-fun/frontend rails/recipe-book/frontend; do \
+    for d in apps/platform/frontend rails/terminal-fun/frontend rails/recipe-book/frontend rails/co-worker/frontend; do \
       (cd "$d" && npm install --no-audit --no-fund --loglevel=error && npm run build); \
     done
 
@@ -36,6 +37,7 @@ COPY apps/platform/backend /app/apps/platform/backend
 COPY --from=web /build/apps/platform/frontend/dist    /app/dist/shell
 COPY --from=web /build/rails/terminal-fun/frontend/dist /app/dist/terminal-fun
 COPY --from=web /build/rails/recipe-book/frontend/dist  /app/dist/recipe-book
+COPY --from=web /build/rails/co-worker/frontend/dist    /app/dist/co-worker
 
 # Container-network backend URLs + baked dist paths. PLATFORM_ENABLED_APPS + PLATFORM_ADMIN_*
 # are supplied by the installer's .env at run time (the chooser decides the enabled set).
@@ -43,9 +45,11 @@ ENV PYTHONPATH=/app/apps/platform/backend:/app/packages/platform_core \
     PLATFORM_BROKER_URL=http://host.docker.internal:11500 \
     PLATFORM_APP_TERMINAL_FUN_URL=http://terminal-fun:8730 \
     PLATFORM_APP_RECIPE_BOOK_URL=http://recipe-book:8830 \
+    PLATFORM_APP_CO_WORKER_URL=http://co-worker:8860 \
     PLATFORM_FRONTEND_DIST=/app/dist/shell \
     PLATFORM_TERMINAL_FUN_DIST=/app/dist/terminal-fun \
     PLATFORM_RECIPE_BOOK_DIST=/app/dist/recipe-book \
+    PLATFORM_CO_WORKER_DIST=/app/dist/co-worker \
     PLATFORM_ENABLED_APPS=terminal-fun,recipe-book \
     PYTHONUNBUFFERED=1
 
