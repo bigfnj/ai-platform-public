@@ -21,7 +21,12 @@ param(
   [string]$AdminUser,
   [string]$AdminPass,
   [string]$EnabledApps,           # comma list, e.g. "terminal-fun,recipe-book"
-  [string]$DockerMode,            # internal: 'desktop' or 'wsl' (which docker runtime to drive)
+  # internal: which container runtime to drive. 'podman' (daemonless, Hyper-V or WSL machine),
+  # 'desktop' (Docker Desktop) or 'wsl' (Docker Engine inside WSL2). -DockerMode is kept as an
+  # alias so older invocations and docs keep working.
+  [Alias('DockerMode')]
+  [ValidateSet('', 'podman', 'desktop', 'wsl')]
+  [string]$RuntimeMode,
   [switch]$WithRecipeBook
 )
 
@@ -47,34 +52,57 @@ if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
 # ---------------------------------------------------------------------------
 function Test-Prereqs {
   $r = @()
-  # Docker. Dual-runtime: prefer Docker Desktop on Windows if it's installed; otherwise use the
-  # Docker Engine inside WSL2 (Desktop is blocked/paid on some managed boxes). State: missing |
-  # installed (CLI present, daemon down) | running. Mode: desktop | wsl | none. Fix='' - Docker isn't
-  # auto-winget'd here; the installer sets it up per-mode (start Desktop, or install/start in WSL).
-  $dockerMode = 'none'; $dockerState = 'missing'; $dockerDetail = 'no Docker (Desktop or WSL2)'
+  # Container runtime. Tri-runtime, in preference order:
+  #   podman  - daemonless; Linux containers run in a `podman machine` VM (Hyper-V provider keeps
+  #             WSL out of the picture entirely, which matters on boxes where WSL2 is unstable).
+  #             Driven with the standalone docker-compose.exe over Podman's Docker-compatible API.
+  #   desktop - Docker Desktop on Windows.
+  #   wsl     - Docker Engine inside WSL2 (Desktop is blocked/paid on some managed boxes).
+  # State: missing | installed (CLI present, no engine/machine running) | running.
+  # Mode: podman | desktop | wsl | none.
+  # Fix='' - none of these are auto-winget'd here; the installer sets each up per-mode.
+  $rtMode = 'none'; $rtState = 'missing'; $rtDetail = 'no container runtime (Podman or Docker)'
+  $podmanExe = Join-Path $env:LOCALAPPDATA 'Programs\Podman\podman.exe'
+  $hasPodman = (Test-Path $podmanExe) -or [bool](Get-Command podman -ErrorAction SilentlyContinue)
   $winDockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe'
   $hasWinDocker = (Test-Path $winDockerExe) -or [bool](Get-Command docker -ErrorAction SilentlyContinue)
-  if ($hasWinDocker) {
-    $dockerMode = 'desktop'; $dockerState = 'installed'; $dockerDetail = 'Docker Desktop installed, engine not running'
+  if ($hasPodman) {
+    $rtMode = 'podman'; $rtState = 'installed'
+    $machines = @(& podman machine list --noheading 2>$null | Where-Object { $_ -match '\S' })
+    $rtDetail = if ($machines.Count -eq 0) { 'Podman installed, no machine created yet' } else { 'Podman machine created, not running' }
+    # `podman info` talks to the machine, so a zero exit means the VM is up and serving.
+    & podman info 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $rtState = 'running'
+      $pv = (& podman --version 2>$null)
+      $rtDetail = if ($pv) { "$($pv.ToString().Trim()) (machine running)" } else { 'Podman machine running' }
+      if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
+        $rtDetail += ' - docker-compose.exe MISSING'
+        $rtState = 'installed'   # can't compose without it, so don't claim ready
+      }
+    }
+  }
+  elseif ($hasWinDocker) {
+    $rtMode = 'desktop'; $rtState = 'installed'; $rtDetail = 'Docker Desktop installed, engine not running'
     & docker version 1>$null 2>$null
-    if ($LASTEXITCODE -eq 0) { $dockerState = 'running'; $dockerDetail = 'Docker Desktop engine running' }
+    if ($LASTEXITCODE -eq 0) { $rtState = 'running'; $rtDetail = 'Docker Desktop engine running' }
   }
   else {
     & wsl.exe -l -q 1>$null 2>$null
     if ($LASTEXITCODE -eq 0) {
-      $dockerMode = 'wsl'; $dockerDetail = 'WSL2 present, Docker Engine not installed'
+      $rtMode = 'wsl'; $rtDetail = 'WSL2 present, Docker Engine not installed'
       & wsl.exe docker version 1>$null 2>$null
       if ($LASTEXITCODE -eq 0) {
-        $dockerState = 'running'; $ver = (& wsl.exe docker --version 2>$null)
-        $dockerDetail = if ($ver) { "WSL2: $($ver.ToString().Trim())" } else { 'WSL2 engine running' }
+        $rtState = 'running'; $ver = (& wsl.exe docker --version 2>$null)
+        $rtDetail = if ($ver) { "WSL2: $($ver.ToString().Trim())" } else { 'WSL2 engine running' }
       }
       else {
         & wsl.exe docker --version 1>$null 2>$null
-        if ($LASTEXITCODE -eq 0) { $dockerState = 'installed'; $dockerDetail = 'WSL2 Docker CLI present, daemon not running' }
+        if ($LASTEXITCODE -eq 0) { $rtState = 'installed'; $rtDetail = 'WSL2 Docker CLI present, daemon not running' }
       }
     }
   }
-  $r += [pscustomobject]@{ Key = 'docker'; Name = 'Docker'; Ok = ($dockerState -eq 'running'); Detail = $dockerDetail; Fix = ''; State = $dockerState; Mode = $dockerMode }
+  $r += [pscustomobject]@{ Key = 'runtime'; Name = 'Container runtime'; Ok = ($rtState -eq 'running'); Detail = $rtDetail; Fix = ''; State = $rtState; Mode = $rtMode }
   # NVIDIA GPU >= 8 GB
   $gpuOk = $false; $gpuDetail = 'no NVIDIA GPU detected'
   try {
@@ -98,7 +126,18 @@ function Test-Prereqs {
 
 function Test-ExistingInstall {
   if (Get-Service platform-broker -ErrorAction SilentlyContinue) { return 'platform-broker service exists' }
-  try { $ps = & wsl.exe docker ps --format '{{.Names}}' 2>$null; if ($ps -match 'platform-') { return 'platform-* containers are running' } } catch {}
+  # Ask whichever runtime is actually present. This used to only ever run `wsl docker ps`, so the
+  # guard was blind in desktop mode (and would be blind under Podman too).
+  $probes = @()
+  if (Get-Command podman -ErrorAction SilentlyContinue) { $probes += , @('podman', @('ps', '--format', '{{.Names}}')) }
+  if (Get-Command docker -ErrorAction SilentlyContinue) { $probes += , @('docker', @('ps', '--format', '{{.Names}}')) }
+  $probes += , @('wsl.exe', @('docker', 'ps', '--format', '{{.Names}}'))
+  foreach ($p in $probes) {
+    try {
+      $ps = & $p[0] @($p[1]) 2>$null
+      if ($ps -match 'platform-') { return "platform-* containers exist ($($p[0]))" }
+    } catch {}
+  }
   if (Test-Path (Join-Path $Root 'deploy\.env')) { return 'deploy\.env already exists' }
   return $null
 }
@@ -134,6 +173,53 @@ function Start-DockerEngineWsl {
   Wait-Job $job -Timeout 30 | Out-Null; Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue
 }
 
+# --- Podman -----------------------------------------------------------------
+# Podman is daemonless, but Linux containers still need a Linux VM ("podman machine"). The Hyper-V
+# provider is preferred here over the default WSL provider: it keeps WSL - and WSL's drvfs/9p and
+# vNIC churn - out of the runtime path entirely. Networking is user-mode via gvproxy over hvsock,
+# so containers reach the native Windows broker WITHOUT an inbound firewall rule (gvproxy dials the
+# broker from the host's own loopback).
+$PodmanMachine = 'podman-machine-default'   # default name => the default //./pipe/docker_engine API pipe
+
+# Is a podman machine present / running? Returns 'missing' | 'stopped' | 'running'.
+function Get-PodmanMachineState {
+  $rows = @(& podman machine list --noheading 2>$null | Where-Object { $_ -match '\S' })
+  if ($rows.Count -eq 0) { return 'missing' }
+  & podman info 1>$null 2>$null
+  if ($LASTEXITCODE -eq 0) { return 'running' }
+  return 'stopped'
+}
+
+# Create the machine if absent, then start it. The FIRST hyperv machine init needs admin (it writes
+# machine-scope registry keys); Podman 6.0 no longer needs admin for start/stop. Returns $true when
+# the machine ends up running.
+function Initialize-PodmanMachine {
+  param([string]$Provider = 'hyperv', [int]$Cpus = 4, [int]$MemoryMb = 8192, [int]$DiskGb = 60)
+  $state = Get-PodmanMachineState
+  if ($state -eq 'missing') {
+    Write-Log "creating the podman machine ($Provider, ${Cpus} cpu / ${MemoryMb} MB / ${DiskGb} GB)..."
+    # Share the repo into the VM at the SAME path so compose bind mounts resolve identically on both
+    # sides. (The Hyper-V provider shares host dirs over 9p; the WSL provider automounts /mnt/<drive>.)
+    $iargs = @('machine', 'init', '--provider', $Provider, '--cpus', $Cpus, '--memory', $MemoryMb, '--disk-size', $DiskGb)
+    if ($Provider -eq 'hyperv') { $iargs += @('-v', "${Root}:${Root}") }
+    & podman @iargs 2>&1 | Tee-Object -FilePath $LogFile -Append
+    if ($LASTEXITCODE -ne 0) {
+      Write-Log 'podman machine init failed. The first Hyper-V machine needs an ADMIN shell (and the'
+      Write-Log 'Hyper-V feature + "Hyper-V Administrators" membership); see docs/INSTALL.md.'
+      return $false
+    }
+    $state = 'stopped'
+  }
+  if ($state -ne 'running') {
+    Write-Log 'starting the podman machine...'
+    & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append
+  }
+  # `restart: always` containers need something to bring them back when the VM boots. Podman has no
+  # daemon, so enable podman-restart.service inside the machine (the Docker-daemon equivalent).
+  & podman machine ssh 'sudo systemctl enable --now podman-restart' 2>&1 | Out-Null
+  return ((Get-PodmanMachineState) -eq 'running')
+}
+
 # Install Docker Engine + compose plugin into the default WSL2 distro (run as root inside WSL; no
 # Windows elevation needed). Used when WSL2 is present but Docker isn't. Returns $true on success.
 function Install-DockerInWsl {
@@ -160,6 +246,92 @@ systemctl enable --now docker 2>/dev/null || true
   return ($LASTEXITCODE -eq 0)
 }
 
+# The address the CONTAINERS should use for the native Windows broker/Ollama, per runtime:
+#   wsl     - the WSL->Windows default-route gateway (dynamic, re-detected every logon).
+#   podman  - gvproxy's host address. gvproxy runs ON Windows and dials the target over the host's
+#             own loopback, so this works even for services bound to 127.0.0.1 only (Ollama) and
+#             needs no firewall rule. Asked of a container directly, with the documented
+#             gvisor-tap-vsock host address as the fallback.
+#   desktop - $null: Docker Desktop resolves the literal `host-gateway` itself.
+$PodmanProbeImage = 'docker.io/library/alpine:latest'
+$GvproxyHostFallback = '192.168.127.254'
+
+function Get-PodmanHostIp {
+  $ip = $null
+  try {
+    & podman image exists $PodmanProbeImage 2>$null
+    if ($LASTEXITCODE -ne 0) { & podman pull -q $PodmanProbeImage 2>&1 | Out-Null }
+    $out = & podman run --rm $PodmanProbeImage getent hosts host.containers.internal 2>$null
+    if ($out -match '^\s*(\d+\.\d+\.\d+\.\d+)') { $ip = $Matches[1] }
+  } catch {}
+  if (-not $ip) { $ip = $GvproxyHostFallback }
+  return $ip
+}
+
+function Get-ContainerHostIp {
+  param([string]$Mode)
+  switch ($Mode) {
+    'wsl'    { return Get-WslWindowsHost }
+    'podman' { return Get-PodmanHostIp }
+    default  { return $null }
+  }
+}
+
+# Set (or replace) one KEY=value in an env file, ATOMICALLY and as UTF-8 with NO BOM.
+# Both matter: the old code appended/`sed -i`'d in place, and a crash mid-rewrite left the live
+# deploy/.env padded with NUL bytes (silently wiping PLATFORM_ENABLED_APPS and everything after it).
+# A BOM would corrupt the first variable name for every consumer.
+function Set-EnvValue {
+  param([string]$Path, [string]$Key, [string]$Value)
+  $lines = if (Test-Path $Path) { @(Get-Content -LiteralPath $Path) } else { @() }
+  $out = New-Object System.Collections.Generic.List[string]
+  $seen = $false
+  foreach ($l in $lines) {
+    if ($l -match "^\s*$([regex]::Escape($Key))\s*=") { if (-not $seen) { $out.Add("$Key=$Value"); $seen = $true } }
+    else { $out.Add($l) }
+  }
+  if (-not $seen) { $out.Add("$Key=$Value") }
+  $tmp = "$Path.tmp$PID"
+  [System.IO.File]::WriteAllText($tmp, (($out -join "`r`n") + "`r`n"), (New-Object System.Text.UTF8Encoding($false)))
+  Move-Item -LiteralPath $tmp -Destination $Path -Force
+}
+
+# Map the enabled-app list onto the compose profiles that carry those services.
+function Get-ComposeProfiles {
+  param([string]$Apps)
+  $p = @()
+  foreach ($a in @('recipe-book', 'bouquet', 'co-worker')) {
+    if (($Apps -split ',' | ForEach-Object { $_.Trim() }) -contains $a) { $p += @('--profile', $a) }
+  }
+  return $p
+}
+
+# Run `compose <args>` against whichever runtime is selected. Podman is driven with the standalone
+# docker-compose.exe over its Docker-compatible API pipe (the reference Compose implementation, so
+# profiles / ${VAR:-default} / depends_on all behave exactly as they did under Docker).
+function Invoke-Compose {
+  param([string[]]$Arguments, [string]$Mode = $RuntimeMode)
+  switch ($Mode) {
+    'podman' {
+      # No DOCKER_HOST needed when Docker isn't installed (podman claims //./pipe/docker_engine),
+      # but set it explicitly so the target is never ambiguous.
+      if (-not $env:DOCKER_HOST) { $env:DOCKER_HOST = "npipe:////./pipe/$PodmanMachine" }
+      & docker-compose @Arguments 2>&1 | Tee-Object -FilePath $LogFile -Append
+    }
+    'wsl' { & wsl.exe @(@('docker', 'compose') + $Arguments) 2>&1 | Tee-Object -FilePath $LogFile -Append }
+    default { & docker @(@('compose') + $Arguments) 2>&1 | Tee-Object -FilePath $LogFile -Append }
+  }
+}
+
+# Absolute paths as the selected runtime's compose needs to see them.
+function Get-ComposePaths {
+  param([string]$Mode = $RuntimeMode)
+  $envFile = Join-Path $Root 'deploy\.env'
+  $compose = Join-Path $Installer 'docker-compose.installer.yml'
+  if ($Mode -eq 'wsl') { return @{ Env = (ConvertTo-WslPath $envFile); Compose = (ConvertTo-WslPath $compose) } }
+  return @{ Env = $envFile; Compose = $compose }
+}
+
 # ---------------------------------------------------------------------------
 # Provisioning (runs elevated via -Provision; logs to $LogFile + a marker)
 # ---------------------------------------------------------------------------
@@ -184,15 +356,30 @@ function Invoke-Provision {
     Write-Log 'writing deploy\.env (lean) ...'
     $tmpl = Get-Content (Join-Path $Installer 'env.lean.example') -Raw
     $tmpl = $tmpl.Replace('{{ADMIN_USER}}', $AdminUser).Replace('{{ADMIN_PASSWORD}}', $AdminPass).Replace('{{ENABLED_APPS}}', $EnabledApps)
-    Set-Content -Path (Join-Path $Root 'deploy\.env') -Value $tmpl -Encoding utf8
+    $envFile = Join-Path $Root 'deploy\.env'
+    # UTF-8 with NO BOM, written whole. See Set-EnvValue for why this is not Set-Content -Encoding utf8.
+    [System.IO.File]::WriteAllText($envFile, $tmpl, (New-Object System.Text.UTF8Encoding($false)))
     Copy-Item (Join-Path $Installer 'roles.lean.json') (Join-Path $Root 'services\broker\roles.json') -Force
-    if ($DockerMode -eq 'wsl') {
-      # WSL containers reach the native Windows broker via host.docker.internal = the WSL->Windows
-      # gateway IP (dynamic; detected now). Desktop mode needs nothing (host-gateway maps natively).
-      Write-Log 'detecting the WSL -> Windows host IP (wsl ip route, in a background job)...'
-      $winHost = Get-WslWindowsHost
-      if ($winHost) { Add-Content -Path (Join-Path $Root 'deploy\.env') -Value "WINDOWS_HOST=$winHost" -Encoding utf8; Write-Log "WINDOWS_HOST=$winHost (rails reach the native broker/ollama here)" }
-      else { Write-Log 'WARNING: could not detect the WSL->Windows host IP; containers may not reach the broker.' }
+
+    # The Co-Worker rail reads a Windows-side inbox that a host process writes into, so the container
+    # needs a bind mount to it. Under WSL that path must be the /mnt/<drive> form; podman/desktop take
+    # the Windows path as-is. (This conversion was documented in the compose file but never implemented.)
+    $inboxWin = Join-Path $Root 'data\co-worker\inbox'
+    try { New-Item -ItemType Directory -Force -Path $inboxWin -ErrorAction Stop | Out-Null } catch {}
+    $inboxMount = if ($RuntimeMode -eq 'wsl') { ConvertTo-WslPath $inboxWin } else { $inboxWin }
+    Set-EnvValue -Path $envFile -Key 'CO_WORKER_INBOX_WIN'   -Value $inboxWin
+    Set-EnvValue -Path $envFile -Key 'CO_WORKER_INBOX_MOUNT' -Value $inboxMount
+    Write-Log "co-worker inbox: $inboxMount"
+
+    # How containers reach the NATIVE broker/Ollama on the Windows host.
+    if ($RuntimeMode -eq 'wsl' -or $RuntimeMode -eq 'podman') {
+      Write-Log "detecting the container -> Windows host address ($RuntimeMode)..."
+      $winHost = Get-ContainerHostIp -Mode $RuntimeMode
+      if ($winHost) {
+        Set-EnvValue -Path $envFile -Key 'WINDOWS_HOST' -Value $winHost
+        Write-Log "WINDOWS_HOST=$winHost (rails reach the native broker/ollama here)"
+      }
+      else { Write-Log 'WARNING: could not detect the container->host address; containers may not reach the broker.' }
     }
     Write-Log 'config written.'
 
@@ -203,7 +390,9 @@ function Invoke-Provision {
     # on :11434 - no second server; the full 24 GB stack keeps the Ollama NSSM service.)
     Write-Log 'installing the native broker service (approve the UAC prompt that appears)...'
     $nativeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Installer 'install-native.ps1'), '-PlatformRoot', $Root, '-SkipOllama')
-    if ($DockerMode -eq 'wsl') { $nativeArgs += '-OpenWslFirewall' }   # WSL containers need inbound :11500/:11434
+    # Only WSL-Docker needs the inbound rule: its containers reach the broker across the WSL vNIC.
+    # Podman's gvproxy dials from the host's own loopback, so no rule (and no 0.0.0.0 bind) is needed.
+    if ($RuntimeMode -eq 'wsl') { $nativeArgs += '-OpenWslFirewall' }
     $np = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList $nativeArgs
     if ($np.ExitCode -ne 0) { throw "install-native.ps1 failed (exit $($np.ExitCode)); see deploy\logs\platform-broker.err.log" }
 
@@ -226,28 +415,24 @@ function Invoke-Provision {
       Write-Log "  $m pulled."
     }
 
-    # 4. bundled compose via the detected Docker runtime. WSL mode: build from /mnt/c and reach the
-    # native broker via the injected WINDOWS_HOST. Desktop mode: native docker + host-gateway.
-    Write-Log "building + starting containers via docker ($DockerMode); first build takes several minutes..."
-    if ($DockerMode -eq 'wsl') {
+    # 4. bundled compose via the detected runtime.
+    #   podman  - docker-compose.exe over Podman's Docker-compat pipe; the machine must be up.
+    #   wsl     - build from /mnt/c, reach the native broker via the injected WINDOWS_HOST.
+    #   desktop - native docker + host-gateway.
+    Write-Log "building + starting containers via $RuntimeMode; first build takes several minutes..."
+    if ($RuntimeMode -eq 'podman') {
+      if (-not (Initialize-PodmanMachine)) { throw 'the podman machine is not running (see the log).' }
+    }
+    elseif ($RuntimeMode -eq 'wsl') {
       Write-Log 'starting the WSL Docker daemon...'
       Start-DockerEngineWsl
-      $envA = ConvertTo-WslPath (Join-Path $Root 'deploy\.env')
-      $compA = ConvertTo-WslPath (Join-Path $Installer 'docker-compose.installer.yml')
-      $cargs = @('docker', 'compose', '--progress', 'plain', '--env-file', $envA, '-f', $compA)
-      if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
-      $cargs += @('up', '-d', '--build')
-      & wsl.exe @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
     }
-    else {
-      $envA = Join-Path $Root 'deploy\.env'
-      $compA = Join-Path $Installer 'docker-compose.installer.yml'
-      $cargs = @('compose', '--progress', 'plain', '--env-file', $envA, '-f', $compA)
-      if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
-      $cargs += @('up', '-d', '--build')
-      & docker @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
-    }
-    if ($LASTEXITCODE -ne 0) { throw "docker compose up failed ($DockerMode mode; see the log)." }
+    $paths = Get-ComposePaths
+    $cargs = @('--progress', 'plain', '--env-file', $paths.Env, '-f', $paths.Compose)
+    $cargs += Get-ComposeProfiles -Apps $EnabledApps
+    $cargs += @('up', '-d', '--build')
+    Invoke-Compose -Arguments $cargs
+    if ($LASTEXITCODE -ne 0) { throw "compose up failed ($RuntimeMode mode; see the log)." }
 
     # 5. wait for the gateway
     Write-Log 'waiting for the gateway...'
