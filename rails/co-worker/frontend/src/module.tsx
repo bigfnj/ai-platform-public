@@ -17,9 +17,16 @@ import {
   typeMeta,
   priorityOf,
   periodLabel,
+  relatedEdges,
+  metricDelta,
+  deltaIsGood,
+  isCorrection,
+  type Competing,
   type DocResponse,
   type InboxResponse,
   type Item,
+  type Metric,
+  type RelType,
   type SkippedFile,
   type Source,
   type Status,
@@ -27,6 +34,16 @@ import {
 import './theme.css'
 
 type SortKey = 'priority' | 'newest' | 'when'
+
+const REL_LABEL: Record<RelType, string> = {
+  'relates-to': '↔',
+  'answers': '→ answers',
+  'derives-from': '← from',
+  'duplicates': '≡ dup',
+  'supersedes': '⇒ supersedes',
+  'retracts': '✕ retracts',
+  'blocks': '⛔ blocks',
+}
 
 function fmtWhen(iso: string | null | undefined): string {
   if (!iso) return ''
@@ -100,16 +117,72 @@ function DocModal({ path, onClose }: { path: string; onClose: () => void }) {
   )
 }
 
+// --- metrics strip ----------------------------------------------------------
+
+function MetricsStrip({ metrics }: { metrics: Metric[] }) {
+  return (
+    <div className="cw-metrics">
+      {metrics.map((m, i) => {
+        const delta = metricDelta(m)
+        const good = deltaIsGood(m)
+        const corr = isCorrection(m)
+        const sign = delta !== null && delta > 0 ? '+' : ''
+        return (
+          <div key={i} className="cw-metric">
+            <span className="cw-metric-lbl">{m.label}</span>
+            <span className="cw-metric-val">
+              {m.value}
+              {m.unit ? <span className="cw-metric-unit">&thinsp;{m.unit}</span> : null}
+            </span>
+            {delta !== null && !corr && (
+              <span className={`cw-metric-delta${good === true ? ' good' : good === false ? ' bad' : ''}`}>
+                {sign}{delta}{m.unit || ''}
+              </span>
+            )}
+            {corr && typeof m.prev === 'number' && (
+              <span className="cw-metric-delta corr">was&nbsp;{m.prev}{m.unit || ''}</span>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- competing options (conflict type) -------------------------------------
+
+function CompetingSection({ items }: { items: Competing[] }) {
+  return (
+    <div className="cw-competing">
+      {items.map((c, i) => (
+        <div key={i} className={`cw-compete-item${c.verdict ? ' ' + c.verdict : ''}`}>
+          <span className="cw-compete-lbl">{c.label}</span>
+          {(c.start || c.end) && (
+            <span className="cw-compete-time">
+              {[c.start && fmtWhen(c.start), c.end && fmtWhen(c.end)].filter(Boolean).join(' – ')}
+            </span>
+          )}
+          {c.verdict && (
+            <span className={`cw-chip${c.verdict === 'take' ? ' good' : ''}`}>{c.verdict}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // --- card -------------------------------------------------------------------
 
 function Card({
   item,
   onStatus,
   onOpenDoc,
+  archived = false,
 }: {
   item: Item
   onStatus: (id: string, status: Status) => void
   onOpenDoc: (path: string) => void
+  archived?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const p = priorityOf(item)
@@ -119,6 +192,8 @@ function Card({
   const links = Array.isArray(item.links) ? item.links : []
   const tags = Array.isArray(item.tags) ? item.tags : []
   const related = Array.isArray(item.related) ? item.related : []
+  const metrics = Array.isArray(item.metrics) ? (item.metrics as Metric[]) : []
+  const competing = Array.isArray(item.competing) ? (item.competing as Competing[]) : []
   const resolved = item._status === 'done' || item._status === 'dismissed'
 
   return (
@@ -168,10 +243,18 @@ function Card({
       )}
 
       {related.length > 0 && (
-        <div className="cw-rel">
-          ↔ relates to {related.length} other item{related.length > 1 ? 's' : ''}
+        <div className="cw-rels">
+          {relatedEdges(item).map((e, i) => (
+            <span key={i} className="cw-rel-edge">
+              <span className="cw-rel-type">{REL_LABEL[e.rel] ?? e.rel}</span>
+              <code className="cw-rel-id">{e.id}</code>
+            </span>
+          ))}
         </div>
       )}
+
+      {metrics.length > 0 && <MetricsStrip metrics={metrics} />}
+      {competing.length > 0 && <CompetingSection items={competing} />}
 
       <div className="cw-acts">
         {links.map((l) => (
@@ -185,7 +268,7 @@ function Card({
           </button>
         )}
         <span className="cw-spacer" />
-        {resolved ? (
+        {!archived && (resolved ? (
           <button className="cw-tri" onClick={() => onStatus(item._id, 'open')} title="Move back to open">
             ↩ Reopen
           </button>
@@ -198,7 +281,7 @@ function Card({
               Dismiss
             </button>
           </>
-        )}
+        ))}
       </div>
     </div>
   )
@@ -215,6 +298,9 @@ export default function CoWorkerModule() {
   const [patchErr, setPatchErr] = useState('')
   const [docPath, setDocPath] = useState<string | null>(null)
 
+  const [view, setView] = useState<'inbox' | 'archive'>('inbox')
+  const [period, setPeriod] = useState<string | null>(null)
+  const [periods, setPeriods] = useState<string[]>([])
   const [source, setSource] = useState<Source | 'all'>('all')
   const [type, setType] = useState('all')
   const [clientOnly, setClientOnly] = useState(false)
@@ -226,18 +312,20 @@ export default function CoWorkerModule() {
   const load = useCallback(() => {
     setLoading(true)
     setErr('')
-    getJSON<InboxResponse>('/api/inbox')
+    const endpoint = view === 'archive' ? '/api/archive' : '/api/inbox'
+    getJSON<InboxResponse>(endpoint)
       .then((d) => {
         setItems(Array.isArray(d.items) ? d.items : [])
         setSkipped(Array.isArray(d.skipped) ? d.skipped : [])
-        setInboxDir(d.inbox_dir || '')
+        setInboxDir(d.inbox_dir || d.archive_dir || '')
+        setPeriods(Array.isArray(d.periods) ? d.periods : [])
         setLoading(false)
       })
       .catch((e) => {
         setErr(String(e))
         setLoading(false)
       })
-  }, [])
+  }, [view])
 
   useEffect(() => {
     load()
@@ -276,6 +364,7 @@ export default function CoWorkerModule() {
     const out = items.filter((i) => {
       if (source !== 'all' && i.source !== source) return false
       if (type !== 'all' && i.type !== type) return false
+      if (period !== null && i.period !== period) return false
       if (clientOnly && !i.client) return false
       if (hideNoise && (i.type === 'noise' || priorityOf(i) === 5)) return false
       if (hideResolved && i._status !== 'open') return false
@@ -293,7 +382,7 @@ export default function CoWorkerModule() {
       return priorityOf(a) - priorityOf(b) || byWhen(a, b) || b._mtime - a._mtime
     })
     return out
-  }, [items, source, type, clientOnly, hideNoise, hideResolved, q, sort])
+  }, [items, source, type, period, clientOnly, hideNoise, hideResolved, q, sort])
 
   const kpi = useMemo(() => {
     const open = items.filter((i) => i._status === 'open')
@@ -318,6 +407,20 @@ export default function CoWorkerModule() {
           </span>
         </div>
         <span className="cw-spacer" />
+        <div className="cw-view-toggle">
+          <button
+            className={'cw-tab' + (view === 'inbox' ? ' on' : '')}
+            onClick={() => { setView('inbox'); setPeriod(null) }}
+          >
+            Inbox
+          </button>
+          <button
+            className={'cw-tab' + (view === 'archive' ? ' on' : '')}
+            onClick={() => { setView('archive'); setPeriod(null) }}
+          >
+            Archive
+          </button>
+        </div>
         <button className="cw-btn primary" onClick={load} disabled={loading}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>
@@ -428,6 +531,15 @@ export default function CoWorkerModule() {
             <option value="newest">Sort: newest harvested</option>
           </select>
 
+          {periods.length > 0 && (
+            <select className="cw-select" value={period ?? ''} onChange={(e) => setPeriod(e.target.value || null)}>
+              <option value="">All periods</option>
+              {periods.map((p) => (
+                <option key={p} value={p}>{periodLabel(p)}</option>
+              ))}
+            </select>
+          )}
+
           <label>
             <input
               className="cw-check"
@@ -460,15 +572,21 @@ export default function CoWorkerModule() {
 
       {!loading && !err && items.length === 0 && (
         <div className="cw-empty">
-          <p>No harvested items yet.</p>
-          <p>
-            The scheduled co-work loops drop <code>.json</code> items into
-            <br />
-            <code>{inboxDir || '/data/inbox'}</code>
-          </p>
-          <p style={{ marginTop: 14 }}>
-            Teams scan runs Mon 3a · Email daily 4a · Calendar Mon 5a · Insights Mon 6a
-          </p>
+          {view === 'archive' ? (
+            <p>No archived items. Items move here after their active window expires.</p>
+          ) : (
+            <>
+              <p>No harvested items yet.</p>
+              <p>
+                The scheduled co-work loops drop <code>.json</code> items into
+                <br />
+                <code>{inboxDir || '/data/inbox'}</code>
+              </p>
+              <p style={{ marginTop: 14 }}>
+                Teams scan runs Mon 3a · Email daily 4a · Calendar Mon 5a · Insights Mon 6a
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -481,7 +599,7 @@ export default function CoWorkerModule() {
       {filtered.length > 0 && (
         <div className="cw-grid">
           {filtered.map((i) => (
-            <Card key={i._id} item={i} onStatus={setStatus} onOpenDoc={setDocPath} />
+            <Card key={i._id} item={i} onStatus={setStatus} onOpenDoc={setDocPath} archived={view === 'archive'} />
           ))}
         </div>
       )}

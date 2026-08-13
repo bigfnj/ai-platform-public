@@ -43,8 +43,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # Tier 1 - how long an item stays visible on the dashboard (flat in inbox/).
@@ -299,9 +301,15 @@ def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: boo
             if not dry_run:
                 for s in stale:
                     state.pop(s, None)
-                (inbox / STATE_FILE).write_text(
-                    json.dumps(state, indent=2, sort_keys=True), encoding="utf-8"
-                )
+                p = inbox / STATE_FILE
+                fd, tmp = tempfile.mkstemp(dir=str(inbox), prefix=".state-", suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as f:
+                        json.dump(state, f, indent=2, sort_keys=True)
+                    os.replace(tmp, str(p))
+                except Exception:
+                    Path(tmp).unlink(missing_ok=True)
+                    raise
 
     print()
     print("dry run - nothing changed" if dry_run else "done")

@@ -275,3 +275,47 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
   background: var(--s2); border: 1px solid var(--bd); border-radius: 5px; padding: 1px 5px;
 }
 .cw-doc .cw-tablewrap table { font-size: 12px; }
+
+/* --- view toggle (inbox / archive) ---------------------------------------- */
+.cw-view-toggle { display: flex; gap: 4px; }
+
+/* --- metrics strip --------------------------------------------------------- */
+.cw-metrics { display: flex; gap: 6px; flex-wrap: wrap; padding: 9px 15px 0; }
+.cw-metric {
+  display: inline-flex; align-items: baseline; gap: 4px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: 8px;
+  padding: 3px 8px; font-size: 11.5px;
+}
+.cw-metric-lbl { color: var(--mut); }
+.cw-metric-val { font-weight: 650; color: var(--ink); }
+.cw-metric-unit { font-size: 10.5px; color: var(--mut); }
+.cw-metric-delta { font-size: 10.5px; color: var(--mut); }
+.cw-metric-delta.good { color: var(--ok); }
+.cw-metric-delta.bad { color: var(--p1); }
+.cw-metric-delta.corr { font-style: italic; }
+
+/* --- competing options (conflict type) ------------------------------------- */
+.cw-competing { padding: 9px 15px 0; display: flex; flex-direction: column; gap: 5px; }
+.cw-compete-item {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 9px; border-radius: 8px; font-size: 12px;
+  border: 1px solid var(--bd); background: var(--s2);
+}
+.cw-compete-item.take { border-color: var(--ok); }
+.cw-compete-item.drop { opacity: 0.55; }
+.cw-compete-lbl { flex: 1; font-weight: 620; color: var(--ink); min-width: 0; }
+.cw-compete-time { font-size: 11px; color: var(--mut); white-space: nowrap; }
+
+/* --- typed related edges --------------------------------------------------- */
+.cw-rels { display: flex; gap: 5px; flex-wrap: wrap; padding: 8px 15px 0; }
+.cw-rel-edge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; color: var(--mut);
+  background: var(--s2); border: 1px solid var(--bd); border-radius: 6px;
+  padding: 2px 7px;
+}
+.cw-rel-type { font-weight: 620; white-space: nowrap; }
+.cw-rel-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; opacity: 0.75;
+}

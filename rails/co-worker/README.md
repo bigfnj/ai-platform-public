@@ -128,7 +128,7 @@ npm run dev            # standalone on :5260, proxies /co-worker/api to :8860
 Working end to end. Backend, schema, frontend dashboard and all four harvest loops are in
 place.
 
-**Known gap:** the backend is read-only, so there is no `PATCH /api/inbox/{id}` and triage
-state (`open` / `done` / `dismissed`) cannot round-trip. Card dismissal would be
-frontend-local and reset on reload, so it is deliberately not implemented yet. Adding a
-write endpoint is the natural next step if persistent triage is wanted.
+Triage state (`open` / `done` / `dismissed`) persists in `inbox/.state.json` via an atomic
+sidecar write — harvest files are never mutated. `PATCH /api/inbox/{id}` sets triage status;
+the dashboard updates optimistically and rolls back on failure. The archive view surfaces
+pruned items for trend analysis.
