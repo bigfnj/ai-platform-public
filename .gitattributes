@@ -1,0 +1,5 @@
+# Shell scripts must always have LF line endings (CRLF breaks bash on Windows-mounted WSL paths)
+*.sh text eol=lf
+
+# Everything else: let git use the platform default
+* text=auto
