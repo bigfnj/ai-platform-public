@@ -70,8 +70,12 @@ if ($ans) { $Dir = $ans }
 if (Test-Path (Join-Path $Dir '.git')) {
   Write-Head "Updating existing clone ($Ref)..."
   & $git -C $Dir fetch --depth 1 origin $Ref
-  & $git -C $Dir checkout $Ref
-  & $git -C $Dir pull --ff-only origin $Ref
+  if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE)." }
+  # Force the install clone to exactly match published $Ref. It's a throwaway mirror, not a working
+  # copy, so a hard reset is correct - and it tolerates the "diverged" shallow state a depth-1 fetch
+  # produces (which broke pull --ff-only). reset --hard only touches tracked files, so untracked
+  # install state (.venv, deploy/.env) is left alone.
+  & $git -C $Dir reset --hard FETCH_HEAD
 }
 elseif ((Test-Path $Dir) -and (Get-ChildItem -Force $Dir -ErrorAction SilentlyContinue | Select-Object -First 1)) {
   throw "$Dir exists and is not an ai-platform clone. Pick an empty/new path via `$env:AIPLATFORM_DIR and re-run."
