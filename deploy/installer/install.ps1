@@ -216,21 +216,24 @@ function Invoke-Provision {
       for ($i = 0; $i -lt 15 -and -not (Test-OllamaUp); $i++) { Start-Sleep 2 }
     }
     if (-not (Test-OllamaUp)) { throw 'Ollama is not serving on :11434 - start the Ollama app and re-run.' }
-    Write-Log 'Ollama is up; pulling the lean models (~4.5 GB total, streams below)...'
+    Write-Log 'Ollama is up; pulling the lean models (~4.5 GB total)...'
     foreach ($m in @('gemma3:4b', 'bge-m3')) {
-      Write-Log "ollama pull $m ..."
-      & ollama pull $m 2>&1 | Tee-Object -FilePath $LogFile -Append
+      Write-Log "ollama pull $m (progress below)..."
+      & ollama pull $m   # direct to the console: ollama renders its own progress bar; piping it
+      # through Tee mangles the bar (mojibake + red + repeated lines) since it's no longer a TTY.
       if ($LASTEXITCODE -ne 0) { throw "ollama pull $m failed (exit $LASTEXITCODE)" }
+      Write-Log "  $m pulled."
     }
 
     # 4. bundled compose via the detected Docker runtime. WSL mode: build from /mnt/c and reach the
     # native broker via the injected WINDOWS_HOST. Desktop mode: native docker + host-gateway.
     Write-Log "building + starting containers via docker ($DockerMode); first build takes several minutes..."
     if ($DockerMode -eq 'wsl') {
+      Write-Log 'starting the WSL Docker daemon...'
       Start-DockerEngineWsl
       $envA = ConvertTo-WslPath (Join-Path $Root 'deploy\.env')
       $compA = ConvertTo-WslPath (Join-Path $Installer 'docker-compose.installer.yml')
-      $cargs = @('docker', 'compose', '--env-file', $envA, '-f', $compA)
+      $cargs = @('docker', 'compose', '--progress', 'plain', '--env-file', $envA, '-f', $compA)
       if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
       $cargs += @('up', '-d', '--build')
       & wsl.exe @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
@@ -238,7 +241,7 @@ function Invoke-Provision {
     else {
       $envA = Join-Path $Root 'deploy\.env'
       $compA = Join-Path $Installer 'docker-compose.installer.yml'
-      $cargs = @('compose', '--env-file', $envA, '-f', $compA)
+      $cargs = @('compose', '--progress', 'plain', '--env-file', $envA, '-f', $compA)
       if ($WithRecipeBook) { $cargs += @('--profile', 'recipe-book') }
       $cargs += @('up', '-d', '--build')
       & docker @cargs 2>&1 | Tee-Object -FilePath $LogFile -Append
