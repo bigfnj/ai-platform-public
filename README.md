@@ -73,10 +73,18 @@ docs/                     INSTALL.md (lean installer) + architecture.md
 
 ## Run it
 
-The broker runs as a native Windows service; the shell and rails run in Docker. From `deploy/`:
+The broker runs as a native Windows service (`platform-broker`, NSSM, `:11500`); the shell and
+rails run in containers — **Podman** (Hyper-V provider, default on Windows) or Docker Desktop.
 
-```bash
-# rebuild just the changed service (avoid a bare full-stack up, which churns the NAT):
+From `deploy/`:
+
+```powershell
+# Podman (standalone docker-compose.exe drives the Podman Docker-compat pipe):
+docker-compose --env-file .env -f installer/docker-compose.installer.yml --profile recipe-book --profile co-worker up -d --build --no-deps <service>
+
+# Docker Desktop / Docker Engine:
 docker compose up -d --build --no-deps <service>
-# local: http://localhost:1111  (podman: docker-compose up -d; docker: docker compose up -d)
+
+# local: http://localhost:1111
+# (platform.localhost is intercepted by some corporate proxies — use the plain localhost form)
 ```

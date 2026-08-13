@@ -1,62 +1,52 @@
-# Platform hosting — the unified shell behind Caddy (P4, federated)
+# deploy/
 
-Hosts the whole platform (the shell with edu-suite federated in) as containers,
-with the GPU/media layer staying **native** on Windows. This supersedes
-`edu-suite/deploy` (which hosted the dashboard standalone); that Dockerfile is
-reused here for the dashboard backend.
+Container stack, service installer, and operational scripts.
+
+## How to install
+
+Use the lean one-command installer described in [`docs/INSTALL.md`](../docs/INSTALL.md). It handles
+Docker/Podman detection, broker service install, Caddy, and logon persistence automatically.
+
+```powershell
+irm https://raw.githubusercontent.com/bigfnj/ai-platform-public/main/get.ps1 | iex
+```
+
+## Files
+
+| File / Dir | Purpose |
+|---|---|
+| `installer/install.ps1` | GUI + console + doctor install wizard |
+| `installer/install-native.ps1` | Broker venv + NSSM service install |
+| `installer/lib-runtime.ps1` | Shared helpers: Podman/Docker detection, atomic .env writes, compose wrappers |
+| `installer/platform-startup.ps1` | Logon startup script (Podman mode); installed as a Startup-folder shortcut |
+| `installer/platform-startup.sh` | Logon startup script (WSL/Docker-in-WSL2 mode) |
+| `installer/smoke-test.ps1` | Phase-gated smoke tests: `-Stage runtime\|data\|build\|e2e\|persistence` |
+| `installer/docker-compose.installer.yml` | Lean stack: bundled gateway + rail backends + caddy |
+| `installer/Caddyfile` | Caddy config for the lean install (plain HTTP on :1111) |
+| `installer/env.lean.example` | .env template for the lean stack |
+| `docker-compose.yml` | Full stack (all rails, separate frontend mounts, 24 GB VRAM) |
+| `Dockerfile.gateway.bundled` | Multi-stage image: bakes all rail frontends into the gateway |
+| `activate-model-roles.ps1` | One-shot: restart broker + write per-rail `@role` vars into .env |
+| `install-services.ps1` | Low-level: broker + Ollama NSSM service install |
+| `logs/` | Runtime logs (gitignored) |
 
 ## Topology
 
 ```
-Browser ── Caddy (container, :80/:443, internal-CA HTTPS)
-              └─ reverse_proxy ─> gateway (container, :8700)
-                    ├─ serves the shell SPA + the edu-suite federated remote
-                    ├─ /edu-suite/api/* ─> dashboard (container, :8800)  [edu-suite backend]
-                    └─ /api/platform/*  ─> broker (NATIVE, host.docker.internal:11500)
-                                              └─ Ollama + XTTS + SDXL (native GPU)
+Browser → localhost:1111 → caddy (container)
+              └─ → gateway:8700 (container, bundled frontends)
+                    ├─ /terminal-fun/  → terminal-fun:8730 (container)
+                    ├─ /recipe-book/   → recipe-book:8830  (container)
+                    ├─ /co-worker/     → co-worker:8860    (container)
+                    └─ host.docker.internal:11500 → broker (NATIVE, Windows service)
+                                                        └─ Ollama :11434 (native)
 ```
 
-Both frontend dists are **mounted** into the gateway (not baked in), so rebuilding
-a frontend just needs `npm run build` + a gateway restart, no image rebuild.
+**Container runtime:** Podman 6.x (Hyper-V provider, default) or Docker Desktop/Engine.
+- Podman: `docker-compose.exe` (standalone) drives the Docker-compat API pipe — no `DOCKER_HOST` override needed.
+- Host address: `WINDOWS_HOST=192.168.127.254` (gvproxy, static for Hyper-V); no inbound firewall rule needed.
+- WSL/Docker-in-WSL2: `wsl docker compose`, `WINDOWS_HOST` = dynamic WSL→Windows gateway IP.
 
-## Prerequisites (on the host)
+## Access
 
-1. **Build both frontends** (mounted into the gateway):
-   ```powershell
-   cd D:\.claude\projects\platform\apps\platform\frontend ; npm ci ; npm run build
-   cd D:\.claude\projects\edu-suite\apps\dashboard\frontend ; npm ci ; npm run build
-   ```
-2. **Start the broker on 0.0.0.0** (so containers can reach it), with edu-suite's
-   venv available for the media worker (all native, alongside Ollama):
-   ```powershell
-   cd D:\.claude\projects\platform
-   .\.venv\Scripts\Activate.ps1
-   uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500
-   ```
-
-## Build + run
-
-```powershell
-cd D:\.claude\projects\platform\deploy
-docker compose up -d --build
-```
-
-Open **https://platform.localhost** (from this machine). For LAN access, change the
-site address in `Caddyfile` to this box's name/IP and import Caddy's root CA on
-other devices, or use `http://platform.localhost` for quick testing.
-
-The job library defaults to `D:\edu-suite-library` (override with `EDU_LIBRARY_HOST`).
-
-## Survive reboot
-
-- Containers use `restart: unless-stopped`; set Docker Desktop to start at login.
-- Run the **native broker** (and Ollama) as Windows services (NSSM/WinSW) so the GPU
-  layer comes up without a login. Wrap:
-  `<platform venv>\Scripts\python.exe -m uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500`
-  (working dir = the platform repo root).
-
-## Note on Docker credentials
-
-`docker compose up --build` must run in an **interactive terminal**. In an agent /
-non-interactive shell, Docker Desktop's `credsStore: desktop` helper fails ("logon
-session does not exist") even for anonymous public pulls.
+`http://localhost:1111` — the corporate proxy bypasses `localhost`; `platform.localhost` is intercepted.
