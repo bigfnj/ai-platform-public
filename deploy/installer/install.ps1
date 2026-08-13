@@ -171,6 +171,10 @@ function Write-Log($m) {
 
 function Invoke-Provision {
   Remove-Item $DoneFile, $FailFile -ErrorAction SilentlyContinue
+  # Native tools (ollama, docker) write progress to stderr; with `2>&1 | Tee-Object` under the
+  # script's ErrorActionPreference='Stop', that benign stderr is wrapped as a terminating error
+  # (PS 5.1 NativeCommandError). Relax it here and gate on explicit exit codes instead.
+  $ErrorActionPreference = 'Continue'
   try {
     Write-Log "=== AI-Platform lean install ==="
     Write-Log "repo root: $Root"
@@ -216,6 +220,7 @@ function Invoke-Provision {
     foreach ($m in @('gemma3:4b', 'bge-m3')) {
       Write-Log "ollama pull $m ..."
       & ollama pull $m 2>&1 | Tee-Object -FilePath $LogFile -Append
+      if ($LASTEXITCODE -ne 0) { throw "ollama pull $m failed (exit $LASTEXITCODE)" }
     }
 
     # 4. bundled compose via the detected Docker runtime. WSL mode: build from /mnt/c and reach the
@@ -360,13 +365,19 @@ function Invoke-ConsoleInstall {
   CW ''
   CW '  Super-admin account' 'Cyan'
   $u = Read-Host '   Username [admin]'; if (-not $u) { $u = 'admin' }
+  function Read-Secret($prompt) {
+    $sec = Read-Host $prompt -AsSecureString
+    $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringAuto($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
+  }
+  # Enter twice and require a match - a single typo here means you can't log in and must reinstall.
   $pass = ''
   while (-not $pass) {
-    $sec = Read-Host '   Password' -AsSecureString
-    $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
-    $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($b)
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
-    if (-not $pass) { CW '   Password cannot be empty.' 'Yellow' }
+    $p1 = Read-Secret '   Password'
+    if (-not $p1) { CW '   Password cannot be empty.' 'Yellow'; continue }
+    $p2 = Read-Secret '   Confirm password'
+    if ($p1 -ne $p2) { CW '   Passwords do not match - re-enter both.' 'Yellow'; continue }
+    $pass = $p1
   }
   CW ''
   CW '  Rails: Admin shell (always) + Terminal Fun (default).' 'Cyan'
