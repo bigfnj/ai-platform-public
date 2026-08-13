@@ -40,8 +40,8 @@ Never nest JSON items in subfolders; they will not be found.
 <period>_<source>_<slug>.json
 
 2026W33_calendar_conflict-thu-triple-book.json
-20260811_email_vpn-tunnel-andy-mack.json
-2026W33_teams_dangling-vpn-answer-brooke.json
+20260811_email_vpn-tunnel-access-request.json
+2026W33_teams_dangling-vpn-answer-owed.json
 2026W33_insights_reactor-not-initiator.json
 ```
 
@@ -219,6 +219,15 @@ inbox/archive/*.json  tier 2 — the HISTORY window (long, feeds trend deltas)
 | `insights` | 14 days | 26 weeks |
 
 Anything with `_status: "done"` or `"dismissed"` is archived after 7 days regardless of source.
+
+**Narrative markdown is swept on the same retention numbers, single-tier.** Briefs never move
+to `archive/`: they already live in a per-source subfolder that the flat glob cannot see, so
+relocating them would only break the `doc` paths behind drill-through. They are deleted once
+past `RETENTION_DAYS`, with one guard — **a brief still referenced by any surviving item,
+active or archived, is never deleted**, because a dead drill-through link is worse than a
+stale file. That guard means a brief outlives its items by exactly one pruner run; the sweep
+converges on the following run and is then a no-op. Files that are not `*.md` inside those
+subfolders (e.g. `teams/chat-registry.json`, which is loop scratch state) are never touched.
 
 Tier 1 is what keeps `inbox/` from flooding — the flat glob only ever sees roughly one to two
 periods per source, so the root count is bounded and flat over time no matter how long the

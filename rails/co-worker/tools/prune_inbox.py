@@ -11,6 +11,12 @@ Two tiers, deliberately separate:
       v
     deleted
 
+Narrative markdown (inbox/<source>/*.md) is swept on the SAME retention numbers, but with
+only one tier. It never moves to archive/: it already lives in a subfolder, so the backend's
+flat `inbox/*.json` glob cannot see it, and relocating it would break the `doc` paths that
+drive drill-through for no benefit. It is simply deleted once past RETENTION_DAYS - unless a
+live item still references it, which is always checked first.
+
 The dashboard globs `inbox/*.json` flat, so tier 1 is what controls how many cards
 render. History has to live much longer than that for the insights loop to compute
 week-over-week change, but it must not live forever or the folder becomes clutter
@@ -68,6 +74,10 @@ ARCHIVE = "archive"
 PERIOD_WEEK = re.compile(r"^(\d{4})W(\d{2})$")
 PERIOD_DAY = re.compile(r"^(\d{8})$")
 
+# Every brief is named with a leading ISO date: 2026-08-12.md, 2026-08-10-week.md,
+# 2026-08-10-30day.md, 2026-08-10-synthesis.md
+MD_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
 
 def period_to_date(period: str) -> dt.date | None:
     """Period -> the date it represents. Weeks resolve to their Monday."""
@@ -109,6 +119,64 @@ def read_meta(f: Path) -> tuple[str, dt.date] | None:
     if ref is None:
         return None
     return str(d.get("source", "")), ref
+
+
+def referenced_docs(inbox: Path) -> set[str]:
+    """Every `doc` path pointed at by a still-existing item, active or archived.
+
+    A brief that something still references is never deleted, however old it looks -
+    a dead drill-through link is worse than a stale file.
+    """
+    refs: set[str] = set()
+    dirs = [inbox]
+    if (inbox / ARCHIVE).is_dir():
+        dirs.append(inbox / ARCHIVE)
+    for d in dirs:
+        for f in d.glob("*.json"):
+            if f.name.startswith("."):
+                continue
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(data, dict) and data.get("doc"):
+                refs.add(str(data["doc"]).replace("\\", "/"))
+    return refs
+
+
+def sweep_markdown(inbox: Path, today: dt.date, dry_run: bool,
+                   skipped: list[str]) -> tuple[list[tuple[Path, str]], int]:
+    """Expire narrative briefs past their source's retention window."""
+    refs = referenced_docs(inbox)
+    doomed: list[tuple[Path, str]] = []
+    kept = 0
+    for source in sorted(RETENTION_DAYS):
+        d = inbox / source
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.md")):
+            rel = f"{source}/{f.name}"
+            m = MD_DATE.match(f.name)
+            if not m:
+                skipped.append(f"{rel} (no leading ISO date - kept)")
+                kept += 1
+                continue
+            try:
+                ref = dt.date.fromisoformat(m.group(1))
+            except ValueError:
+                skipped.append(f"{rel} (unparseable date - kept)")
+                kept += 1
+                continue
+            age = (today - ref).days
+            limit = RETENTION_DAYS[source]
+            if age <= limit:
+                kept += 1
+            elif rel in refs:
+                skipped.append(f"{rel} ({age}d old but still referenced by a live item - kept)")
+                kept += 1
+            else:
+                doomed.append((f, f"{source} brief {age}d old (retention {limit}d)"))
+    return doomed, kept
 
 
 def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: bool) -> int:
@@ -173,11 +241,15 @@ def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: boo
             else:
                 retained += 1
 
+    # --- markdown briefs ---------------------------------------------------
+    md_doomed, md_kept = sweep_markdown(inbox, today, dry_run, skipped)
+
     # --- report + act ------------------------------------------------------
     print(f"inbox   : {inbox}")
     print(f"today   : {today}")
     print(f"active  : {active} on the dashboard   -> archiving {len(to_archive)}")
     print(f"archived: {retained} in history        -> {'expiring' if expire else 'expiring (disabled):'} {len(to_delete)}")
+    print(f"briefs  : {md_kept} narrative .md       -> {'expiring' if expire else 'expiring (disabled):'} {len(md_doomed)}")
 
     if skipped and verbose:
         print()
@@ -192,6 +264,10 @@ def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: boo
         print()
         for f, reason in to_delete:
             print(f"  {'would delete ' if dry_run else 'delete '} archive/{f.name}  <- {reason}")
+    if md_doomed and expire:
+        print()
+        for f, reason in md_doomed:
+            print(f"  {'would delete ' if dry_run else 'delete '} {f.parent.name}/{f.name}  <- {reason}")
 
     if not dry_run:
         if to_archive:
@@ -203,6 +279,8 @@ def prune(inbox: Path, today: dt.date, dry_run: bool, verbose: bool, expire: boo
                 f.rename(dest)
         if expire:
             for f, _ in to_delete:
+                f.unlink()
+            for f, _ in md_doomed:
                 f.unlink()
 
     # --- garbage-collect triage state -------------------------------------

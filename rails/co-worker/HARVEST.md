@@ -98,8 +98,20 @@ Full field table is in `SCHEMA.md`. The rules that get broken most:
 - `links` = real Graph `webLink`s, copied verbatim. `related` = **co-worker item ids only**,
   never a Graph id. A cross-source ref must resolve, so list `inbox\*.json` and use a real id
   rather than guessing another loop's slug.
+- **Re-derive `related` from a fresh inbox listing on every run. Never carry a ref forward
+  unverified.** Slug reuse (step 2) tempts you to copy the previous body and refs wholesale,
+  but another loop may have correctly retired the item you pointed at — and because you may
+  only rewrite your *own* source, nobody else can repair your dangling ref. It would freeze
+  into the archive when your period ages out. Re-check every id; drop the ones that no longer
+  resolve.
+- **Prefer durable targets.** Point `related` at a finding that stays true, not at one whose
+  whole purpose is to be resolved. Referencing a "no output produced yet" item guarantees a
+  broken edge the moment somebody produces the output.
 - **One item per finding**, target 8–25 small cards. Don't paste the whole brief into one
   `body` — summarize and point `doc` at the markdown.
+
+**You may only ever write items for your own `source`.** If you spot a problem in another
+loop's item, emit a finding describing it — routing it is your job, repairing it is not.
 
 Triage state lives in `inbox\.state.json` and is keyed by item id. Never write or mutate it;
 because ids are deterministic, Justin's done/dismissed marks survive your rewrite on their own.
@@ -132,8 +144,12 @@ validator is the only thing that makes that visible. Warnings are advisory; erro
 
 **Then prune.** Every loop, every run — it is idempotent and cheap, and it means clutter
 cannot accumulate if another loop is paused. It archives items past the dashboard window to
-`inbox\archive\` and deletes archived items past their retention window. Retention lives in
-one table at the top of `prune_inbox.py`; change it there and nowhere else.
+`inbox\archive\`, deletes archived items past their retention window, and expires narrative
+briefs on the same retention numbers. Retention lives in one table at the top of
+`prune_inbox.py`; change it there and nowhere else.
+
+Your own brief is never at risk: it is dated today and still referenced by the items you just
+wrote, and the pruner refuses to delete a brief any surviving item points at.
 
 Never delete `inbox\archive\` — it is where trend history lives.
 
