@@ -32,7 +32,11 @@ $Installer = $PSScriptRoot
 # with 8.3 name generation disabled. USERPROFILE is the long form, so derive the temp base from it.
 $TempBase  = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
 if (-not (Test-Path $TempBase)) { $TempBase = $env:TEMP }
-$LogFile   = Join-Path $TempBase 'ai-platform-install.log'
+# Human-readable install log lives in the install folder (deploy\logs\install.log - reachable via the
+# menu's "Open the install folder"); the done/fail markers stay in temp.
+$LogDir    = Join-Path $Root 'deploy\logs'
+try { New-Item -ItemType Directory -Force -Path $LogDir -ErrorAction Stop | Out-Null } catch {}
+$LogFile   = if (Test-Path $LogDir) { Join-Path $LogDir 'install.log' } else { Join-Path $TempBase 'ai-platform-install.log' }
 $DoneFile  = Join-Path $TempBase 'ai-platform-install.done'
 $FailFile  = Join-Path $TempBase 'ai-platform-install.fail'
 $DockerBin = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin'
@@ -112,15 +116,23 @@ function ConvertTo-WslPath($winPath) {
   if ($p -match '^([A-Za-z]):/(.*)$') { return "/mnt/$($Matches[1].ToLower())/$($Matches[2])" }
   return $p
 }
-# The Windows host IP as seen from inside WSL (the default-route gateway). Dynamic across restarts,
-# so it must be detected at run time; containers use it as host.docker.internal to reach the broker.
+# The Windows host IP as seen from inside WSL (the default-route gateway). Dynamic across restarts.
+# Run wsl in a BACKGROUND JOB: wsl.exe can wedge when invoked directly in an interactive console, and
+# the job gives a hard timeout so host detection can never hang the whole install.
 function Get-WslWindowsHost {
-  $route = (& wsl.exe sh -c "ip route show default" 2>$null | Select-Object -First 1)
-  if ($route -match 'via\s+(\d+\.\d+\.\d+\.\d+)') { return $Matches[1] }
-  return $null
+  $job = Start-Job -ScriptBlock { (& wsl.exe sh -c 'ip route show default' 2>$null) -join "`n" }
+  $ip = $null
+  if (Wait-Job $job -Timeout 25) { $o = (Receive-Job $job); if ($o -match 'via\s+(\d+\.\d+\.\d+\.\d+)') { $ip = $Matches[1] } }
+  else { Stop-Job $job -ErrorAction SilentlyContinue }
+  Remove-Job $job -Force -ErrorAction SilentlyContinue
+  return $ip
 }
-# Ensure the WSL2 Docker daemon is running (systemd-managed; no Windows elevation needed).
-function Start-DockerEngineWsl { & wsl.exe -u root systemctl start docker 1>$null 2>$null }
+# Ensure the WSL2 Docker daemon is running (systemd-managed; no Windows elevation needed). Also via a
+# job (same interactive-console-hang avoidance) with a timeout.
+function Start-DockerEngineWsl {
+  $job = Start-Job -ScriptBlock { & wsl.exe -u root systemctl start docker 2>&1 | Out-Null }
+  Wait-Job $job -Timeout 30 | Out-Null; Stop-Job $job -ErrorAction SilentlyContinue; Remove-Job $job -Force -ErrorAction SilentlyContinue
+}
 
 # Install Docker Engine + compose plugin into the default WSL2 distro (run as root inside WSL; no
 # Windows elevation needed). Used when WSL2 is present but Docker isn't. Returns $true on success.
@@ -162,6 +174,7 @@ function Invoke-Provision {
   try {
     Write-Log "=== AI-Platform lean install ==="
     Write-Log "repo root: $Root"
+    Write-Log "full log: $LogFile"
 
     # 1. config: deploy/.env from the lean template + roles.lean.json -> broker roles.json
     Write-Log 'writing deploy\.env (lean) ...'
@@ -172,6 +185,7 @@ function Invoke-Provision {
     if ($DockerMode -eq 'wsl') {
       # WSL containers reach the native Windows broker via host.docker.internal = the WSL->Windows
       # gateway IP (dynamic; detected now). Desktop mode needs nothing (host-gateway maps natively).
+      Write-Log 'detecting the WSL -> Windows host IP (wsl ip route, in a background job)...'
       $winHost = Get-WslWindowsHost
       if ($winHost) { Add-Content -Path (Join-Path $Root 'deploy\.env') -Value "WINDOWS_HOST=$winHost" -Encoding utf8; Write-Log "WINDOWS_HOST=$winHost (rails reach the native broker/ollama here)" }
       else { Write-Log 'WARNING: could not detect the WSL->Windows host IP; containers may not reach the broker.' }
@@ -198,7 +212,7 @@ function Invoke-Provision {
       for ($i = 0; $i -lt 15 -and -not (Test-OllamaUp); $i++) { Start-Sleep 2 }
     }
     if (-not (Test-OllamaUp)) { throw 'Ollama is not serving on :11434 - start the Ollama app and re-run.' }
-    Write-Log 'Ollama is up.'
+    Write-Log 'Ollama is up; pulling the lean models (~4.5 GB total, streams below)...'
     foreach ($m in @('gemma3:4b', 'bge-m3')) {
       Write-Log "ollama pull $m ..."
       & ollama pull $m 2>&1 | Tee-Object -FilePath $LogFile -Append
@@ -364,6 +378,7 @@ function Invoke-ConsoleInstall {
   # live via Write-Log / Tee-Object (no hidden window, so you can see it's not stuck).
   CW ''
   CW '  Provisioning (a UAC prompt will appear for the broker service)...' 'Cyan'
+  CW "  Full log: $LogFile" 'DarkGray'
   Set-Content -Path $LogFile -Value '' -Encoding utf8
   $script:AdminUser = $u; $script:AdminPass = $pass; $script:EnabledApps = ($enabled -join ',')
   $script:DockerMode = $dmode; $script:WithRecipeBook = [bool]$withRecipe
