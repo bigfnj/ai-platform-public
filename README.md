@@ -10,7 +10,11 @@ federated **rail** served behind a **gateway**, and all model work goes through 
 The fastest way to stand up a lean platform on a modest (8 GB VRAM) Windows box is the one-window
 GUI installer described in [`docs/INSTALL.md`](docs/INSTALL.md). It brings up the admin shell,
 Terminal Fun, and optional Recipe Book on two small Ollama models, with no HuggingFace token and no
-image/TTS pipeline.
+image/TTS pipeline. From any PowerShell — no manual clone:
+
+```powershell
+irm https://raw.githubusercontent.com/bigfnj/ai-platform-public/main/get.ps1 | iex
+```
 
 For the design rationale and broker API, see [`docs/architecture.md`](docs/architecture.md).
 

@@ -25,7 +25,19 @@ there's no media pipeline. Recipe icons ship pre-rendered in the seed.
 
 ## Run it
 
-Clone the repo, then from an ordinary PowerShell:
+**Fastest — one line, no manual clone.** From any PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/bigfnj/ai-platform-public/main/get.ps1 | iex
+```
+
+This ensures git, enables Windows long-paths, clones the repo to `%USERPROFILE%\ai-platform-public`
+(override with `$env:AIPLATFORM_DIR`; pin a tag with `$env:AIPLATFORM_REF`), and opens an
+interactive menu that launches the installer below. It runs non-elevated; the installer
+self-elevates only for provisioning. *(Piping a remote script to `iex` runs whatever is at that URL
+— read it first at the raw link, and point `AIPLATFORM_REF` at a tag for a pinned install.)*
+
+**Manual — already cloned.** From an ordinary PowerShell in the repo:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\installer\install.ps1

@@ -36,28 +36,34 @@ if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
 # ---------------------------------------------------------------------------
 function Test-Prereqs {
   $r = @()
-  # Docker daemon
-  $dockerOk = $false; $dockerDetail = 'not found'
-  try { & docker version --format '{{.Server.Version}}' 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $dockerOk = $true; $dockerDetail = 'engine running' } else { $dockerDetail = 'installed, daemon not running' } } catch {}
-  $r += [pscustomobject]@{ Name = 'Docker Desktop'; Ok = $dockerOk; Detail = $dockerDetail; Fix = 'Docker.DockerDesktop' }
+  # Docker (State: missing | installed | running). Resolve the CLI by its known install path too,
+  # because a winget install done in THIS session isn't on our already-loaded PATH yet.
+  $dockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe'
+  $dockerCmd = if (Test-Path $dockerExe) { $dockerExe } elseif (Get-Command docker -ErrorAction SilentlyContinue) { 'docker' } else { $null }
+  $dockerState = 'missing'; $dockerDetail = 'not found'
+  if ($dockerCmd) {
+    $dockerState = 'installed'; $dockerDetail = 'installed, daemon not running'
+    try { & $dockerCmd version --format '{{.Server.Version}}' 2>$null | Out-Null; if ($LASTEXITCODE -eq 0) { $dockerState = 'running'; $dockerDetail = 'engine running' } } catch {}
+  }
+  $r += [pscustomobject]@{ Key = 'docker'; Name = 'Docker Desktop'; Ok = ($dockerState -eq 'running'); Detail = $dockerDetail; Fix = 'Docker.DockerDesktop'; State = $dockerState }
   # NVIDIA GPU >= 8 GB
   $gpuOk = $false; $gpuDetail = 'no NVIDIA GPU detected'
   try {
     $mem = (& nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
     if ($mem) { $mib = [int]($mem.Trim()); $gpuDetail = "$([math]::Round($mib/1024,1)) GB VRAM"; $gpuOk = $mib -ge 7500 }
   } catch {}
-  $r += [pscustomobject]@{ Name = 'NVIDIA GPU (>= 8 GB)'; Ok = $gpuOk; Detail = $gpuDetail; Fix = '' }
+  $r += [pscustomobject]@{ Key = 'gpu'; Name = 'NVIDIA GPU (>= 8 GB)'; Ok = $gpuOk; Detail = $gpuDetail; Fix = ''; State = '' }
   # Ollama
   $ollamaExe = Join-Path $env:USERPROFILE 'AppData\Local\Programs\Ollama\ollama.exe'
   $ollamaOk = (Test-Path $ollamaExe) -or [bool](Get-Command ollama -ErrorAction SilentlyContinue)
-  $r += [pscustomobject]@{ Name = 'Ollama'; Ok = $ollamaOk; Detail = $(if ($ollamaOk) { 'installed' } else { 'not found' }); Fix = 'Ollama.Ollama' }
+  $r += [pscustomobject]@{ Key = 'ollama'; Name = 'Ollama'; Ok = $ollamaOk; Detail = $(if ($ollamaOk) { 'installed' } else { 'not found' }); Fix = 'Ollama.Ollama'; State = '' }
   # Python 3.11+
   $pyOk = $false; $pyDetail = 'not found'
   try { $v = (& python --version 2>&1); if ($v -match '(\d+)\.(\d+)') { $pyDetail = $v.ToString().Trim(); $pyOk = ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 10) } } catch {}
-  $r += [pscustomobject]@{ Name = 'Python 3.11'; Ok = $pyOk; Detail = $pyDetail; Fix = 'Python.Python.3.11' }
+  $r += [pscustomobject]@{ Key = 'python'; Name = 'Python 3.11'; Ok = $pyOk; Detail = $pyDetail; Fix = 'Python.Python.3.11'; State = '' }
   # Disk (system drive) >= 20 GB. DriveInfo (not Get-PSDrive, which hangs on dead network mounts).
   $free = [math]::Round((New-Object System.IO.DriveInfo($env:SystemDrive)).AvailableFreeSpace / 1GB, 1)
-  $r += [pscustomobject]@{ Name = 'Disk (>= 20 GB free)'; Ok = ($free -ge 20); Detail = "$free GB free on $env:SystemDrive"; Fix = '' }
+  $r += [pscustomobject]@{ Key = 'disk'; Name = 'Disk (>= 20 GB free)'; Ok = ($free -ge 20); Detail = "$free GB free on $env:SystemDrive"; Fix = ''; State = '' }
   return $r
 }
 
@@ -65,6 +71,15 @@ function Test-ExistingInstall {
   if (Get-Service platform-broker -ErrorAction SilentlyContinue) { return 'platform-broker service exists' }
   try { $ps = & docker ps --format '{{.Names}}' 2>$null; if ($ps -match 'platform-') { return 'platform-* containers are running' } } catch {}
   if (Test-Path (Join-Path $Root 'deploy\.env')) { return 'deploy\.env already exists' }
+  return $null
+}
+
+# Locate the Docker Desktop launcher (to start the engine after a fresh install; the winget
+# package installs it but the daemon only comes up after a manual first launch + license accept).
+function Get-DockerDesktopExe {
+  foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+    if ($base) { $p = Join-Path $base 'Docker\Docker\Docker Desktop.exe'; if (Test-Path $p) { return $p } }
+  }
   return $null
 }
 
@@ -199,48 +214,132 @@ $log.Font = New-Object Drawing.Font('Consolas', 9)
 $form.Controls.Add($log)
 
 $script:prereqs = @()
+$script:pendingInstall = $false     # user asked to install; waiting on the Docker engine to come up
+$script:dockerAnnounced = $false    # printed "Docker detected" once
+$script:ollamaAnnounced = $false    # printed "Ollama detected" once
+
+function Get-Prereq($key) { $script:prereqs | Where-Object { $_.Key -eq $key } }
+
+# The two prerequisites the build genuinely can't proceed without: a *running* container engine
+# and an *installed* Ollama (the elevated provisioner starts Ollama's service and pulls models).
+# GPU / Python / disk stay soft (a skippable warning).
+function Test-HardReady {
+  $d = Get-Prereq 'docker'; $o = Get-Prereq 'ollama'
+  return ($d -and $d.State -eq 'running' -and $o -and $o.Ok)
+}
+
 function Refresh-Prereqs {
   $script:prereqs = Test-Prereqs
   $prereqBox.Text = ($script:prereqs | ForEach-Object { "{0} {1,-22} {2}" -f $(if ($_.Ok) { '[OK]  ' } else { '[MISS]' }), $_.Name, $_.Detail }) -join "`r`n"
 }
+
+# Launch the elevated provisioning and tail its log. Called directly when Docker is already up,
+# or by the watcher once the engine comes online.
+function Start-Provisioning {
+  $ex = Test-ExistingInstall
+  if ($ex -and -not $Force) { [Windows.Forms.MessageBox]::Show("An existing platform install was detected ($ex).`nThis installer refuses to touch it. Run on a clean machine/VM.", 'Installer'); return }
+  $enabled = @('terminal-fun'); if ($chkRecipe.Checked) { $enabled += 'recipe-book' }
+  $btnInstall.Enabled = $false
+  $log.AppendText("starting provisioning (elevated)...`r`n")
+  Set-Content -Path $LogFile -Value '' -Encoding utf8
+  $script:pos = 0
+  $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
+    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','))
+  if ($chkRecipe.Checked) { $pargs += '-WithRecipeBook' }
+  Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $pargs
+  $timer = New-Object Windows.Forms.Timer; $timer.Interval = 800
+  $timer.Add_Tick({
+      if (Test-Path $LogFile) {
+        $all = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
+        if ($all -and $all.Length -gt $script:pos) { $log.AppendText($all.Substring($script:pos)); $script:pos = $all.Length }
+      }
+      if (Test-Path $DoneFile) { $timer.Stop(); $btnLaunch.Enabled = $true; $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show('Install complete. Click "Open :1111".', 'Installer') }
+      elseif (Test-Path $FailFile) { $timer.Stop(); $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show("Install failed:`n" + (Get-Content $FailFile -Raw), 'Installer') }
+    }.GetNewClosure())
+  $timer.Start()
+}
+
+# Poll every 3s for Docker + Ollama to come up after an install/launch, then auto-continue.
+$script:watchTimer = New-Object Windows.Forms.Timer
+$script:watchTimer.Interval = 3000
+$script:watchTimer.Add_Tick({
+    Refresh-Prereqs
+    $d = Get-Prereq 'docker'; $ol = Get-Prereq 'ollama'
+    if ($d -and $d.State -eq 'running' -and -not $script:dockerAnnounced) { $script:dockerAnnounced = $true; $log.AppendText("Docker detected.`r`n") }
+    if ($ol -and $ol.Ok -and -not $script:ollamaAnnounced) { $script:ollamaAnnounced = $true; $log.AppendText("Ollama detected.`r`n") }
+    if (Test-HardReady) {
+      if ($script:pendingInstall) {
+        $script:pendingInstall = $false
+        $script:watchTimer.Stop()
+        $log.AppendText("prerequisites ready, continuing.`r`n")
+        Start-Provisioning
+      }
+      else { $script:watchTimer.Stop() }   # ready, nothing queued
+    }
+  }.GetNewClosure())
+
 Refresh-Prereqs
 
-$btnCheck.Add_Click({ Refresh-Prereqs })
+# Launch Docker Desktop if present (its winget package installs it but the daemon only comes up
+# after a manual first launch + license accept). Emits the guidance note either way.
+function Start-DockerDesktop {
+  $dd = Get-DockerDesktopExe
+  if ($dd) { $log.AppendText("launching Docker Desktop - accept its license / service agreement, then wait for the engine to start.`r`n"); try { Start-Process $dd | Out-Null } catch {} }
+  else { $log.AppendText("Docker installed. Launch Docker Desktop and accept its license to start the engine.`r`n") }
+}
+
+# Re-check: manual refresh; if both hard prereqs are ready and an install was queued, continue now.
+$btnCheck.Add_Click({
+    Refresh-Prereqs
+    if ((Test-HardReady) -and $script:pendingInstall) { $script:pendingInstall = $false; $script:watchTimer.Stop(); Start-Provisioning }
+  })
+
+# Install missing: winget the fixable gaps, then (if a hard prereq still isn't ready) launch
+# Docker Desktop and start watching so a later "Install" continues automatically.
 $btnFix.Add_Click({
-    foreach ($p in ($script:prereqs | Where-Object { -not $_.Ok -and $_.Fix })) {
+    $missing = $script:prereqs | Where-Object { -not $_.Ok -and $_.Fix }
+    if (-not $missing) { $log.AppendText("nothing to install - all fixable prerequisites are present.`r`n"); return }
+    foreach ($p in $missing) {
       $log.AppendText("winget install $($p.Fix)...`r`n")
       Start-Process winget -ArgumentList @('install', '--id', $p.Fix, '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
     }
     Refresh-Prereqs
+    if (-not (Test-HardReady)) {
+      $d = Get-Prereq 'docker'
+      if ($d -and $d.State -ne 'running') { Start-DockerDesktop }
+      $log.AppendText("watching for Docker + Ollama to come up (auto-continues when detected)...`r`n")
+      $script:watchTimer.Start()
+    }
   })
 
+# Install: proceed when Docker is running AND Ollama is installed; otherwise install/launch the
+# missing hard prereq(s) and continue automatically once both are ready. GPU/Python/disk stay a
+# soft, skippable warning.
 $btnInstall.Add_Click({
     if (-not $txtPass.Text) { [Windows.Forms.MessageBox]::Show('Set a super-admin password.', 'Installer'); return }
-    $bad = $script:prereqs | Where-Object { -not $_.Ok }
-    if ($bad) { if ([Windows.Forms.MessageBox]::Show("Unmet prerequisites:`n" + (($bad | ForEach-Object { $_.Name }) -join ', ') + "`n`nContinue anyway?", 'Installer', 'YesNo') -ne 'Yes') { return } }
-    $ex = Test-ExistingInstall
-    if ($ex -and -not $Force) { [Windows.Forms.MessageBox]::Show("An existing platform install was detected ($ex).`nThis installer refuses to touch it. Run on a clean machine/VM.", 'Installer'); return }
+    Refresh-Prereqs
+    $d = Get-Prereq 'docker'; $o = Get-Prereq 'ollama'
+    $soft = $script:prereqs | Where-Object { -not $_.Ok -and $_.Key -notin @('docker', 'ollama') }
+    if ($soft) { if ([Windows.Forms.MessageBox]::Show("Unmet prerequisites:`n" + (($soft | ForEach-Object { $_.Name }) -join ', ') + "`n`nContinue anyway?", 'Installer', 'YesNo') -ne 'Yes') { return } }
 
-    $enabled = @('terminal-fun'); if ($chkRecipe.Checked) { $enabled += 'recipe-book' }
-    $btnInstall.Enabled = $false
-    Set-Content -Path $LogFile -Value '' -Encoding utf8
-    $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
-      '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','))
-    if ($chkRecipe.Checked) { $args += '-WithRecipeBook' }
-    Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList $args
+    if (Test-HardReady) { Start-Provisioning; return }
 
-    $pos = 0
-    $timer = New-Object Windows.Forms.Timer; $timer.Interval = 800
-    $timer.Add_Tick({
-        if (Test-Path $LogFile) {
-          $all = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
-          if ($all -and $all.Length -gt $pos) { $log.AppendText($all.Substring($pos)); $script:pos = $all.Length }
-        }
-        if (Test-Path $DoneFile) { $timer.Stop(); $btnLaunch.Enabled = $true; $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show('Install complete. Click "Open :1111".', 'Installer') }
-        elseif (Test-Path $FailFile) { $timer.Stop(); $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show("Install failed:`n" + (Get-Content $FailFile -Raw), 'Installer') }
-      }.GetNewClosure())
-    $script:pos = 0
-    $timer.Start()
+    # A hard prereq is missing / not up: install what's missing, launch Docker, then let the
+    # watcher continue once BOTH the engine is running and Ollama is installed.
+    $script:pendingInstall = $true
+    if ($d.State -eq 'missing') {
+      $log.AppendText("winget install Docker.DockerDesktop...`r`n")
+      Start-Process winget -ArgumentList @('install', '--id', 'Docker.DockerDesktop', '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
+    }
+    if (-not $o.Ok) {
+      $log.AppendText("winget install Ollama.Ollama...`r`n")
+      Start-Process winget -ArgumentList @('install', '--id', 'Ollama.Ollama', '-e', '--accept-source-agreements', '--accept-package-agreements') -Wait
+    }
+    Refresh-Prereqs
+    $d = Get-Prereq 'docker'
+    if ($d.State -ne 'running') { Start-DockerDesktop }
+    $log.AppendText("waiting for Docker + Ollama; the install continues automatically once both are ready...`r`n")
+    $script:watchTimer.Start()
   })
 
 $btnLaunch.Add_Click({ Start-Process 'http://platform.localhost:1111' })
