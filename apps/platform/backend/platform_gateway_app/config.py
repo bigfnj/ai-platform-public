@@ -41,6 +41,7 @@ class GatewaySettings(PlatformSettings):
     app_workstation_url: str = "http://127.0.0.1:8720"
     app_terminal_fun_url: str = "http://127.0.0.1:8730"
     app_ai_playground_url: str = "http://127.0.0.1:8850"
+    app_co_worker_url: str = "http://127.0.0.1:8860"
 
     # Direct Ollama endpoint — used ONLY by the admin model-pool "Delete" action (ollama rm),
     # which the broker has no verb for. All inference still goes through the broker. Container
@@ -69,6 +70,7 @@ class GatewaySettings(PlatformSettings):
     workstation_dist: str = "rails/workstation/frontend/dist"
     terminal_fun_dist: str = "rails/terminal-fun/frontend/dist"
     ai_playground_dist: str = "rails/ai-playground/frontend/dist"
+    co_worker_dist: str = "rails/co-worker/frontend/dist"
 
     # --- auth / multi-tenant (PLATFORM_ env prefix) -------------------------
     # SQLite on a mounted volume in the container; the seam is a SQLAlchemy URL so
@@ -104,6 +106,7 @@ class GatewaySettings(PlatformSettings):
             "workstation": self.app_workstation_url.rstrip("/"),
             "terminal-fun": self.app_terminal_fun_url.rstrip("/"),
             "ai-playground": self.app_ai_playground_url.rstrip("/"),
+            "co-worker": self.app_co_worker_url.rstrip("/"),
         }
         return {name: urls[name] for name in self.enabled_apps if name in urls}
 
@@ -118,7 +121,8 @@ class GatewaySettings(PlatformSettings):
         raw = {"edu-suite": self.edu_suite_dist, "iep": self.iep_dist,
                "recipe-book": self.recipe_book_dist, "bouquet": self.bouquet_dist,
                "workstation": self.workstation_dist, "terminal-fun": self.terminal_fun_dist,
-               "ai-playground": self.ai_playground_dist}
+               "ai-playground": self.ai_playground_dist,
+               "co-worker": self.co_worker_dist}
         out: dict[str, Path] = {}
         for name in self.enabled_apps:
             p = Path(raw.get(name, ""))

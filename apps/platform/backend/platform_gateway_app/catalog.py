@@ -26,6 +26,7 @@ APP_CATALOG: list[dict[str, str]] = [
     # AI Playground — a multi-demo rail (first demo: RAG over documents), broker-mediated,
     # with a live local<->NVIDIA-NIM generation toggle and WebSocket token streaming.
     {"id": "ai-playground", "label": "AI Playground", "icon": "🛝", "status": "ready"},
+    {"id": "co-worker", "label": "Co-Worker", "icon": "💼", "status": "ready"},
 ]
 
 APP_IDS: set[str] = {a["id"] for a in APP_CATALOG}

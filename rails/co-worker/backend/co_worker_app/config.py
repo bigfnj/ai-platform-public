@@ -1,0 +1,30 @@
+"""Co-Worker rail config (pydantic-settings, env_prefix CO_WORKER_).
+
+The gateway sits in front: it authenticates requests and injects x-platform-user,
+so this backend is never directly reachable by a browser.
+"""
+
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="CO_WORKER_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    app_name: str = "co-worker"
+    host: str = "0.0.0.0"
+    port: int = 8860
+
+    # Where the co-work harvest process drops JSON files.
+    # In the container this is the mount point; on the host it's wherever you
+    # bind-mount or copy files. Set CO_WORKER_INBOX_DIR to override.
+    inbox_dir: str = "/data/inbox"
+
+
+settings = Settings()

@@ -51,6 +51,26 @@ services:
       - "8830"
     restart: always
 
+  co-worker:                     # Co-Worker — email/calendar intelligence inbox
+    profiles: ["co-worker"]
+    build:
+      context: ../../rails/co-worker
+      dockerfile: deploy/Dockerfile
+    image: co-worker-backend:latest
+    environment:
+      CO_WORKER_INBOX_DIR: /data/inbox
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      # Bind-mount the Windows-side inbox so the co-work harvest process (running on the
+      # host) can write files the container reads. Set CO_WORKER_INBOX_WIN to the Windows
+      # path (e.g. C:\Users\you\ai-platform\data\co-worker\inbox); the installer converts
+      # it to a WSL mount path automatically. Falls back to a named volume if unset.
+      - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
+    expose:
+      - "8860"
+    restart: always
+
   gateway:                       # shell host + reverse proxy; frontends baked into the image
     build:
       context: ../..
@@ -64,6 +84,7 @@ services:
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
       PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
       PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
+      PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
@@ -87,5 +108,6 @@ services:
 volumes:
   recipe_book_data:
   gateway_data:
+  co_worker_inbox:
   caddy_data:
   caddy_config:

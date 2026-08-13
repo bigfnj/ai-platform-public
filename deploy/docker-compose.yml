@@ -249,6 +249,7 @@ services:
       - workstation
       - terminal-fun
       - ai-playground
+      - co-worker
     environment:
       PLATFORM_BROKER_URL: http://host.docker.internal:11500
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
@@ -261,6 +262,7 @@ services:
       PLATFORM_APP_WORKSTATION_URL: http://workstation:8720
       PLATFORM_APP_TERMINAL_FUN_URL: http://terminal-fun:8730
       PLATFORM_APP_AI_PLAYGROUND_URL: http://ai-playground:8850
+      PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
       PLATFORM_FRONTEND_DIST: /app/shell-dist
       PLATFORM_EDU_SUITE_DIST: /app/edu-suite-dist
       PLATFORM_IEP_DIST: /app/iep-dist
@@ -269,6 +271,7 @@ services:
       PLATFORM_WORKSTATION_DIST: /app/workstation-dist
       PLATFORM_TERMINAL_FUN_DIST: /app/terminal-fun-dist
       PLATFORM_AI_PLAYGROUND_DIST: /app/ai-playground-dist
+      PLATFORM_CO_WORKER_DIST: /app/co-worker-dist
       # auth / multi-tenant
       PLATFORM_DB_URL: sqlite:////data/platform.db
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
@@ -286,6 +289,7 @@ services:
       - ../rails/workstation/frontend/dist:/app/workstation-dist:ro
       - ../rails/terminal-fun/frontend/dist:/app/terminal-fun-dist:ro
       - ../rails/ai-playground/frontend/dist:/app/ai-playground-dist:ro
+      - ../rails/co-worker/frontend/dist:/app/co-worker-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
