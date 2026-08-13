@@ -258,15 +258,24 @@ function Invoke-Provision {
     # stops the containers; a logon-triggered `wsl --exec sleep infinity` holds it up. Registered as a
     # current-user task (no admin) and started now so the platform stays up this session too.
     if ($DockerMode -eq 'wsl') {
-      Write-Log 'registering a logon keep-alive (holds the WSL VM + containers up)...'
+      # Keep the WSL VM alive across logons. Task Scheduler is often Access-denied for a non-elevated
+      # user on managed boxes, so use a Startup-folder shortcut (always user-writable) that launches a
+      # hidden `wsl --exec sleep infinity`. Also start one now so the platform stays up this session.
+      Write-Log 'installing a logon keep-alive (holds the WSL VM + containers up)...'
       try {
-        $ka = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-WindowStyle Hidden -NoProfile -Command "wsl.exe --exec sleep infinity"'
-        $kt = New-ScheduledTaskTrigger -AtLogOn
-        Register-ScheduledTask -TaskName 'AI-Platform WSL keep-alive' -Action $ka -Trigger $kt -Force -Description 'Keeps the WSL2 VM (and AI-Platform containers) running.' | Out-Null
-        Start-ScheduledTask -TaskName 'AI-Platform WSL keep-alive' -ErrorAction SilentlyContinue
-        Write-Log 'keep-alive task registered + started.'
+        $startup = [Environment]::GetFolderPath('Startup')
+        $lnk = Join-Path $startup 'AI-Platform WSL keep-alive.lnk'
+        $ws = New-Object -ComObject WScript.Shell
+        $sc = $ws.CreateShortcut($lnk)
+        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $sc.Arguments = '-WindowStyle Hidden -NoProfile -Command "wsl.exe --exec sleep infinity"'
+        $sc.WindowStyle = 7
+        $sc.Description = 'Keeps the WSL2 VM (and AI-Platform containers) running across logons.'
+        $sc.Save()
+        Start-Process wsl -ArgumentList '--exec', 'sleep', 'infinity' -WindowStyle Hidden
+        Write-Log "keep-alive installed (Startup shortcut) + started: $lnk"
       }
-      catch { Write-Log "keep-alive task could not be registered ($($_.Exception.Message)); the VM may idle-shutdown - create it manually if so." }
+      catch { Write-Log "keep-alive note ($($_.Exception.Message)); if the VM idle-shuts-down, add a Startup keep-alive manually." }
     }
 
     Write-Log 'DONE. Platform is up at http://localhost:1111  (use localhost; platform.localhost may be proxied on managed browsers).'
