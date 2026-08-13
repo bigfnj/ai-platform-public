@@ -177,7 +177,7 @@ function Invoke-Provision {
     # the winget-installed Ollama app owns :11434 via its own login autostart, so there is no second
     # server to fight over the port. (The full 24 GB headless stack keeps the Ollama NSSM service.)
     Write-Log 'installing the native broker service (Ollama runs via its own app on :11434)...'
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Installer 'install-native.ps1') -PlatformRoot $Root -InstallOllama:$false *>> $LogFile
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Installer 'install-native.ps1') -PlatformRoot $Root -SkipOllama *>> $LogFile
     if ($LASTEXITCODE -ne 0) { throw 'install-native.ps1 failed' }
 
     # 3. make sure the Ollama app is serving on :11434 (it usually auto-starts right after the winget

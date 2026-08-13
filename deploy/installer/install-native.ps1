@@ -1,8 +1,9 @@
 # Register the native services for a LEAN install: create the torch-free broker venv, then register
-# `platform-broker` (media OFF) as a LocalSystem NSSM service and start it. With -InstallOllama
-# (default $true) it ALSO registers an `ollama serve` service; the lean installer passes
-# -InstallOllama:$false so Ollama runs via its own app/autostart on :11434 (one server, no port
-# conflict). Idempotent. MUST run elevated (install.ps1 launches it elevated).
+# `platform-broker` (media OFF) as a LocalSystem NSSM service and start it. By default it ALSO
+# registers an `ollama serve` service; pass -SkipOllama (the lean installer does) so Ollama runs via
+# its own app/autostart on :11434 (one server, no port conflict). Idempotent. MUST run elevated
+# (install.ps1 launches it elevated). NB: -SkipOllama is a [switch], not a [bool], so it survives
+# being passed through `powershell -File`.
 #
 #   powershell -ExecutionPolicy Bypass -File install-native.ps1 -PlatformRoot <repo-root>
 #
@@ -10,7 +11,7 @@
 #Requires -RunAsAdministrator
 param(
   [Parameter(Mandatory = $true)][string]$PlatformRoot,
-  [bool]$InstallOllama = $true
+  [switch]$SkipOllama            # skip the Ollama NSSM service (lean install: Ollama runs as its own app)
 )
 $ErrorActionPreference = 'Stop'
 
@@ -71,16 +72,16 @@ Install-Svc 'platform-broker' $BrokerPy `
   '-m uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500' `
   $PlatformRoot @('BROKER_MEDIA_ENABLED=false')
 
-if ($InstallOllama) {
+if (-not $SkipOllama) {
   Install-Svc 'ollama' $OllamaExe 'serve' (Split-Path $OllamaExe) `
     @("OLLAMA_MODELS=$UserProfile\.ollama\models")
 }
 
 # --- 5. start + report ------------------------------------------------------
-if ($InstallOllama) { Invoke-Nssm start ollama | Out-Null; Start-Sleep 4 }
+if (-not $SkipOllama) { Invoke-Nssm start ollama | Out-Null; Start-Sleep 4 }
 else { Write-Host 'skipping the Ollama service (Ollama runs via its own app/autostart on :11434).' }
 Invoke-Nssm start platform-broker | Out-Null
 Start-Sleep 4
-$names = @('platform-broker'); if ($InstallOllama) { $names += 'ollama' }
+$names = @('platform-broker'); if (-not $SkipOllama) { $names += 'ollama' }
 Get-Service -Name $names -ErrorAction SilentlyContinue | Select-Object Name, Status | Format-Table -AutoSize
 Write-Host 'native services installed. Verify: curl http://127.0.0.1:11500/healthz'
