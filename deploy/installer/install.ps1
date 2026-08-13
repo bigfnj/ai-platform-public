@@ -260,20 +260,27 @@ function Invoke-Provision {
     # current-user task (no admin) and started now so the platform stays up this session too.
     if ($DockerMode -eq 'wsl') {
       # Keep the WSL VM alive across logons. Task Scheduler is often Access-denied for a non-elevated
-      # user on managed boxes, so use a Startup-folder shortcut (always user-writable) that launches a
-      # hidden `wsl --exec sleep infinity`. Also start one now so the platform stays up this session.
+      # user on managed boxes, so use a Startup-folder shortcut (always user-writable) that runs
+      # deploy/installer/platform-startup.sh — it re-detects the WSL gateway IP, updates .env,
+      # runs docker compose up -d, then sleeps forever to hold the VM up.
       Write-Log 'installing a logon keep-alive (holds the WSL VM + containers up)...'
       try {
+        # Convert Windows path to WSL mount path  (C:\foo\bar -> /mnt/c/foo/bar)
+        $drive  = $Root.Substring(0, 1).ToLower()
+        $rest   = $Root.Substring(2) -replace '\\', '/'
+        $wslScript = "/mnt/$drive$rest/deploy/installer/platform-startup.sh"
+
         $startup = [Environment]::GetFolderPath('Startup')
         $lnk = Join-Path $startup 'AI-Platform WSL keep-alive.lnk'
         $ws = New-Object -ComObject WScript.Shell
         $sc = $ws.CreateShortcut($lnk)
         $sc.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $sc.Arguments = '-WindowStyle Hidden -NoProfile -Command "wsl.exe --exec sleep infinity"'
+        $sc.Arguments  = "-WindowStyle Hidden -NoProfile -Command `"wsl bash '$wslScript'`""
         $sc.WindowStyle = 7
-        $sc.Description = 'Keeps the WSL2 VM (and AI-Platform containers) running across logons.'
+        $sc.Description = 'Keeps the WSL2 VM alive and re-syncs the broker IP on each logon (AI-Platform).'
         $sc.Save()
-        Start-Process wsl -ArgumentList '--exec', 'sleep', 'infinity' -WindowStyle Hidden
+        # Also launch now so the platform stays up this session
+        Start-Process wsl -ArgumentList 'bash', $wslScript -WindowStyle Hidden
         Write-Log "keep-alive installed (Startup shortcut) + started: $lnk"
       }
       catch { Write-Log "keep-alive note ($($_.Exception.Message)); if the VM idle-shuts-down, add a Startup keep-alive manually." }
