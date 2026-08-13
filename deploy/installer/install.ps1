@@ -105,12 +105,24 @@ function Invoke-Provision {
     Copy-Item (Join-Path $Installer 'roles.lean.json') (Join-Path $Root 'services\broker\roles.json') -Force
     Write-Log 'config written.'
 
-    # 2. native services (broker venv + ollama/broker NSSM, media off)
-    Write-Log 'installing native services (broker venv + NSSM)...'
-    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Installer 'install-native.ps1') -PlatformRoot $Root *>> $LogFile
+    # 2. native broker service only (media off). We deliberately DO NOT register an Ollama service:
+    # the winget-installed Ollama app owns :11434 via its own login autostart, so there is no second
+    # server to fight over the port. (The full 24 GB headless stack keeps the Ollama NSSM service.)
+    Write-Log 'installing the native broker service (Ollama runs via its own app on :11434)...'
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Installer 'install-native.ps1') -PlatformRoot $Root -InstallOllama:$false *>> $LogFile
     if ($LASTEXITCODE -ne 0) { throw 'install-native.ps1 failed' }
 
-    # 3. pull the lean models
+    # 3. make sure the Ollama app is serving on :11434 (it usually auto-starts right after the winget
+    # install; launch it if not), then pull the lean models into the user's model store.
+    Write-Log 'ensuring the Ollama app is serving on :11434 ...'
+    function Test-OllamaUp { try { Invoke-WebRequest 'http://127.0.0.1:11434/api/version' -TimeoutSec 3 -UseBasicParsing | Out-Null; return $true } catch { return $false } }
+    if (-not (Test-OllamaUp)) {
+      $app = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
+      if (Test-Path $app) { Write-Log 'starting the Ollama app...'; Start-Process $app | Out-Null }
+      for ($i = 0; $i -lt 15 -and -not (Test-OllamaUp); $i++) { Start-Sleep 2 }
+    }
+    if (-not (Test-OllamaUp)) { throw 'Ollama is not serving on :11434 - start the Ollama app and re-run.' }
+    Write-Log 'Ollama is up.'
     foreach ($m in @('gemma3:4b', 'bge-m3')) {
       Write-Log "ollama pull $m ..."
       & ollama pull $m *>> $LogFile

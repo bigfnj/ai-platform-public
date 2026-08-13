@@ -1,6 +1,8 @@
-# Register the native GPU-layer services for a LEAN install: create the torch-free broker venv,
-# then register `ollama` (serve) and `platform-broker` (media OFF) as LocalSystem NSSM services
-# and start them. Idempotent. MUST run elevated (install.ps1 launches it elevated).
+# Register the native services for a LEAN install: create the torch-free broker venv, then register
+# `platform-broker` (media OFF) as a LocalSystem NSSM service and start it. With -InstallOllama
+# (default $true) it ALSO registers an `ollama serve` service; the lean installer passes
+# -InstallOllama:$false so Ollama runs via its own app/autostart on :11434 (one server, no port
+# conflict). Idempotent. MUST run elevated (install.ps1 launches it elevated).
 #
 #   powershell -ExecutionPolicy Bypass -File install-native.ps1 -PlatformRoot <repo-root>
 #
@@ -76,6 +78,7 @@ if ($InstallOllama) {
 
 # --- 5. start + report ------------------------------------------------------
 if ($InstallOllama) { Invoke-Nssm start ollama | Out-Null; Start-Sleep 4 }
+else { Write-Host 'skipping the Ollama service (Ollama runs via its own app/autostart on :11434).' }
 Invoke-Nssm start platform-broker | Out-Null
 Start-Sleep 4
 $names = @('platform-broker'); if ($InstallOllama) { $names += 'ollama' }

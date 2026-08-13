@@ -48,8 +48,9 @@ powershell -ExecutionPolicy Bypass -File deploy\installer\install.ps1
 - **Rails** — Admin (always) + Terminal Fun (default) + Recipe Book (optional; ships with a seed
   corpus you can rebuild from the admin UI).
 - **Install** — writes `deploy\.env`, drops in the lean `roles.json`, creates the broker venv,
-  registers the `ollama` + `platform-broker` NSSM services (media off) + BrokerTray, `docker
-  compose build && up` the bundled subset, then enables **Open :1111**.
+  registers the `platform-broker` NSSM service (media off; Ollama runs on :11434 via its own app,
+  so there's no second server to conflict with), `docker compose build && up` the bundled subset,
+  then enables **Open :1111**.
 
 Doctor only, no window: `powershell -File deploy\installer\install.ps1 -Check`.
 
@@ -66,7 +67,9 @@ guard; don't, unless you know why.)
 ## What it builds (under `deploy/installer/`)
 
 - `install.ps1` — the GUI + doctor + elevated provisioning.
-- `install-native.ps1` — broker venv + `ollama`/`platform-broker` NSSM services (parameterized).
+- `install-native.ps1` — broker venv + `platform-broker` NSSM service (parameterized; `-InstallOllama`
+  defaults on for the full stack, but the lean installer passes `-InstallOllama:$false` and relies on
+  the Ollama app's own :11434 autostart).
 - `Dockerfile.gateway.bundled` (in `deploy/`) — multi-stage image that **bakes** the shell +
   chosen rail frontends in (no host Node, no runtime bind-mounts).
 - `docker-compose.installer.yml` — the bundled gateway + rail backends + caddy.
