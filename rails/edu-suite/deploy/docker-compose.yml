@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2
+    image: docker.io/library/caddy:2
     depends_on:
       - dashboard
     ports:

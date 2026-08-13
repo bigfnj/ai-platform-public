@@ -34,7 +34,22 @@ param(
 $ErrorActionPreference = 'Stop'
 $deploy = Split-Path -Parent $MyInvocation.MyCommand.Path
 $envFile = Join-Path $deploy '.env'
-$docker = 'C:\Program Files\Docker\Docker\resources\bin\docker.exe'
+# Resolve the container runtime instead of hardcoding Docker Desktop's path (which does not exist
+# under Podman or Docker-in-WSL2). Podman is driven through the standalone docker-compose.exe over
+# its Docker-compatible API pipe; Docker uses its own `compose` subcommand.
+foreach ($dir in @((Join-Path $env:LOCALAPPDATA 'Programs\Podman'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'))) {
+  if ((Test-Path $dir) -and ($env:Path -notlike "*$dir*")) { $env:Path = "$dir;$env:Path" }
+}
+$dockerDesktop = 'C:\Program Files\Docker\Docker\resources\bin\docker.exe'
+if (Get-Command podman -ErrorAction SilentlyContinue) {
+  if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
+    throw 'Podman is installed but docker-compose.exe is not (winget install Docker.DockerCompose).'
+  }
+  $composeExe = (Get-Command docker-compose).Source; $composePre = @()
+}
+elseif (Test-Path $dockerDesktop) { $composeExe = $dockerDesktop; $composePre = @('compose') }
+elseif (Get-Command docker -ErrorAction SilentlyContinue) { $composeExe = (Get-Command docker).Source; $composePre = @('compose') }
+else { throw 'no container runtime found (Podman or Docker) - cannot recreate the rail containers.' }
 
 # PER-RAIL role map: each rail model slot points at its OWN role so Admin > Rails can repoint
 # one rail without moving others. Behavior-preserving: every per-rail role is seeded (roles.json /
@@ -111,10 +126,10 @@ if ($WhatIf) {
 # 5. recreate only the affected rails (NOT caddy/gateway) -------------------
 Write-Step "Recreating rails: $($rails -join ', ')"
 if ($WhatIf) {
-  Write-Host "  [WhatIf] $docker compose up -d $($rails -join ' ')"
+  Write-Host "  [WhatIf] $composeExe $($composePre -join ' ') up -d $($rails -join ' ')"
 } else {
   Push-Location $deploy
-  try { & $docker compose up -d @rails } finally { Pop-Location }
+  try { & $composeExe @composePre up -d @rails } finally { Pop-Location }
 }
 
 # 6. final health -----------------------------------------------------------

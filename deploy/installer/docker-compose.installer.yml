@@ -94,7 +94,7 @@ services:
     restart: always
 
   caddy:                         # front door on host :1111
-    image: caddy:2
+    image: docker.io/library/caddy:2
     depends_on:
       - gateway
     ports:

@@ -39,7 +39,7 @@ services:
       # forever. (The IEP instance has its own separate 30-day in-process sweep.)
       EDU_SUITE_RETENTION_DAYS: ${EDU_SUITE_RETENTION_DAYS:-365}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - "${EDU_LIBRARY_HOST:-D:/edu-suite-library}:/library"
       - edu_db:/data          # job/event DB on ext4 so SQLite WAL works across processes
@@ -65,7 +65,7 @@ services:
       # IEP generation defaults to qwen3.6 (English-only); broker resolves the glob.
       IEP_LLM_MODEL: ${IEP_LLM_MODEL:-qwen3.6*:27b}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - "${IEP_LIBRARY_HOST:-D:/iep-library}:/library"   # student PII — separate from edu-suite
       - iep_db:/data
@@ -109,7 +109,7 @@ services:
       # plaintext (legacy). Rotating it invalidates stored tokens (users re-connect).
       RECIPE_BOOK_TOKEN_KEY: ${RECIPE_BOOK_TOKEN_KEY:-}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - recipe_book_data:/srv/var  # recipe_book.db + recipes/ (markdown corpus) + icons/, seeded once from the host
     expose:
@@ -136,7 +136,7 @@ services:
       # Local time drives the weekly cleanup sweep (Sunday 03:00) of abandoned uploads.
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - bouquet_data:/srv/var    # analyses DB + uploaded photos (the flower KB is baked into the image)
     expose:
@@ -161,7 +161,7 @@ services:
       WORKSTATION_INSECURE_SKIP_HOST_KEY_CHECK: ${WORKSTATION_INSECURE_SKIP_HOST_KEY_CHECK:-false}
       WORKSTATION_AUDIT_DIR: /audit
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     # Least-privilege (P1.4): non-root user (in the image), read-only rootfs, no new
     # privileges, all Linux capabilities dropped. Writable paths are the tmpfs + the
     # audit volume only. Shrinks the blast radius if this backend is ever compromised.
@@ -192,7 +192,7 @@ services:
       TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma4*:12b}
       TERMINAL_FUN_DATA_DIR: /data   # per-user game saves (NetHack + Crawl) persist here
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     # Sandbox: non-root (in the image), no new privileges, all Linux caps dropped, writable temp
     # on tmpfs. NOT read_only rootfs — some games (e.g. nethack) write into /var/games at runtime.
     tmpfs:
@@ -229,7 +229,7 @@ services:
       AI_PLAYGROUND_NVIDIA_CHAT_MODEL: ${AI_PLAYGROUND_NVIDIA_CHAT_MODEL:-nvidia/nemotron-mini-4b-instruct}
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       - ai_playground_data:/srv/var   # corpora DB + uploaded docs (seed corpora baked into the image)
     expose:
@@ -248,7 +248,7 @@ services:
       CO_WORKER_INBOX_DIR: /data/inbox
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
       # Bind-mount the Windows-side inbox so the harvest process (running on the host)
       # can write files this container reads. CO_WORKER_INBOX_MOUNT is the WSL-style
@@ -302,7 +302,7 @@ services:
       # MUST be true once served over HTTPS/public (see Caddyfile + INSTRUCTIONS).
       PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:                     # host-built dists, mounted read-only
       - ../apps/platform/frontend/dist:/app/shell-dist:ro
       - ../rails/edu-suite/apps/dashboard/frontend/dist:/app/edu-suite-dist:ro
@@ -319,7 +319,7 @@ services:
     restart: always
 
   caddy:                         # TLS + reverse proxy front door
-    image: caddy:2
+    image: docker.io/library/caddy:2
     depends_on:
       - gateway
     ports:
