@@ -9,7 +9,7 @@
   for its provisioning step.
 
   Because `| iex` can't take parameters, override defaults with env vars set BEFORE the one-liner:
-      $env:AIPLATFORM_DIR = 'C:\src\ai-platform'   # where to clone (default: %USERPROFILE%\ai-platform-public)
+      $env:AIPLATFORM_DIR = "$HOME\dev\ai-platform"   # where to clone (default: %USERPROFILE%\ai-platform)
       $env:AIPLATFORM_REF = 'v1.2.3'               # branch or tag to check out (default: main)
 
   Security note: piping a remote script to iex executes whatever is at that URL right now. Read it
@@ -18,7 +18,7 @@
 $ErrorActionPreference = 'Stop'
 $RepoUrl = 'https://github.com/bigfnj/ai-platform-public.git'
 $Ref = if ($env:AIPLATFORM_REF) { $env:AIPLATFORM_REF } else { 'main' }
-$Dir = if ($env:AIPLATFORM_DIR) { $env:AIPLATFORM_DIR } else { Join-Path $env:USERPROFILE 'ai-platform-public' }
+$Dir = if ($env:AIPLATFORM_DIR) { $env:AIPLATFORM_DIR } else { Join-Path $env:USERPROFILE 'ai-platform' }
 
 function Write-Head($t) { Write-Host ''; Write-Host "  $t" -ForegroundColor Cyan }
 function Write-Ok($t) { Write-Host "  [ok]  $t" -ForegroundColor Green }
@@ -61,7 +61,7 @@ Write-Head "Install folder: $Dir"
 $inOneDrive = ($Dir -match 'OneDrive') -or ($env:OneDrive -and $Dir -like "$env:OneDrive*")
 if ($inOneDrive) {
   Write-Warn2 'That path is under OneDrive. A cloned repo + Python venv + a LocalSystem service do'
-  Write-Warn2 'not play well with OneDrive sync - prefer a local path (e.g. C:\src\ai-platform-public).'
+  Write-Warn2 "not play well with OneDrive sync - prefer a path under your profile, e.g. $env:USERPROFILE\ai-platform."
 }
 $ans = Read-Host '  Press Enter to use it, or type another path'
 if ($ans) { $Dir = $ans }

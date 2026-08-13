@@ -31,7 +31,7 @@ there's no media pipeline. Recipe icons ship pre-rendered in the seed.
 irm https://raw.githubusercontent.com/bigfnj/ai-platform-public/main/get.ps1 | iex
 ```
 
-This ensures git, enables Windows long-paths, clones the repo to `%USERPROFILE%\ai-platform-public`
+This ensures git, enables Windows long-paths, clones the repo to `%USERPROFILE%\ai-platform`
 (override with `$env:AIPLATFORM_DIR`; pin a tag with `$env:AIPLATFORM_REF`), and opens an
 interactive menu that launches the installer below. It runs non-elevated; the installer
 self-elevates only for provisioning. *(Piping a remote script to `iex` runs whatever is at that URL
