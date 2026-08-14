@@ -28,6 +28,7 @@ gateway, entitlement-gated, with all model work routed through the broker. The s
 | **edu-suite** | 🎓 | Bilingual (EN / es-MX) classroom content: translation, CVC worksheets, TeachTown units. |
 | **IEP** | 📝 | A second instance of the edu-suite dashboard, isolated to drafting IEP Present Levels narratives (its own library/DB so student data stays separate). |
 | **recipe-book** | 🍳 | Multi-tenant cooking assistant: meal plans, recipe help, pantry and bar reasoning, plus generated recipe-card icons. |
+| **co-worker** | 🗂️ | Exec-brief dashboard: harvests email, calendar, and Teams activity and synthesizes it into prioritized attention items (client interactions, open threads, missed responses, agenda-less meetings). Attention only — not another inbox. |
 | **workstation** | 💻 | A browser terminal into the host over SSH. Highest-privilege rail, entitlement-gated to a single owner. |
 | **terminal-fun** | 🕹️ | Self-hosted terminal games and toys with an in-terminal AI helper. Sandboxed, no host access. |
 | **ai-playground** | 🛝 | A multi-demo rail: a RAG-over-documents demo (local or NVIDIA NIM generation, WebSocket token streaming) plus an Embedding Lab that benchmarks embedders head-to-head (GPU vs CPU-ONNX) with optional CPU cross-encoder reranking. |

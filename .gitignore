@@ -16,8 +16,8 @@ venv/
 CLAUDE.local.md
 # workstation terminal: SSH key(s) the backend logs in with — never commit
 deploy/workstation-keys/
-# transient deploy/job logs (foldin/rehydrate/etc.) — operational output, not tracked
-deploy/*.log
+# transient logs anywhere in the repo — operational output, not tracked
+*.log
 # co-worker harvest output — real email/calendar/Teams intelligence: client names, colleague
 # names, ticket ids, and the learned org context in CONTEXT.md. THIS REPO IS PUBLIC.
 # Machine-local runtime data only; never commit.
@@ -32,6 +32,9 @@ dist/
 .DS_Store
 Thumbs.db
 *.swp
+
+# rails removed from the active lean stack but still present on some dev workstation disks
+rails/bouquet/
 
 # AI-assistant leftovers — keep agent context/memory/rules out of the public repo
 .claude/
