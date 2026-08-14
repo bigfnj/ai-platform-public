@@ -57,6 +57,34 @@ function Get-PodmanMachineState {
   return 'stopped'
 }
 
+# Lower the Hyper-V startup memory reservation while keeping the dynamic ceiling at $MaxMb.
+#
+# `podman machine init --memory N` yields DynamicMemoryEnabled=True with Startup == Maximum == N.
+# Hyper-V refuses to boot unless the whole STARTUP amount can be reserved up front, so an 8 GB
+# machine will not start on a 32 GB box that is already fully committed -- and because that happens
+# at logon, the platform is simply missing with no visible error. A small startup value boots
+# reliably and the balloon still grows to $MaxMb under load.
+#
+# Requires the Hyper-V PowerShell module + "Hyper-V Administrators" membership; best-effort by design
+# (a machine that already boots does not need this, so a failure here is logged, never fatal).
+function Set-PodmanMachineStartupRam {
+  param([int]$MaxMb = 8192, [int]$StartupMb = 2048, [string]$VmName = 'podman-machine-default')
+  if ($StartupMb -gt $MaxMb) { $StartupMb = $MaxMb }
+  try {
+    if (-not (Get-Command Set-VMMemory -ErrorAction SilentlyContinue)) {
+      Write-Log 'Hyper-V PowerShell module not available; leaving the machine memory config alone.'
+      return $false
+    }
+    Set-VMMemory -VMName $VmName -StartupBytes ($StartupMb * 1MB) `
+                 -MinimumBytes 512MB -MaximumBytes ($MaxMb * 1MB) -ErrorAction Stop
+    Write-Log "podman machine memory: startup ${StartupMb} MB, max ${MaxMb} MB (dynamic)."
+    return $true
+  } catch {
+    Write-Log "could not adjust the machine startup memory: $($_.Exception.Message)"
+    return $false
+  }
+}
+
 # Create the machine if absent, then start it. The FIRST hyperv machine init needs admin (it writes
 # machine-scope registry keys); Podman 6.0 no longer needs admin for start/stop. Returns $true when
 # the machine ends up running.
@@ -69,17 +97,32 @@ function Initialize-PodmanMachine {
     # sides. (The Hyper-V provider shares host dirs over 9p; the WSL provider automounts /mnt/<drive>.)
     $iargs = @('machine', 'init', '--provider', $Provider, '--cpus', $Cpus, '--memory', $MemoryMb, '--disk-size', $DiskGb)
     if ($Provider -eq 'hyperv') { $iargs += @('-v', "${Root}:${Root}") }
-    & podman @iargs 2>&1 | Tee-Object -FilePath $LogFile -Append
+    # Tee-Object passes its input DOWN the pipeline; without Out-Null those lines become part of this
+    # function's return value, and `-not <non-empty array>` is $false — a failure that reads as success.
+    & podman @iargs 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Log 'podman machine init failed. The first Hyper-V machine needs an ADMIN shell (and the'
       Write-Log 'Hyper-V feature + "Hyper-V Administrators" membership); see docs/INSTALL.md.'
       return $false
     }
+    # Podman sets Hyper-V dynamic memory with STARTUP = max. Hyper-V must reserve the full startup
+    # amount before the VM boots, so an 8 GB startup fails outright on a box whose RAM is already
+    # committed -- the platform then silently never comes up at logon. Cap startup low and let the
+    # balloon grow to $MemoryMb on demand.
+    if ($Provider -eq 'hyperv') { Set-PodmanMachineStartupRam -MaxMb $MemoryMb | Out-Null }
     $state = 'stopped'
   }
   if ($state -ne 'running') {
     Write-Log 'starting the podman machine...'
-    & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append
+    & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      # Most common cause on a memory-tight box: not enough free RAM for the startup reservation.
+      Write-Log "podman machine start failed (exit $LASTEXITCODE); retrying with a smaller startup reservation..."
+      if ($Provider -eq 'hyperv') {
+        Set-PodmanMachineStartupRam -MaxMb $MemoryMb | Out-Null
+        & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
+      }
+    }
   }
   # `restart: always` containers need something to bring them back when the VM boots. Podman has no
   # daemon, so enable podman-restart.service inside the machine (the Docker-daemon equivalent).
