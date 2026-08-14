@@ -281,13 +281,16 @@ function Invoke-Provision {
       Write-Log 'installing a logon startup task (starts the podman machine + the stack)...'
       try {
         $startupPs1 = Join-Path $Installer 'platform-startup.ps1'
+        $launcherVbs = Join-Path $Installer 'platform-startup-launcher.vbs'
         $startup = [Environment]::GetFolderPath('Startup')
         $lnk = Join-Path $startup 'AI-Platform startup.lnk'
         $ws = New-Object -ComObject WScript.Shell
         $sc = $ws.CreateShortcut($lnk)
-        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $sc.Arguments = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$startupPs1`""
-        $sc.WindowStyle = 7
+        # Target wscript.exe + the VBS trampoline so the window is completely hidden
+        # (WshShortcut.WindowStyle cannot express SW_HIDE=0; WScript.Shell.Run can).
+        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
+        $sc.Arguments = "`"$launcherVbs`""
+        $sc.WindowStyle = 1
         $sc.Description = 'Starts the podman machine and the AI-Platform stack at logon.'
         $sc.Save()
         Write-Log "startup shortcut installed: $lnk"
