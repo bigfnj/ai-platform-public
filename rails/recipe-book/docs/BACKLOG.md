@@ -2,6 +2,13 @@
 
 Known bugs / follow-ups. Newest first.
 
+## DONE 2026-08-14 — surface only fully-makeable recipes + fix ingredient matching
+Pantry match now separates **fully-makeable** recipes from **one-away** (sorted makeable-first,
+then by fewest missing ingredients), so the grid leads with what you can cook right now. Fixed
+generic-vs-specific ingredient matching in `catalog.py` (`ingredient_is_covered` +
+`ingredient_words_generic`): a generic staple no longer masks a missing specific ingredient, and
+optional ingredients don't make a recipe count as unmakeable. Covered by `tests/test_pantry_match.py`.
+
 ## DONE 2026-08-06 — allow editing the recipe title when editing a recipe
 The admin edit flow now edits the title alongside content/category/attributes. `PUT
 /api/recipes/{id}/title` (behind `require_admin`) stores a **title override** (new

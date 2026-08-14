@@ -160,7 +160,7 @@ Backend injects `_id`, `_file`, `_mtime`, and `_status` on read — never write 
 | `verification` | string\|null | — | How the source was actually read. See **Verification**. |
 | `series` | object\|null | — | Recurrence, for `calendar` items. See **Series**. |
 
-**Timezone rule:** every datetime carries an explicit offset. Justin is US Pacific: `-07:00`
+**Timezone rule:** every datetime carries an explicit offset. The owner is US Pacific: `-07:00`
 during PDT (Mar–Nov), `-08:00` during PST (Nov–Mar). Graph returns UTC; the harvest converts
 and writes the correct offset for that date. `tools/validate_inbox.py` enforces this.
 
@@ -339,21 +339,21 @@ For `calendar` items about a recurring commitment:
 | `type` | Meaning | Typical source |
 |---|---|---|
 | `meeting` | A meeting needing attention or prep | calendar |
-| `agenda-draft` | Drafted agenda for a meeting Justin owns that had none | calendar |
+| `agenda-draft` | Drafted agenda for a meeting the owner owns that had none | calendar |
 | `conflict` | Scheduling collision, with a recommendation | calendar |
 | `prep` | Prep material or agenda surfaced from someone else's invite | calendar |
 | `email` | An email ranked for response | email |
-| `dangling` | A commitment Justin made and never closed ("let me check…") | teams |
+| `dangling` | A commitment the owner made and never closed ("let me check…") | teams |
 | `follow-up` | Something owed to someone | any |
 | `reminder` | Time-anchored nudge | any |
 | `fyi` | Context, no action | any |
-| `noise` | Spam, or a thread he's cc'd on but not engaged in | email, teams |
+| `noise` | Spam, or a thread they're cc'd on but not engaged in | email, teams |
 | `insight` | An observed pattern, trend or habit | teams, insights |
 | `recommendation` | A concrete suggested change | insights, email |
 
 ## Priority rules
 
-Justin's stated ordering: **client work is #1. Internal may be important, but never as
+The owner's stated ordering: **client work is #1. Internal may be important, but never as
 important as client.** Encoded so the ranking can be critiqued over time:
 
 | Priority | Meaning |

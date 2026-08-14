@@ -6,7 +6,7 @@ specific to it: what to fetch and how to think about it.
 
 Read this together with `SCHEMA.md`, which is the authoritative field contract.
 
-Paths below are relative to `C:\Users\justin.lowe\ai-platform\`.
+Paths below are relative to `C:\Users\you\ai-platform\`.
 
 ---
 
@@ -64,7 +64,7 @@ wholesale. Never delete the Corrections log.
 
 | Artifact | Path | Purpose |
 |---|---|---|
-| Narrative markdown | `data\co-worker\inbox\<source>\…md` | For Justin to read |
+| Narrative markdown | `data\co-worker\inbox\<source>\…md` | For the owner to read |
 | Item JSON | `data\co-worker\inbox\*.json` — **flat** | Cards on the dashboard |
 
 The backend globs `inbox/*.json` flat and non-recursive. JSON nested in a subfolder is never
@@ -165,7 +165,7 @@ Full field table is in `SCHEMA.md`. The rules that get broken most:
 loop's item, emit a finding describing it — routing it is your job, repairing it is not.
 
 Triage state lives in `inbox\.state.json` and is keyed by item id. Never write or mutate it;
-because ids are deterministic, Justin's done/dismissed marks survive your rewrite on their own.
+because ids are deterministic, the owner's done/dismissed marks survive your rewrite on their own.
 
 ## 5. Close out every run
 
@@ -200,7 +200,7 @@ picking wrong is worse than not running: you would report a clean validation of 
 items are not in. **In both cases say so plainly and stop** — never report a clean run you did
 not verify.
 
-Note the split: **Read/Write/Edit use the Windows paths** (`C:\Users\justin.lowe\ai-platform\…`)
+Note the split: **Read/Write/Edit use the Windows paths** (`C:\Users\you\ai-platform\…`)
 because they run on the host. **Bash uses the `/sessions/…` mount.** The same file has two
 paths depending on which tool you reach for; passing a `C:\` path to Bash silently finds
 nothing, and passing a `/sessions/` path to Read fails outright.

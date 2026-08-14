@@ -33,7 +33,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root      = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # deploy/installer -> repo root
 $Installer = $PSScriptRoot
-# $env:TEMP can be the 8.3 short form (C:\Users\JUSTIN~1.LOW\...), which fails to resolve on boxes
+# $env:TEMP can be the 8.3 short form (C:\Users\YOURNA~1\...), which fails to resolve on boxes
 # with 8.3 name generation disabled. USERPROFILE is the long form, so derive the temp base from it.
 $TempBase  = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
 if (-not (Test-Path $TempBase)) { $TempBase = $env:TEMP }
