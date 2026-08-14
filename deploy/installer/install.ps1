@@ -415,7 +415,14 @@ function Invoke-ConsoleInstall {
       $i++; Start-Sleep -Milliseconds 700
     }
     if ($d.State -eq 'running') { Write-Host "`r   [OK]  container runtime is up.              " -ForegroundColor Green }
-    else { Write-Host "`r   [ - ] container runtime did not come up.    " -ForegroundColor Yellow }
+    else {
+      Write-Host "`r   [ - ] container runtime did not come up.    " -ForegroundColor Yellow
+      # Name the cause. A bare "did not come up" sent us digging through Hyper-V error codes once.
+      if ($d.Mode -eq 'podman') {
+        $advice = Get-PodmanMachineMemoryAdvice
+        if ($advice) { CW "        $advice" 'Yellow' }
+      }
+    }
   }
 
   # 3. re-read; Ollama just needs to be installed (its own app serves :11434; provisioning verifies).

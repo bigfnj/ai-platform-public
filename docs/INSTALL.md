@@ -19,6 +19,21 @@ pipeline**. It's designed for an **8 GB-VRAM** Windows machine.
 | **Ollama** | the LLM host (native on Windows) | winget |
 | **Python 3.11+** | the torch-free broker venv only | winget |
 | ~20 GB free disk | images + two models | — |
+| ~2 GB free **system RAM** at logon | the Podman VM's startup reservation | — |
+
+**A note on RAM (Podman/Hyper-V).** The container VM uses Hyper-V dynamic memory, and Hyper-V must
+reserve the whole *startup* allocation before the VM will boot. `podman machine init --memory 8192`
+sets startup **and** maximum to 8 GB, which fails outright on a machine whose RAM is already
+committed — and since that happens at logon, the platform is simply absent. The installer therefore
+caps the startup reservation at 2 GB and leaves the ceiling at 8 GB, so the VM boots under memory
+pressure and still balloons up under load. To check or change it by hand:
+
+```powershell
+Get-VMMemory -VMName podman-machine-default
+Set-VMMemory -VMName podman-machine-default -StartupBytes 2GB -MinimumBytes 512MB -MaximumBytes 8GB
+```
+
+`smoke-test.ps1 -Stage runtime` warns when the reservation is large enough to threaten the next boot.
 
 No Node.js is needed — the frontends are built inside the Docker image. No HuggingFace token —
 there's no media pipeline. Recipe icons ship pre-rendered in the seed.

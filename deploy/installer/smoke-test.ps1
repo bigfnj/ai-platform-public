@@ -81,8 +81,35 @@ function Test-StageRuntime {
     if ($LASTEXITCODE -eq 0) { Ok "podman CLI: $($v -join ' ')" } else { Bad 'podman CLI not runnable'; return }
 
     $state = Get-PodmanMachineState
-    if ($state -eq 'running') { Ok 'podman machine is running' }
-    else { Bad "podman machine state = $state (run: podman machine start)"; return }
+    if ($state -eq 'running') {
+      Ok 'podman machine is running'
+      # Reboot-survival check: the machine can be up NOW and still be unable to boot at next logon,
+      # because Hyper-V must reserve the whole startup allocation before the VM starts. A startup
+      # reservation larger than typical free RAM is exactly how the platform goes missing after a
+      # restart with nothing but a Hyper-V error code to show for it.
+      if (Get-Command Get-VMMemory -ErrorAction SilentlyContinue) {
+        try {
+          $m = Get-VMMemory -VMName $PodmanMachine -ErrorAction Stop
+          $startupMb = [int]($m.Startup / 1MB); $maxMb = [int]($m.Maximum / 1MB)
+          $totalMb = [int]((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB)
+          if ($m.DynamicMemoryEnabled -and $startupMb -le 2048) {
+            Ok "machine memory: ${startupMb} MB startup / ${maxMb} MB max (boots under memory pressure)"
+          } elseif ($startupMb -gt [int]($totalMb / 4)) {
+            Warn ("machine reserves ${startupMb} MB at startup on a ${totalMb} MB box - it may fail to " +
+                  "boot at logon. Lower it: Set-VMMemory -VMName $PodmanMachine -StartupBytes 2GB " +
+                  "-MinimumBytes 512MB -MaximumBytes ${maxMb}MB")
+          } else {
+            Ok "machine memory: ${startupMb} MB startup / ${maxMb} MB max"
+          }
+        } catch {}
+      }
+    }
+    else {
+      $advice = Get-PodmanMachineMemoryAdvice
+      Bad "podman machine state = $state (run: podman machine start)"
+      if ($advice) { Warn $advice }
+      return
+    }
 
     $prov = (& podman machine inspect --format '{{.ConfigDir.Path}}' 2>$null)
     $rows = (& podman machine list 2>$null) -join ' '
@@ -125,7 +152,18 @@ function Test-StageRuntime {
   $cli = Get-RuntimeCli
   $name = "smoke-port-$PID"
   if ($RuntimeMode -eq 'podman') {
-    & podman run -d --rm --name $name -p "${probePort}:8000" --entrypoint '' $Probe sh -c "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nport-ok!' | nc -l -p 8000 -q 1; done" 2>&1 | Out-Null
+    # `caddy respond` is a real HTTP server in one flag-set, and the caddy image is already local
+    # (the stack runs it), so this costs no extra pull. Two earlier forms of this probe were broken:
+    #
+    #   1. `--entrypoint ''` written INLINE is dropped by PowerShell (splatted in an array, as the
+    #      Invoke-InContainer calls above do, it survives). podman then read the image name as
+    #      --entrypoint's value and treated `sh` as the image -> "docker://sh:latest access denied".
+    #   2. The replacement used busybox `httpd`, which Alpine's busybox does not build in
+    #      ("sh: httpd: not found", exit 127) -- and `nc -q` is likewise unsupported.
+    #
+    # Both failed as "published host port not reachable", blaming the runtime for a probe bug.
+    & podman run -d --rm --name $name -p "${probePort}:8000" `
+        docker.io/library/caddy:2 caddy respond --listen :8000 --body 'port-ok!' 2>&1 | Out-Null
     Start-Sleep 3
     try {
       $resp = Invoke-WebRequest "http://localhost:$probePort" -TimeoutSec 5 -UseBasicParsing

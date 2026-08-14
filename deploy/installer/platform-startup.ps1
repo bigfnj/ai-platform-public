@@ -59,7 +59,13 @@ if (-not (Test-Path $envFile)) { Write-Log "no deploy\.env - is the platform ins
 
 # 1. runtime up
 if ($RuntimeMode -eq 'podman') {
-  if (-not (Initialize-PodmanMachine)) { Write-Log 'the podman machine did not start; aborting.'; exit 1 }
+  if (-not (Initialize-PodmanMachine)) {
+    # This runs unattended at logon, so the log is the ONLY place a failure can be seen. Say why.
+    $advice = Get-PodmanMachineMemoryAdvice
+    if ($advice) { Write-Log "  $advice" }
+    Write-Log 'the podman machine did not start; aborting.'
+    exit 1
+  }
   Write-Log 'podman machine is running.'
 }
 

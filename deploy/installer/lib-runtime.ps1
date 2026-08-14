@@ -68,7 +68,7 @@ function Get-PodmanMachineState {
 # Requires the Hyper-V PowerShell module + "Hyper-V Administrators" membership; best-effort by design
 # (a machine that already boots does not need this, so a failure here is logged, never fatal).
 function Set-PodmanMachineStartupRam {
-  param([int]$MaxMb = 8192, [int]$StartupMb = 2048, [string]$VmName = 'podman-machine-default')
+  param([int]$MaxMb = 8192, [int]$StartupMb = 2048, [string]$VmName = $PodmanMachine)
   if ($StartupMb -gt $MaxMb) { $StartupMb = $MaxMb }
   try {
     if (-not (Get-Command Set-VMMemory -ErrorAction SilentlyContinue)) {
@@ -83,6 +83,29 @@ function Set-PodmanMachineStartupRam {
     Write-Log "could not adjust the machine startup memory: $($_.Exception.Message)"
     return $false
   }
+}
+
+# Why won't the Hyper-V machine boot? Returns a human-readable reason, or '' when memory looks fine.
+#
+# Exists because the failure it explains is otherwise invisible: at logon the VM just doesn't appear,
+# and the only clue is a Hyper-V error code buried in a log. Called on the failure paths so the
+# message names the actual cause instead of "the container runtime did not come up".
+function Get-PodmanMachineMemoryAdvice {
+  param([string]$VmName = $PodmanMachine)
+  try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    $freeMb = [int]($os.FreePhysicalMemory / 1KB)
+    $startupMb = 0
+    if (Get-Command Get-VMMemory -ErrorAction SilentlyContinue) {
+      try { $startupMb = [int]((Get-VMMemory -VMName $VmName -ErrorAction Stop).Startup / 1MB) } catch {}
+    }
+    if ($startupMb -gt 0 -and $freeMb -lt $startupMb) {
+      return ("only ${freeMb} MB RAM free but the machine reserves ${startupMb} MB at startup - " +
+              "Hyper-V will refuse to boot it. Close some memory hogs, or lower the reservation with:" +
+              "`n    Set-VMMemory -VMName $VmName -StartupBytes 2GB -MinimumBytes 512MB -MaximumBytes 8GB")
+    }
+    return ''
+  } catch { return '' }
 }
 
 # Create the machine if absent, then start it. The FIRST hyperv machine init needs admin (it writes
@@ -119,8 +142,11 @@ function Initialize-PodmanMachine {
       # Most common cause on a memory-tight box: not enough free RAM for the startup reservation.
       Write-Log "podman machine start failed (exit $LASTEXITCODE); retrying with a smaller startup reservation..."
       if ($Provider -eq 'hyperv') {
+        $advice = Get-PodmanMachineMemoryAdvice
+        if ($advice) { Write-Log "  $advice" }
         Set-PodmanMachineStartupRam -MaxMb $MemoryMb | Out-Null
         & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
+        if ($LASTEXITCODE -ne 0) { Write-Log "podman machine start still failing (exit $LASTEXITCODE)." }
       }
     }
   }
