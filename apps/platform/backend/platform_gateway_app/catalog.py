@@ -15,7 +15,6 @@ APP_CATALOG: list[dict[str, str]] = [
     {"id": "edu-suite", "label": "EDU-Suite", "icon": "🎓", "status": "ready"},
     {"id": "iep", "label": "IEP Present Levels", "icon": "📝", "status": "ready"},
     {"id": "recipe-book", "label": "Recipe Book", "icon": "🍳", "status": "ready"},
-    {"id": "bouquet", "label": "Bouquet Builder", "icon": "💐", "status": "ready"},
     # Browser terminal into the host (a real shell on ELSEWHERE). Needs an explicit
     # entitlement even for admins — only the seed owner is all-access. See
     # apps/workstation/README.md and apps/workstation/HARDENING.md (P1.1).

@@ -116,33 +116,6 @@ services:
       - "8830"
     restart: always
 
-  bouquet:                       # Bouquet Builder — bouquet photo -> full flower report.
-    # Two broker round-trips: @vision (gemma3:27b) identifies the flowers from the photo,
-    # @chat writes the report from the baked-in flower knowledge base. Torch-free.
-    build:
-      context: ../rails/bouquet     # uses bouquet/deploy/Dockerfile
-      dockerfile: deploy/Dockerfile
-    image: bouquet-backend:latest
-    environment:
-      BOUQUET_DATA_DIR: /srv/var
-      BOUQUET_BROKER_URL: http://host.docker.internal:11500
-      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
-      # Roles: @vision identifies the flowers; the large chat model writes both the
-      # florist description and the expert analysis. The broker resolves the leading @
-      # (roles.json). Override with a plain model name in deploy/.env if needed.
-      BOUQUET_VISION_MODEL: ${BOUQUET_VISION_MODEL:-@vision}
-      BOUQUET_DESCRIPTION_MODEL: ${BOUQUET_DESCRIPTION_MODEL:-@chat-large}
-      BOUQUET_ANALYSIS_MODEL: ${BOUQUET_ANALYSIS_MODEL:-@chat-large}
-      # Local time drives the weekly cleanup sweep (Sunday 03:00) of abandoned uploads.
-      TZ: ${TZ:-America/Los_Angeles}
-    extra_hosts:
-      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
-    volumes:
-      - bouquet_data:/srv/var    # analyses DB + uploaded photos (the flower KB is baked into the image)
-    expose:
-      - "8840"
-    restart: always
-
   workstation:                   # browser-terminal backend — SSH client into the host.
     # INERT until you (a) add "workstation" to the gateway's PLATFORM_ENABLED_APPS and
     # (b) create ./workstation-keys with an SSH key + known_hosts and set WORKSTATION_SSH_*.
@@ -268,7 +241,6 @@ services:
       - dashboard
       - iep
       - recipe-book
-      - bouquet
       - workstation
       - terminal-fun
       - ai-playground
@@ -281,7 +253,6 @@ services:
       PLATFORM_APP_EDU_SUITE_URL: http://dashboard:8800
       PLATFORM_APP_IEP_URL: http://iep:8800
       PLATFORM_APP_RECIPE_BOOK_URL: http://recipe-book:8830
-      PLATFORM_APP_BOUQUET_URL: http://bouquet:8840
       PLATFORM_APP_WORKSTATION_URL: http://workstation:8720
       PLATFORM_APP_TERMINAL_FUN_URL: http://terminal-fun:8730
       PLATFORM_APP_AI_PLAYGROUND_URL: http://ai-playground:8850
@@ -290,7 +261,6 @@ services:
       PLATFORM_EDU_SUITE_DIST: /app/edu-suite-dist
       PLATFORM_IEP_DIST: /app/iep-dist
       PLATFORM_RECIPE_BOOK_DIST: /app/recipe-book-dist
-      PLATFORM_BOUQUET_DIST: /app/bouquet-dist
       PLATFORM_WORKSTATION_DIST: /app/workstation-dist
       PLATFORM_TERMINAL_FUN_DIST: /app/terminal-fun-dist
       PLATFORM_AI_PLAYGROUND_DIST: /app/ai-playground-dist
@@ -308,7 +278,6 @@ services:
       - ../rails/edu-suite/apps/dashboard/frontend/dist:/app/edu-suite-dist:ro
       - ../rails/edu-suite/apps/dashboard/frontend/dist-iep:/app/iep-dist:ro
       - ../rails/recipe-book/frontend/dist:/app/recipe-book-dist:ro
-      - ../rails/bouquet/frontend/dist:/app/bouquet-dist:ro
       - ../rails/workstation/frontend/dist:/app/workstation-dist:ro
       - ../rails/terminal-fun/frontend/dist:/app/terminal-fun-dist:ro
       - ../rails/ai-playground/frontend/dist:/app/ai-playground-dist:ro
@@ -342,7 +311,6 @@ volumes:
   workstation_audit:  # workstation session audit log (rotated daily, retention-capped)
   gateway_data:   # persists the gateway auth DB across rebuilds
   recipe_book_data: # persists recipe-book's DB + markdown corpus + generated icons across rebuilds
-  bouquet_data:   # persists bouquet's analyses DB + uploaded photos (the flower KB is baked into the image)
   ai_playground_data: # persists ai-playground's corpora DB + uploaded docs (seed corpora baked into the image)
   edu_db:         # edu-suite job/event SQLite DB (off the bind mount so WAL works)
   edu_cache:      # edu-suite shared translation cache

@@ -236,7 +236,7 @@ function Set-EnvValue {
 function Get-ComposeProfiles {
   param([string]$Apps)
   $p = @()
-  foreach ($a in @('recipe-book', 'bouquet', 'co-worker')) {
+  foreach ($a in @('recipe-book', 'co-worker')) {
     if (($Apps -split ',' | ForEach-Object { $_.Trim() }) -contains $a) { $p += @('--profile', $a) }
   }
   return $p

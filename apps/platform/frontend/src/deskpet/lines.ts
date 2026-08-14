@@ -9,7 +9,6 @@
 // "quip pass") and add it to RAIL below, so the pet is rail-aware everywhere by default.
 
 import recipeBook from "./quips/recipe-book.json";
-import bouquet from "./quips/bouquet.json";
 import eduSuite from "./quips/edu-suite.json";
 import iep from "./quips/iep.json";
 import workstation from "./quips/workstation.json";
@@ -21,7 +20,6 @@ import welcome from "./quips/welcome.json";
 
 const RAIL: Record<string, string[]> = {
   "recipe-book": recipeBook,
-  bouquet,
   "edu-suite": eduSuite,
   iep,
   workstation,

@@ -10,7 +10,7 @@ from sqlalchemy import select
 from platform_gateway_app import scheduler
 from platform_gateway_app.models import Schedule, SessionRow, User
 
-ENABLED = {"recipe-book", "bouquet", "ai-playground"}
+ENABLED = {"recipe-book", "ai-playground"}
 
 
 # --- seeding ---------------------------------------------------------------
@@ -22,7 +22,7 @@ def test_seed_creates_rows_including_platform(session):
     assert ("platform", "prune-sessions") in keys        # gateway task always installs
     assert ("recipe-book", "reindex") in keys
     assert ("recipe-book", "icons-repass") in keys
-    assert ("bouquet", "sweep") in keys
+    assert ("recipe-book", "purge") in keys
     assert all(r.rail != "edu-suite" for r in rows)       # not-enabled rail not seeded
     for r in rows:
         assert r.next_run is not None and r.anchor is not None
@@ -140,12 +140,12 @@ class _FakeJsonHttp:
 
 
 def test_fire_sync_task_surfaces_result_counts():
-    # A synchronous task (bouquet sweep) should carry its JSON counts into last_status.
-    http = _FakeJsonHttp({"pending_removed": 3, "orphan_removed": 5})
-    status = asyncio.run(scheduler.fire(http, {"bouquet": "http://bq:8000"}, "bouquet", "sweep"))
+    # A synchronous task (recipe-book purge) should carry its JSON counts into last_status.
+    http = _FakeJsonHttp({"purged": 8})
+    status = asyncio.run(scheduler.fire(http, {"recipe-book": "http://rb:8000"}, "recipe-book", "purge"))
     assert status.startswith("ok (200)")
-    assert "pending_removed=3" in status and "orphan_removed=5" in status
-    assert http.calls == [("POST", "http://bq:8000/api/maintenance/sweep")]
+    assert "purged=8" in status
+    assert http.calls == [("POST", "http://rb:8000/api/maintenance/purge")]
 
 
 def test_fire_unknown_task_errors():
@@ -168,7 +168,7 @@ def test_tick_fires_due_task_and_reschedules(session, db):
     session.commit()
 
     http = _FakeHttp()
-    backends = {"recipe-book": "http://rb:8000", "bouquet": "http://bq:8000",
+    backends = {"recipe-book": "http://rb:8000",
                 "ai-playground": "http://ap:8000"}
     asyncio.run(scheduler.tick(db.session, http, backends))
 

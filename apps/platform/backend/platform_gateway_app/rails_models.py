@@ -1,7 +1,7 @@
 """Per-rail model slots — the source of truth for the admin 'Rails' settings.
 
 Each rail selects its model(s) from an env var that points at a per-rail broker ROLE
-(e.g. ``BOUQUET_VISION_MODEL=@bouquet-vision``). This catalog maps each rail model slot to
+(e.g. ``RECIPE_BOOK_VISION_MODEL=@recipe-vision``). This catalog maps each rail model slot to
 that role plus a human description, so an admin can repoint ONE rail's model without moving
 others that would otherwise share a generic class (``@chat`` feeds several rails). The
 gateway resolves each role via the broker to show the concrete model a slot currently uses,
@@ -57,14 +57,6 @@ RAIL_MODEL_SLOTS: dict[str, list[dict[str, str]]] = {
         {"slot": "icon", "label": "Recipe icon images", "role": "recipe-icon", "kind": "image",
          "env": "RECIPE_BOOK_ICON_MODEL", "default": "flux-schnell",
          "description": "Renders the illustrated icon for each recipe card (image model, not an LLM)."},
-    ],
-    "bouquet": [
-        {"slot": "vision", "label": "Flower identification", "role": "bouquet-vision", "kind": "vision",
-         "env": "BOUQUET_VISION_MODEL", "default": "gemma4*:26b",
-         "description": "Identifies the flowers from an uploaded bouquet photo (multimodal)."},
-        {"slot": "writer", "label": "Description & analysis writer", "role": "bouquet-writer", "kind": "chat",
-         "env": "BOUQUET_DESCRIPTION_MODEL + BOUQUET_ANALYSIS_MODEL", "default": "qwen3.6*:27b",
-         "description": "Writes the florist Description and the expert Analysis from the corrected inventory."},
     ],
     "terminal-fun": [
         {"slot": "assistant", "label": "Terminal assistant", "role": "terminal-fun", "kind": "chat",

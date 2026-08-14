@@ -9,7 +9,7 @@ This file is the short, repo-local version.
                 +------------------------------------------+
    apps  ---->  |  GPU / MODEL BROKER  (FastAPI, :11500)    |  ----> Ollama (:11434)
  (edu-suite,    |  - the ONLY thing that touches the GPU    |        [XTTS/SDXL/whisper later]
-  bouquet, ...) |  - serialized heavy-op gate               |
+  recipe, ...)  |  - serialized heavy-op gate               |
                 |  - one-heavy-model policy + VRAM view     |
                 +------------------------------------------+
 ```

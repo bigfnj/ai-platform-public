@@ -10,8 +10,6 @@
   "iep": "gemma3:4b",
   "recipe": "gemma3:4b",
   "recipe-vision": "gemma3:4b",
-  "bouquet-vision": "gemma3:4b",
-  "bouquet-writer": "gemma3:4b",
   "terminal-fun": "gemma3:4b",
   "ai-playground": "gemma3:4b",
   "co-worker-synthesis": "gemma3:4b",

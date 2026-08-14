@@ -15,11 +15,6 @@ declare module 'recipe_book/module' {
   const RecipeBookModule: ComponentType
   export default RecipeBookModule
 }
-declare module 'bouquet/module' {
-  import type { ComponentType } from 'react'
-  const BouquetModule: ComponentType
-  export default BouquetModule
-}
 declare module 'workstation/module' {
   import type { ComponentType } from 'react'
   const WorkstationModule: ComponentType

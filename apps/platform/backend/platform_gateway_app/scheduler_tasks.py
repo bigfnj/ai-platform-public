@@ -44,15 +44,6 @@ SCHEDULED_TASKS: list[dict[str, Any]] = [
         "default": {"freq": "daily", "interval": 1, "at": "02:00", "tz": "America/Los_Angeles"},
     },
     {
-        "rail": "bouquet", "task_id": "sweep", "label": "Cleanup sweep", "icon": "💐",
-        "method": "POST", "path": "/api/maintenance/sweep",
-        "description": "Delete abandoned pending uploads and stray orphan files (older than the "
-                       "age guard). Synchronous — the run status shows the counts deleted. "
-                       "Replaces bouquet's weekly in-process loop.",
-        "default": {"freq": "weekly", "interval": 1, "byweekday": [6], "at": "03:00",
-                    "tz": "America/Los_Angeles"},
-    },
-    {
         "rail": "edu-suite", "task_id": "expire", "label": "Job retention sweep", "icon": "🎓",
         "method": "POST", "path": "/api/maintenance/expire",
         "description": "Delete done/failed edu-suite jobs (files + rows) older than the retention "

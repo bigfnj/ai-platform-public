@@ -54,8 +54,8 @@ else { throw 'no container runtime found (Podman or Docker) - cannot recreate th
 # PER-RAIL role map: each rail model slot points at its OWN role so Admin > Rails can repoint
 # one rail without moving others. Behavior-preserving: every per-rail role is seeded (roles.json /
 # DEFAULT_ROLES) to the exact model that slot runs today.
-#   @edu=mistral-small3*:24b  @iep/@bouquet-writer=qwen3.6*:27b
-#   @recipe/@recipe-vision/@bouquet-vision=gemma4*:26b  @terminal-fun/@chat-fast=gemma4*:12b
+#   @edu=mistral-small3*:24b  @iep=qwen3.6*:27b
+#   @recipe/@recipe-vision=gemma4*:26b  @terminal-fun/@chat-fast=gemma4*:12b
 $roleVars = [ordered]@{
   'EDU_LLM_MODEL'               = '@edu'            # was mistral-small3*:24b
   'IEP_LLM_MODEL'               = '@iep'            # was qwen3.6*:27b
@@ -64,12 +64,9 @@ $roleVars = [ordered]@{
   'RECIPE_BOOK_VISION_MODEL'    = '@recipe-vision'  # recipe-photo reader (was gemma3*:27b)
   'RECIPE_BOOK_ICON_MODEL'      = '@recipe-icon'    # per-recipe icon IMAGE model (media backend)
   'TERMINAL_FUN_LLM_MODEL'      = '@terminal-fun'   # was gemma3:12b
-  'BOUQUET_VISION_MODEL'        = '@bouquet-vision' # flower identification (was @vision)
-  'BOUQUET_DESCRIPTION_MODEL'   = '@bouquet-writer' # florist description (was @chat-large)
-  'BOUQUET_ANALYSIS_MODEL'      = '@bouquet-writer' # expert analysis (was @chat-large)
   'AI_PLAYGROUND_CHAT_MODEL'    = '@ai-playground'  # RAG generation local model (nemotron-3-nano:4b)
 }
-$rails = @('dashboard','iep','recipe-book','bouquet','terminal-fun','ai-playground')
+$rails = @('dashboard','iep','recipe-book','terminal-fun','ai-playground')
 
 function Write-Step($m) { Write-Host "`n=== $m" -ForegroundColor Cyan }
 

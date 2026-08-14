@@ -29,7 +29,6 @@ MEDIA_IMAGE_BACKENDS = ("sdxl-turbo", "flux-schnell")
 ROLE_RAIL = {
     "edu": "EDU-Suite", "iep": "IEP",
     "recipe": "Recipe Book", "recipe-vision": "Recipe Book", "recipe-icon": "Recipe Book",
-    "bouquet-vision": "Bouquet", "bouquet-writer": "Bouquet",
     "terminal-fun": "Terminal Fun",
     "ai-playground": "AI Playground",
 }

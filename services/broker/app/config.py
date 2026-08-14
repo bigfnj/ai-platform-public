@@ -24,7 +24,7 @@ DEFAULT_ROLES: dict[str, str] = {
     "vision": "gemma4*:26b",
     "embed": "bge-m3*",
     # --- per-rail roles (one role per rail model slot) -----------------------
-    # Each rail's model env var points at its OWN role (e.g. BOUQUET_VISION_MODEL=@bouquet-vision)
+    # Each rail's model env var points at its OWN role (e.g. RECIPE_BOOK_VISION_MODEL=@recipe-vision)
     # so the admin "Rails" settings can repoint a single rail without moving others that would
     # otherwise share a generic class. Seeded to the SAME model each slot resolves to today, so
     # introducing them is behaviour-neutral until an admin changes one. Edited live via
@@ -33,8 +33,6 @@ DEFAULT_ROLES: dict[str, str] = {
     "iep": "qwen3.6*:27b",                     # IEP Present Levels writer
     "recipe": "gemma4*:26b",                    # recipe-book culinary assistant
     "recipe-vision": "gemma4*:26b",            # recipe-book recipe-photo reader
-    "bouquet-vision": "gemma4*:26b",           # bouquet flower identification
-    "bouquet-writer": "qwen3.6*:27b",          # bouquet description + analysis writer
     "terminal-fun": "gemma4*:12b",              # terminal-fun assistant
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator

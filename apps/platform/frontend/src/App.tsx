@@ -10,7 +10,6 @@ import { DeskPet } from './deskpet/DeskPet'
 const EduSuiteModule = lazy(() => import('edu_suite/module'))
 const IepModule = lazy(() => import('iep_app/module'))
 const RecipeBookModule = lazy(() => import('recipe_book/module'))
-const BouquetModule = lazy(() => import('bouquet/module'))
 const WorkstationModule = lazy(() => import('workstation/module'))
 const TerminalFunModule = lazy(() => import('terminal_fun/module'))
 const AiPlaygroundModule = lazy(() => import('ai_playground/module'))
@@ -222,18 +221,6 @@ export default function App() {
         }
       >
         <RecipeBookModule />
-      </Suspense>
-    )
-  } else if (activeEntry?.id === 'bouquet') {
-    content = (
-      <Suspense
-        fallback={
-          <div className="module">
-            <div className="card"><div className="empty">Loading Bouquet Builder…</div></div>
-          </div>
-        }
-      >
-        <BouquetModule />
       </Suspense>
     )
   } else if (activeEntry?.id === 'workstation' && activeEntry.status === 'ready') {

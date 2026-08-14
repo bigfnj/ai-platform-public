@@ -55,7 +55,7 @@ if [ -n "$ENABLED_APPS" ]; then
     IFS=',' read -ra APPS <<< "$ENABLED_APPS"
     for APP in "${APPS[@]}"; do
         case "$APP" in
-            recipe-book|bouquet|co-worker) PROFILES="$PROFILES --profile $APP" ;;
+            recipe-book|co-worker) PROFILES="$PROFILES --profile $APP" ;;
         esac
     done
 fi

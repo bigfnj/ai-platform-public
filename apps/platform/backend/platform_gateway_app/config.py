@@ -37,7 +37,6 @@ class GatewaySettings(PlatformSettings):
     # with its own library/DB/entitlement, isolating student PII from the content instance.
     app_iep_url: str = "http://127.0.0.1:8801"
     app_recipe_book_url: str = "http://127.0.0.1:8830"
-    app_bouquet_url: str = "http://127.0.0.1:8840"
     app_workstation_url: str = "http://127.0.0.1:8720"
     app_terminal_fun_url: str = "http://127.0.0.1:8730"
     app_ai_playground_url: str = "http://127.0.0.1:8850"
@@ -52,7 +51,7 @@ class GatewaySettings(PlatformSettings):
     # catalog show on the rail as 'soon' but aren't reachable. Accepts a comma-separated env string
     # (PLATFORM_ENABLED_APPS=terminal-fun,recipe-book); NoDecode stops pydantic-settings from trying
     # to JSON-decode the env value first (which errors on a bare comma list), so the validator splits.
-    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "bouquet", "workstation", "terminal-fun", "ai-playground")
+    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "workstation", "terminal-fun", "ai-playground")
 
     @field_validator("enabled_apps", mode="before")
     @classmethod
@@ -66,7 +65,6 @@ class GatewaySettings(PlatformSettings):
     edu_suite_dist: str = "rails/edu-suite/apps/dashboard/frontend/dist"
     iep_dist: str = "rails/edu-suite/apps/dashboard/frontend/dist-iep"
     recipe_book_dist: str = "rails/recipe-book/frontend/dist"
-    bouquet_dist: str = "rails/bouquet/frontend/dist"
     workstation_dist: str = "rails/workstation/frontend/dist"
     terminal_fun_dist: str = "rails/terminal-fun/frontend/dist"
     ai_playground_dist: str = "rails/ai-playground/frontend/dist"
@@ -102,7 +100,6 @@ class GatewaySettings(PlatformSettings):
             "edu-suite": self.app_edu_suite_url.rstrip("/"),
             "iep": self.app_iep_url.rstrip("/"),
             "recipe-book": self.app_recipe_book_url.rstrip("/"),
-            "bouquet": self.app_bouquet_url.rstrip("/"),
             "workstation": self.app_workstation_url.rstrip("/"),
             "terminal-fun": self.app_terminal_fun_url.rstrip("/"),
             "ai-playground": self.app_ai_playground_url.rstrip("/"),
@@ -119,7 +116,7 @@ class GatewaySettings(PlatformSettings):
         The gateway mounts each at /<app>/. A missing dist is skipped (the app just won't
         load its bundle) rather than crashing the gateway."""
         raw = {"edu-suite": self.edu_suite_dist, "iep": self.iep_dist,
-               "recipe-book": self.recipe_book_dist, "bouquet": self.bouquet_dist,
+               "recipe-book": self.recipe_book_dist,
                "workstation": self.workstation_dist, "terminal-fun": self.terminal_fun_dist,
                "ai-playground": self.ai_playground_dist,
                "co-worker": self.co_worker_dist}
