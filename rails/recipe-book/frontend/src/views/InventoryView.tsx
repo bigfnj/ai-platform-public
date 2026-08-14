@@ -44,6 +44,10 @@ export function InventoryView({ domain, onOpen, onFav, refresh }: {
   const emptyPrompt = domain === "bar"
     ? "Please add what you have on hand in your bar to see what cocktails you can create!"
     : "Please add what you have on hand in your pantry to see what recipes you can create!";
+  const makeable = (matches ?? []).filter((m) => m.makeable);
+  const almost = (matches ?? []).filter((m) => !m.makeable);
+  const verb = domain === "bar" ? "fully pour" : "fully make";
+  const oneAwayLabel = domain === "bar" ? "You’re one bottle away" : "You’re one ingredient away";
 
   return (
     <div className="rb-layout" style={{ gridTemplateColumns: "330px 1fr" }}>
@@ -72,9 +76,19 @@ export function InventoryView({ domain, onOpen, onFav, refresh }: {
         <h4 className="sec-h">{matchLabel}</h4>
         {!hasOnHand ? <Empty>{emptyPrompt}</Empty>
           : !matches ? <Empty><Spinner /> &nbsp;Matching…</Empty>
-          : matches.length === 0
-            ? <Empty>Nothing matches what you have on hand yet — add a few more {domain === "bar" ? "bottles" : "ingredients"}.</Empty>
-          : <RecipeGrid items={matches.slice(0, 60)} onOpen={onOpen} onFav={onFav} />}
+          : makeable.length === 0 && almost.length === 0
+            ? <Empty>Nothing you can {verb} yet — add a few more {domain === "bar" ? "bottles" : "ingredients"}.</Empty>
+          : <>
+              {makeable.length > 0
+                ? <RecipeGrid items={makeable.slice(0, 60)} onOpen={onOpen} onFav={onFav} />
+                : <Empty>Nothing you can {verb} yet — but you’re close:</Empty>}
+              {almost.length > 0 && (
+                <>
+                  <h4 className="sec-h" style={{ marginTop: 24 }}>{oneAwayLabel}</h4>
+                  <RecipeGrid items={almost.slice(0, 60)} onOpen={onOpen} onFav={onFav} showNeed />
+                </>
+              )}
+            </>}
       </div>
     </div>
   );

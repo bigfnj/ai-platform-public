@@ -76,4 +76,6 @@ export interface MatchResult extends RecipeSummary {
   matched_ingredients: string[];
   missing_ingredients: string[];
   coverage: number;
+  makeable: boolean;   // every required ingredient on hand
+  need?: string;       // the single missing bottle/ingredient when makeable === false
 }

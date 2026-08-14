@@ -2,10 +2,11 @@ import type { MouseEvent } from "react";
 import { RecipeIcon, Stars } from "./ui";
 import type { RecipeSummary } from "../types";
 
-export function RecipeGrid({ items, onOpen, onFav }: {
-  items: RecipeSummary[];
+export function RecipeGrid({ items, onOpen, onFav, showNeed }: {
+  items: (RecipeSummary & { need?: string })[];
   onOpen: (id: string) => void;
   onFav: (id: string, e: MouseEvent) => void;
+  showNeed?: boolean;   // render the single missing ingredient ("one away" section)
 }) {
   return (
     <div className="rb-grid">
@@ -36,6 +37,9 @@ export function RecipeGrid({ items, onOpen, onFav }: {
             )}
             {r.rating && <Stars value={r.rating.stars} />}
           </div>
+          {showNeed && r.need && (
+            <div className="rb-need">Need: <b>{r.need}</b></div>
+          )}
         </div>
       ))}
     </div>

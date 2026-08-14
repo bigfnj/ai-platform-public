@@ -26,12 +26,18 @@ def test_empty_on_hand_yields_no_matches():
     assert cat.match_pantry([], [], []) == []
 
 
-def test_on_hand_returns_only_covered_recipes():
+def test_on_hand_returns_only_fully_covered_recipes():
     cat = _cat()
+    # holding only bread is NOT enough for Buttered Toast (it still needs butter): it may appear
+    # as a one-away suggestion, but never as makeable.
     res = cat.match_pantry(["bread"], [], [])
-    titles = {r["title"] for r in res}
-    assert "Buttered Toast" in titles        # bread matches
-    assert "Cheese Omelet" not in titles     # no shared ingredient -> coverage 0, excluded
+    makeable = {r["title"] for r in res if r["makeable"]}
+    assert "Buttered Toast" not in makeable
+    # bread + butter -> Buttered Toast is makeable; Cheese Omelet (eggs/cheese short) is not
+    res2 = cat.match_pantry(["bread", "butter"], [], [])
+    makeable2 = {r["title"] for r in res2 if r["makeable"]}
+    assert "Buttered Toast" in makeable2
+    assert "Cheese Omelet" not in makeable2
 
 
 def test_staple_is_kept_off_the_shopping_list():
@@ -82,3 +88,70 @@ def test_owning_the_brand_covers_the_branded_call_out():
     items = cat.shopping_list(["branded"], on_hand=[], staples=[], unavailable=[],
                               bar_on_hand=["grey goose vodka", "dry vermouth"])
     assert items == []                       # you have the exact brand -> nothing to buy
+
+
+# --- "what you can pour": only fully-makeable drinks, brand-blind but flavor-aware ---
+
+def _pour() -> Catalog:
+    return Catalog([
+        # brands (Malibu) + a flavor qualifier (Vanilla) — the user's real example
+        Recipe(id="dole", title="Dole Whip", category="Beverages", kind="beverage",
+               rel_path="Beverages/Dole Whip.md",
+               ingredients=["1.5 oz Malibu Coconut Rum", "1.5 oz Vanilla Vodka", "1.5 oz Pineapple Juice"]),
+        # a garnish line + a leaked numbered instruction step masquerading as ingredients
+        Recipe(id="fizz", title="Vodka Fizz", category="Beverages", kind="beverage",
+               rel_path="Beverages/Vodka Fizz.md",
+               ingredients=["2 oz vodka", "Lime wedge garnish", "3. Garnish with a lime wedge."]),
+    ])
+
+
+def test_pour_needs_full_coverage_not_just_one_shared_ingredient():
+    cat = _pour()
+    # holding only "vodka": Dole Whip is short by >1 required ingredient -> not surfaced at all
+    res = cat.match_pantry(["vodka"], [], [], kind="beverage")
+    assert [r for r in res if r["id"] == "dole"] == []
+
+
+def test_generic_covers_branded_call_out():
+    cat = _pour()
+    res = cat.match_pantry(["coconut rum", "vanilla vodka", "pineapple juice"], [], [], kind="beverage")
+    dole = next(r for r in res if r["id"] == "dole")
+    assert dole["makeable"] is True          # generic "coconut rum" covered branded "Malibu Coconut Rum"
+
+
+def test_plain_vodka_does_not_cover_vanilla_vodka():
+    cat = _pour()
+    # plain vodka (not vanilla) leaves Vanilla Vodka uncovered -> one away, not makeable
+    res = cat.match_pantry(["coconut rum", "vodka", "pineapple juice"], [], [], kind="beverage")
+    dole = next(r for r in res if r["id"] == "dole")
+    assert dole["makeable"] is False
+    assert "vanilla vodka" in dole["need"].lower()
+
+
+def test_one_ingredient_away_is_flagged_with_the_missing_bottle():
+    cat = _pour()
+    res = cat.match_pantry(["coconut rum", "vanilla vodka"], [], [], kind="beverage")
+    dole = next(r for r in res if r["id"] == "dole")
+    assert dole["makeable"] is False
+    assert "pineapple" in dole["need"].lower()
+
+
+def test_two_ingredients_away_is_dropped():
+    cat = _pour()
+    res = cat.match_pantry(["coconut rum"], [], [], kind="beverage")
+    assert [r for r in res if r["id"] == "dole"] == []
+
+
+def test_garnish_and_leaked_steps_do_not_block_makeability():
+    cat = _pour()
+    res = cat.match_pantry(["vodka"], [], [], kind="beverage")
+    fizz = next(r for r in res if r["id"] == "fizz")
+    assert fizz["makeable"] is True          # only "2 oz vodka" is a real (required) ingredient
+
+
+def test_marking_vodka_unavailable_does_not_block_vanilla_vodka():
+    cat = _pour()
+    res = cat.match_pantry(["coconut rum", "vanilla vodka", "pineapple juice"], [], ["vodka"],
+                           kind="beverage")
+    dole = next(r for r in res if r["id"] == "dole")
+    assert dole["makeable"] is True          # "vodka" avoid must not block the vanilla-vodka call-out

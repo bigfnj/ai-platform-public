@@ -42,6 +42,36 @@ _ALIASES: list[tuple[re.Pattern[str], str]] = [
 
 _FRACTIONS = re.compile(r"[¼½¾⅓⅔⅛⅜⅝⅞]")
 
+# Spirit BRAND names — dropped when matching the bar cart so a generic bottle on hand covers a
+# branded call-out ("coconut rum" covers "Malibu Coconut Rum"), while real flavor qualifiers
+# ("vanilla", "coconut", "caramel", "lemon") survive so "vodka" still is NOT "vanilla vodka".
+# Multi-word brands are matched as phrases so an ambiguous single word (e.g. "goose") is only
+# dropped in context. Seeded from bar._SPIRIT_PATTERNS. NOTE: liqueur brands that ARE the
+# ingredient identity (Cointreau, Grand Marnier, Kahlúa, Baileys, Campari, Aperol, Chartreuse,
+# Midori, Chambord, Frangelico, St-Germain, Amaretto, Limoncello) are deliberately NOT here — a
+# user names those by brand.
+_SPIRIT_BRANDS: list[re.Pattern[str]] = [re.compile(p) for p in (
+    r"\bgrey goose\b", r"\bketel one\b", r"\bdeep eddy\b", r"\btito'?s?\b", r"\babsolut\b",
+    r"\bsmirnoff\b", r"\bstolichnaya\b", r"\bstoli\b", r"\bsvedka\b", r"\bbelvedere\b",
+    r"\bcaptain morgan\b", r"\bmalibu\b", r"\bbacardi\b", r"\bmyer'?s?\b", r"\bappleton\b",
+    r"\bmount gay\b", r"\bgosling'?s?\b", r"\bkraken\b", r"\bsailor jerry'?s?\b",
+    r"\btanqueray\b", r"\bbeefeater\b", r"\bbombay(?: sapphire)?\b", r"\bhendrick'?s?\b", r"\bplymouth\b",
+    r"\bjose cuervo\b", r"\bcuervo\b", r"\bpatr[oó]n\b", r"\bdon julio\b", r"\bespol[oó]n\b",
+    r"\bherradura\b", r"\bcasamigos\b", r"\bhornitos\b", r"\b1800\b",
+    r"\bjack daniel'?s?\b", r"\bjameson\b", r"\bmaker'?s?\b", r"\bbulleit\b", r"\bwild turkey\b",
+    r"\bjim beam\b", r"\bcrown royal\b", r"\bwoodford(?: reserve)?\b", r"\bknob creek\b",
+    r"\bbuffalo trace\b", r"\bold forester\b", r"\bbushmills\b",
+    r"\bhennessy\b", r"\bcourvoisier\b",
+)]
+
+# Ingredient lines that do NOT gate "can I make this": garnishes, rims, floats-to-finish, and
+# instruction steps that leaked into the ingredient list. They still show on the card.
+_STEP_LINE = re.compile(r"^\s*\d+[.)]\s")
+_OPTIONAL_LINE = re.compile(
+    r"\bgarnish\b|for the rim|\brim(?:med)?\b|\bif desired\b|to taste|"
+    r"\bto top\b|\btop off\b|for serving|to serve"
+)
+
 
 def _singularize(word: str) -> str:
     if word.endswith("ies") and len(word) > 4:
@@ -73,12 +103,32 @@ def ingredient_words(value: str) -> list[str]:
     ]
 
 
+def ingredient_words_generic(value: str) -> list[str]:
+    """Like ``ingredient_words`` but with spirit BRAND names removed, so a generic bottle on the
+    bar cart covers a branded call-out ("coconut rum" -> "Malibu Coconut Rum") while flavor
+    qualifiers survive ("vanilla vodka" stays distinct from "vodka"). Used for beverage matching
+    only. Falls back to the full words if stripping the brand would leave nothing (e.g. a line
+    that is just "Malibu")."""
+    text = value.lower()
+    for pat in _SPIRIT_BRANDS:
+        text = pat.sub(" ", text)
+    return ingredient_words(text) or ingredient_words(value)
+
+
+def is_optional_ingredient(line: str) -> bool:
+    """True for lines that don't gate 'can I make this' — garnishes, 'to top off', 'to taste',
+    rims, and instruction steps that leaked into the ingredient list. They still render on the
+    card; they just never make a recipe count as unmakeable."""
+    return bool(_STEP_LINE.match(line) or _OPTIONAL_LINE.search(line.lower()))
+
+
 def ingredient_key(value: str) -> str:
     words = ingredient_words(value)
     return " ".join(words) or _normalized_text(value) or "other ingredient"
 
 
-def ingredient_is_covered(ingredient: str, inventory: list[str], *, strict: bool = False) -> bool:
+def ingredient_is_covered(ingredient: str, inventory: list[str], *,
+                          strict: bool = False, beverage: bool = False) -> bool:
     """Does the inventory cover this ingredient?
 
     Lenient (default): a generic on-hand item covers a more specific call-out — having
@@ -87,7 +137,17 @@ def ingredient_is_covered(ingredient: str, inventory: list[str], *, strict: bool
 
     ``strict``: every distinguishing word of the ingredient must be on hand, so a generic
     "vodka" does NOT cover the branded "grey goose vodka" (used for the beverage shopping
-    list, so a branded call-out still surfaces for the user to decide on)."""
+    list, so a branded call-out still surfaces for the user to decide on).
+
+    ``beverage``: brand-blind but flavor-aware coverage for "what can I pour" — a single held
+    bottle covers the call-out iff the call-out's generic words (brands stripped) are a subset of
+    that bottle's generic words. So held "coconut rum" covers "Malibu Coconut Rum", but held
+    "vodka" does NOT cover "Vanilla Vodka" (vanilla is a real qualifier, not a brand)."""
+    if beverage:
+        required = set(ingredient_words_generic(ingredient))
+        if not required:
+            return True
+        return any(required <= set(ingredient_words_generic(item)) for item in inventory)
     required = list(dict.fromkeys(ingredient_words(ingredient)))
     if not required:
         return True
@@ -357,11 +417,18 @@ class Catalog:
 
     def match_pantry(self, on_hand: list[str], staples: list[str], unavailable: list[str],
                      kind: str = "all", limit: int = 40) -> list[dict]:
-        """What can I make? Coverage ranking. Reused for the Bar ('what can I pour')
-        by passing the bar inventory as ``on_hand`` and ``kind='beverage'``.
+        """What can I make with what I have? Reused for the Bar ('what can I pour') by passing the
+        bar inventory as ``on_hand`` and ``kind='beverage'``.
 
-        With nothing on hand there's nothing to suggest, so return empty — the UI then
-        prompts the user to add what they have rather than dumping the whole catalog."""
+        Only returns recipes you can actually make: every REQUIRED ingredient must be on hand
+        (garnishes / 'to top off' / 'to taste' don't count). A recipe missing exactly one required
+        ingredient is still returned but flagged ``makeable=False`` with the single ``need`` — that
+        drives the "you're one ingredient away" section. Missing two or more -> dropped.
+
+        Beverages match brand-blind but flavor-aware (held "coconut rum" covers "Malibu Coconut
+        Rum"; held "vodka" does NOT cover "Vanilla Vodka"); meals stay lenient (held "butter"
+        covers "unsalted butter"). With nothing on hand there's nothing to suggest, so return
+        empty — the UI then prompts the user to add what they have."""
         if not on_hand:
             return []
         inventory = on_hand + staples
@@ -371,18 +438,27 @@ class Catalog:
                 continue
             if kind != "all" and r.kind != kind:
                 continue
-            matched, missing = [], []
+            bev = r.kind == "beverage"
+            matched, missing, missing_required = [], [], []
             for ing in r.ingredients:
-                blocked = ingredient_is_covered(ing, unavailable)
-                covered = not blocked and ingredient_is_covered(ing, inventory)
+                blocked = ingredient_is_covered(ing, unavailable, beverage=bev)
+                covered = not blocked and ingredient_is_covered(ing, inventory, beverage=bev)
                 (matched if covered else missing).append(ing)
-            coverage = len(matched) / len(r.ingredients)
-            if coverage > 0:
-                results.append({**r.summary(),
-                                "matched_ingredients": matched,
-                                "missing_ingredients": missing,
-                                "coverage": round(coverage, 3)})
-        results.sort(key=lambda x: (len(x["missing_ingredients"]), -x["coverage"], x["title"].lower()))
+                if not covered and not is_optional_ingredient(ing):
+                    missing_required.append(ing)
+            if len(missing_required) > 1:
+                continue  # more than one real ingredient short -> can't make it, not even close
+            makeable = not missing_required
+            entry = {**r.summary(),
+                     "matched_ingredients": matched,
+                     "missing_ingredients": missing,
+                     "coverage": round(len(matched) / len(r.ingredients), 3),
+                     "makeable": makeable}
+            if not makeable:
+                entry["need"] = _title_case(ingredient_key(missing_required[0]))
+            results.append(entry)
+        # makeable first, then one-away, then alphabetical
+        results.sort(key=lambda x: (not x["makeable"], len(x["missing_ingredients"]), x["title"].lower()))
         return results[: max(1, min(limit, 100))]
 
     def shopping_list(self, recipe_ids: list[str], on_hand: list[str],
