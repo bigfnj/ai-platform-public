@@ -232,6 +232,31 @@ services:
       - "8860"
     restart: always
 
+  smb-partner-enablement:        # SMB Partner Enablement — grounded RAG + voice agent.
+    # Keeps TWO broker models warm at once: @smb-partner-rag (heavy, 3B-class) for the answer
+    # and @embed (light) for retrieval. Both stay resident under the broker's VRAM policy —
+    # see rails/smb-partner-enablement/MODELS.md for the measured numbers and the Kokoro
+    # voice path that is not yet available on this platform.
+    build:
+      context: ../rails/smb-partner-enablement
+      dockerfile: deploy/Dockerfile
+    image: smb-partner-backend:latest
+    environment:
+      SMB_PARTNER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      SMB_PARTNER_RAG_MODEL: ${SMB_PARTNER_RAG_MODEL:-@smb-partner-rag}
+      SMB_PARTNER_EMBED_MODEL: ${SMB_PARTNER_EMBED_MODEL:-@embed}
+      # 'auto' probes the broker's media worker and falls back to browser speech synthesis.
+      SMB_PARTNER_VOICE_BACKEND: ${SMB_PARTNER_VOICE_BACKEND:-auto}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - smb_partner_data:/srv/var
+    expose:
+      - "8870"
+    restart: always
+
   gateway:                       # shell host + reverse proxy
     build:
       context: ..
@@ -245,6 +270,7 @@ services:
       - terminal-fun
       - ai-playground
       - co-worker
+      - smb-partner-enablement
     environment:
       PLATFORM_BROKER_URL: http://host.docker.internal:11500
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
@@ -257,6 +283,7 @@ services:
       PLATFORM_APP_TERMINAL_FUN_URL: http://terminal-fun:8730
       PLATFORM_APP_AI_PLAYGROUND_URL: http://ai-playground:8850
       PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
+      PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
       PLATFORM_FRONTEND_DIST: /app/shell-dist
       PLATFORM_EDU_SUITE_DIST: /app/edu-suite-dist
       PLATFORM_IEP_DIST: /app/iep-dist
@@ -265,6 +292,7 @@ services:
       PLATFORM_TERMINAL_FUN_DIST: /app/terminal-fun-dist
       PLATFORM_AI_PLAYGROUND_DIST: /app/ai-playground-dist
       PLATFORM_CO_WORKER_DIST: /app/co-worker-dist
+      PLATFORM_SMB_PARTNER_ENABLEMENT_DIST: /app/smb-partner-dist
       # auth / multi-tenant
       PLATFORM_DB_URL: sqlite:////data/platform.db
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
@@ -282,6 +310,8 @@ services:
       - ../rails/terminal-fun/frontend/dist:/app/terminal-fun-dist:ro
       - ../rails/ai-playground/frontend/dist:/app/ai-playground-dist:ro
       - ../rails/co-worker/frontend/dist:/app/co-worker-dist:ro
+      # Contains dist/m/ too — the standalone mobile build, served at /smb-partner-enablement/m/.
+      - ../rails/smb-partner-enablement/frontend/dist:/app/smb-partner-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
@@ -318,3 +348,4 @@ volumes:
   iep_cache:      # IEP app cache
   terminal_fun_data:  # terminal-fun per-user save/resume state (NetHack + Crawl)
   co_worker_inbox:    # fallback drop-zone when CO_WORKER_INBOX_MOUNT is unset (empty dashboard)
+  smb_partner_data:   # SMB Partner chunk index + uploaded SME docs (seed KB baked into the image)

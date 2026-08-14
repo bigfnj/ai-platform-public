@@ -1,0 +1,24 @@
+{
+  "name": "smb-partner-enablement-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mobile": "vite -c vite.mobile.config.ts",
+    "build": "tsc && vite build && vite build -c vite.mobile.config.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@originjs/vite-plugin-federation": "^1.3.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}

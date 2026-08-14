@@ -22,6 +22,7 @@ export default defineConfig({
         terminal_fun: '/terminal-fun/assets/remoteEntry.js',
         ai_playground: '/ai-playground/assets/remoteEntry.js',
         co_worker: '/co-worker/assets/remoteEntry.js',
+        smb_partner: '/smb-partner-enablement/assets/remoteEntry.js',
       },
       shared: ['react', 'react-dom'],
     }),
@@ -45,6 +46,8 @@ export default defineConfig({
       // ws:true so the RAG demo's /ai-playground/ws/rag token stream proxies through in dev.
       '/ai-playground': { target: 'http://127.0.0.1:8700', ws: true },
       '/co-worker': 'http://127.0.0.1:8700',
+      // ws:true so the voice agent's /smb-partner-enablement/ws/ask stream proxies through in dev.
+      '/smb-partner-enablement': { target: 'http://127.0.0.1:8700', ws: true },
     },
   },
 })

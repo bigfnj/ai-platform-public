@@ -69,6 +69,13 @@ RAIL_MODEL_SLOTS: dict[str, list[dict[str, str]]] = {
          "description": "Generates the grounded, cited answer in the RAG demo (local mode). NVIDIA's own "
                         "Nemotron by default; the in-demo NIM toggle flips generation to the NVIDIA cloud."},
     ],
+    "smb-partner-enablement": [
+        {"slot": "reasoning", "label": "Partner answer model", "role": "smb-partner-rag", "kind": "chat",
+         "env": "SMB_PARTNER_RAG_MODEL", "default": "llama3.2*:3b",
+         "description": "Writes the grounded answer over the SME knowledge base. Keep this 3B-class: "
+                        "this rail holds it resident ALONGSIDE the embedder (and a voice model), which "
+                        "a 4B+ model will not fit beside on an 8 GB card."},
+    ],
 }
 
 # Roles this panel is allowed to repoint (guards the PUT: no editing generic @chat etc. here).

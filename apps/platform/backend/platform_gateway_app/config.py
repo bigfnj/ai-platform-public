@@ -41,6 +41,7 @@ class GatewaySettings(PlatformSettings):
     app_terminal_fun_url: str = "http://127.0.0.1:8730"
     app_ai_playground_url: str = "http://127.0.0.1:8850"
     app_co_worker_url: str = "http://127.0.0.1:8860"
+    app_smb_partner_enablement_url: str = "http://127.0.0.1:8870"
 
     # Direct Ollama endpoint — used ONLY by the admin model-pool "Delete" action (ollama rm),
     # which the broker has no verb for. All inference still goes through the broker. Container
@@ -51,7 +52,7 @@ class GatewaySettings(PlatformSettings):
     # catalog show on the rail as 'soon' but aren't reachable. Accepts a comma-separated env string
     # (PLATFORM_ENABLED_APPS=terminal-fun,recipe-book); NoDecode stops pydantic-settings from trying
     # to JSON-decode the env value first (which errors on a bare comma list), so the validator splits.
-    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "workstation", "terminal-fun", "ai-playground")
+    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "workstation", "terminal-fun", "ai-playground", "smb-partner-enablement")
 
     @field_validator("enabled_apps", mode="before")
     @classmethod
@@ -69,6 +70,9 @@ class GatewaySettings(PlatformSettings):
     terminal_fun_dist: str = "rails/terminal-fun/frontend/dist"
     ai_playground_dist: str = "rails/ai-playground/frontend/dist"
     co_worker_dist: str = "rails/co-worker/frontend/dist"
+    # This dist also contains the standalone mobile build at dist/m/, which the same
+    # StaticFiles mount serves at /smb-partner-enablement/m/ (html=True).
+    smb_partner_enablement_dist: str = "rails/smb-partner-enablement/frontend/dist"
 
     # --- auth / multi-tenant (PLATFORM_ env prefix) -------------------------
     # SQLite on a mounted volume in the container; the seam is a SQLAlchemy URL so
@@ -104,6 +108,7 @@ class GatewaySettings(PlatformSettings):
             "terminal-fun": self.app_terminal_fun_url.rstrip("/"),
             "ai-playground": self.app_ai_playground_url.rstrip("/"),
             "co-worker": self.app_co_worker_url.rstrip("/"),
+            "smb-partner-enablement": self.app_smb_partner_enablement_url.rstrip("/"),
         }
         return {name: urls[name] for name in self.enabled_apps if name in urls}
 
@@ -119,7 +124,8 @@ class GatewaySettings(PlatformSettings):
                "recipe-book": self.recipe_book_dist,
                "workstation": self.workstation_dist, "terminal-fun": self.terminal_fun_dist,
                "ai-playground": self.ai_playground_dist,
-               "co-worker": self.co_worker_dist}
+               "co-worker": self.co_worker_dist,
+               "smb-partner-enablement": self.smb_partner_enablement_dist}
         out: dict[str, Path] = {}
         for name in self.enabled_apps:
             p = Path(raw.get(name, ""))

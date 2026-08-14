@@ -26,6 +26,9 @@ APP_CATALOG: list[dict[str, str]] = [
     # with a live local<->NVIDIA-NIM generation toggle and WebSocket token streaming.
     {"id": "ai-playground", "label": "AI Playground", "icon": "🛝", "status": "ready"},
     {"id": "co-worker", "label": "Co-Worker", "icon": "💼", "status": "ready"},
+    # SMB Partner Enablement — grounded RAG over Microsoft SMB partner SME content, with a
+    # voice surface and a standalone mobile build served at /smb-partner-enablement/m/.
+    {"id": "smb-partner-enablement", "label": "SMB Partner", "icon": "🤝", "status": "ready"},
 ]
 
 APP_IDS: set[str] = {a["id"] for a in APP_CATALOG}

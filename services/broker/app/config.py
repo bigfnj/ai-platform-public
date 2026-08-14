@@ -34,8 +34,14 @@ DEFAULT_ROLES: dict[str, str] = {
     "recipe": "gemma4*:26b",                    # recipe-book culinary assistant
     "recipe-vision": "gemma4*:26b",            # recipe-book recipe-photo reader
     "terminal-fun": "gemma4*:12b",              # terminal-fun assistant
+    # SMB Partner Enablement. Deliberately a SMALL generative model: this rail keeps its LLM
+    # and the embedder resident together and adds a voice model on top, so a 3B-class model is
+    # what fits alongside on an 8 GB card. See rails/smb-partner-enablement/MODELS.md.
+    "smb-partner-rag": "llama3.2*:3b",
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator
+    # Media (voice) role — a TTS backend in the media worker, NOT an Ollama model.
+    "smb-partner-voice": "kokoro",             # SMB Partner Enablement spoken answers
 }
 
 

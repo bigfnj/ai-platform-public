@@ -45,3 +45,10 @@ CLAUDE.md
 .windsurfrules
 .github/copilot-instructions.md
 AGENTS.md
+
+# SMB Partner Enablement — rebuild source material. Real internal correspondence, decks,
+# SharePoint links and colleague contact details. This repo is PUBLIC: these stay local.
+rails/smb-partner-enablement/research/
+rails/smb-partner-enablement/documents/
+rails/smb-partner-enablement/build/
+rails/smb-partner-enablement/*.egg-info/

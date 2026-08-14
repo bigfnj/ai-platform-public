@@ -31,6 +31,7 @@ ROLE_RAIL = {
     "recipe": "Recipe Book", "recipe-vision": "Recipe Book", "recipe-icon": "Recipe Book",
     "terminal-fun": "Terminal Fun",
     "ai-playground": "AI Playground",
+    "smb-partner-rag": "SMB Partner Enablement", "smb-partner-voice": "SMB Partner Enablement",
 }
 
 

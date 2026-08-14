@@ -1,0 +1,205 @@
+/*
+ * Local tokens derived from the platform theme (see web/THEMING.md) — never hardcoded colours,
+ * so this rail follows the user's palette and light/dark mode like every other rail.
+ *
+ * The original prototype was Microsoft-branded dark with a blue accent. That reads here as the
+ * platform's accent rather than a pinned #0078D4, so the rail stays coherent inside the shell.
+ */
+.smbp {
+  --ink: var(--text-primary, #e8eaed);
+  --muted: var(--text-secondary, #9aa4b2);
+  --s1: var(--surface-1, #12161c);
+  --s2: var(--surface-2, #1a1f27);
+  --bd: var(--border, rgba(255, 255, 255, 0.09));
+  --accent: var(--accent, #3b82f6);
+
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.smbp .muted { color: var(--muted); }
+.smbp .center { text-align: center; }
+
+/* --- tabs --------------------------------------------------------------- */
+.smbp .tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--bd);
+  flex-wrap: wrap;
+}
+.smbp .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.smbp .tab[aria-selected='true'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* --- cards -------------------------------------------------------------- */
+.smbp .card {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 16px;
+}
+.smbp .grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.smbp .card h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.smbp .card p { margin: 0; font-size: 14px; line-height: 1.55; }
+
+/* Scenario cards are clickable cards, so they need a focus ring and a hover affordance. */
+.smbp .scenario {
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 120ms ease;
+}
+.smbp .scenario:hover,
+.smbp .scenario:focus-visible { border-color: var(--accent); }
+.smbp .scenario .icon { font-size: 26px; }
+.smbp .scenario .title { font-weight: 600; margin: 8px 0 2px; }
+.smbp .scenario .fit { color: var(--accent); font-size: 13px; margin-bottom: 8px; }
+
+/* --- ask / answer ------------------------------------------------------- */
+.smbp .askrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.smbp .askrow input {
+  flex: 1 1 260px;
+  min-width: 0;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+.smbp button.go {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font: inherit;
+}
+.smbp button.go:disabled { opacity: 0.5; cursor: default; }
+.smbp button.ghost {
+  background: none;
+  border: 1px solid var(--bd);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.smbp .answer { white-space: pre-wrap; line-height: 1.6; font-size: 14px; }
+.smbp .cites { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.smbp .cite {
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--bd);
+  padding-left: 8px;
+}
+
+/* An ungrounded answer is a correctness signal, not a style choice — it must be visible. */
+.smbp .ungrounded {
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- status ------------------------------------------------------------- */
+.smbp .status { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; }
+.smbp .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.smbp .dot.on { background: #22c55e; }
+.smbp .dot.off { background: var(--muted); }
+
+/* --- mobile preview ----------------------------------------------------- */
+/* A floating pill, bottom-right, matching the original prototype. Fixed rather than absolute
+   so it stays reachable regardless of how far the rail content scrolls. */
+.smbp .mobile-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font: inherit;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.smbp .mobile-fab:hover { border-color: var(--accent); }
+
+.smbp .mpreview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+/* 390x844 is an iPhone 14-class logical viewport — the frame is sized to a real device so the
+   preview shows the same breakpoints a partner's phone would. */
+.smbp .mphone {
+  position: relative;
+  width: 390px;
+  height: 844px;
+  max-height: 82vh;
+  background: var(--s1);
+  border: 10px solid #0b0d10;
+  border-radius: 44px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+.smbp .mphone iframe { width: 100%; height: 100%; border: 0; display: block; }
+.smbp .mnotch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 132px;
+  height: 26px;
+  background: #0b0d10;
+  border-radius: 0 0 16px 16px;
+  z-index: 1;
+}
+.smbp .mpreview kbd {
+  border: 1px solid var(--bd);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+@media (max-width: 520px) {
+  .smbp .askrow { flex-direction: column; }
+  .smbp .askrow button { width: 100%; }
+  /* On an actual phone the preview is pointless — hide the affordance rather than framing a
+     phone inside a phone. */
+  .smbp .mobile-fab { display: none; }
+}
