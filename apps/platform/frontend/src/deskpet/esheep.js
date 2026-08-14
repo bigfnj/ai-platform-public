@@ -36,6 +36,10 @@
  *                Tested on IE11, Edge and Opera
  *
  * Changelog:
+ *                Version 0.10.1 - 13.08.2026:
+ *                  - Fixed child sprites (bathtub, alien, UFO, clones) never appearing when the
+ *                    pet is started from an XML string / embedded pet: children now reuse the
+ *                    parent's source XML instead of fetching a (missing) sibling animation.xml
  *                Version 0.10.0 - 31.07.2026:
  *                  - Embedded the default animation and sprite for offline startup
  *                  - Added awaitable loading, XML validation and lifecycle cleanup
@@ -63,7 +67,7 @@
  *                  - still beta versions...
  */
 
-const VERSION = '0.10.0';             // web eSheep version
+const VERSION = '0.10.1';             // web eSheep version
 const ACTIVATE_DEBUG = false;         // show log on console
 const COLLISION_WITH = ["div", "hr"]; // elements on page to detect for collisions
 
@@ -127,6 +131,7 @@ class eSheep
     };
 
     this.animationFile = null;
+    this._sourceXML = null;                         // raw XML this pet was parsed from (see _parseXML)
     this._request = null;
     this._timers = new Set();
     this.children = new Set();
@@ -275,6 +280,14 @@ class eSheep
     this.xmlDoc = this.parser.parseFromString(text,'text/xml');
     if(this.xmlDoc.getElementsByTagName("parsererror").length)
       throw new Error("The eSheep animation XML is malformed");
+
+    // Remember the source XML so spawned children can be started from the SAME pet without a
+    // network fetch. When Start() is given an XML string (embedded/offline pet, e.g. the platform
+    // shell), this.animationFile stays null; passing that null to a child made it fall back to
+    // fetching a sibling "animation.xml" that usually 404s — so child sprites (the bathtub, alien,
+    // UFO, clones) silently never appeared. Children now reuse this string. (Also spares the URL
+    // path a re-fetch.)
+    this._sourceXML = text;
 
     for(const tagName of ["header", "image", "spawns", "animations"])
     {
@@ -648,8 +661,8 @@ class eSheep
                 const x = childDefs[j].getElementsByTagName('x')[0].textContent;//
                 const y = childDefs[j].getElementsByTagName('y')[0].textContent;
                 eSheepChild._setPosition(this._parseKeyWords(x), this._parseKeyWords(y), true);
-                // Start animation
-                eSheepChild.Start(this.animationFile).catch(error => console.error(error));
+                // Start animation from the same pet (source XML first, so embedded/offline pets work)
+                eSheepChild.Start(this._sourceXML || this.animationFile).catch(error => console.error(error));
                 break;
               }
             }
@@ -869,7 +882,8 @@ class eSheep
           const x = childDefs[k].getElementsByTagName('x')[0].textContent;//
           const y = childDefs[k].getElementsByTagName('y')[0].textContent;
           eSheepChild._setPosition(this._parseKeyWords(x), this._parseKeyWords(y), true);
-          eSheepChild.Start(this.animationFile).catch(error => console.error(error));
+          // Start from the same pet (source XML first, so embedded/offline pets spawn children too)
+          eSheepChild.Start(this._sourceXML || this.animationFile).catch(error => console.error(error));
           break;
         }
       }
