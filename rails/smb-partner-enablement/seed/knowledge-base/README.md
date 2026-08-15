@@ -16,6 +16,7 @@ knowledge-base/
 ├── partner-center/       Partner Center ops: deal registration, referrals, co-sell, marketplace
 ├── csp-licensing/        CSP models, New Commerce, the SMB licensing families
 ├── incentives-funding/   Incentives, co-op funds, payouts
+├── managed-services/     The managed-service requirement, packaging, practice economics
 │
 │  ── the motion: how a partner actually sells ──
 ├── smb-segment/          Segment definition, partner-led economics, the SMB buyer
