@@ -21,7 +21,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from smb_partner import broker, config, ingest, rag, store, voice
+from smb_partner import broker, config, generate, ingest, rag, scenarios, store, voice
 
 log = logging.getLogger("smb_partner.api")
 
@@ -39,6 +39,13 @@ class UploadBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1)
     source: str = "upload.md"
+
+
+class ScenarioBody(BaseModel):
+    scenario_id: str = Field(min_length=1, max_length=80)
+    # question id -> chosen option label. Unanswered questions are allowed; the package is
+    # simply less specific, which beats blocking a partner who is in a hurry.
+    answers: dict[str, str] = {}
 
 
 def identity(x_platform_user: str | None = Header(default=None),
@@ -189,6 +196,71 @@ def create_api() -> FastAPI:
             return await asyncio.to_thread(run)
         except broker.BrokerError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # --- Scenario Builder ----------------------------------------------------
+
+    @app.get("/api/scenarios")
+    async def list_scenarios(who: dict = Depends(identity)) -> dict[str, Any]:
+        """The scenarios, their diagnostic questions, and the generation stages the UI shows."""
+        return {"scenarios": scenarios.public_view(), "stages": scenarios.STAGES}
+
+    @app.post("/api/scenario/generate")
+    async def scenario_generate(body: ScenarioBody,
+                                who: dict = Depends(identity)) -> dict[str, Any]:
+        """Buffered package generation. The WebSocket below is the better path — it reports each
+        pass as it completes — but this exists for clients that cannot hold a socket open."""
+        try:
+            return await asyncio.to_thread(
+                generate.generate_package, body.scenario_id, body.answers)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except broker.BrokerError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.websocket("/ws/scenario")
+    async def ws_scenario(ws: WebSocket) -> None:
+        """Streamed package generation, emitting a `stage` event per pass.
+
+        Generation is blocking and runs in a worker thread, so progress cannot be awaited from
+        inside it. The callback therefore hands events to the event loop via
+        ``call_soon_threadsafe`` and this coroutine drains the queue — without that bridge the
+        stage events would either be lost or corrupt the socket from the wrong thread.
+        """
+        await ws.accept()
+        loop = asyncio.get_running_loop()
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    body = ScenarioBody(**json.loads(raw))
+                except (json.JSONDecodeError, TypeError, ValueError) as exc:
+                    await ws.send_json({"type": "error", "detail": f"bad request: {exc}"})
+                    continue
+
+                queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+                def emit(event: str, payload: dict[str, Any]) -> None:
+                    loop.call_soon_threadsafe(queue.put_nowait, {"type": event, **payload})
+
+                task = asyncio.create_task(
+                    asyncio.to_thread(generate.generate_package,
+                                      body.scenario_id, body.answers, emit))
+                task.add_done_callback(
+                    lambda _t: loop.call_soon_threadsafe(queue.put_nowait, None))
+
+                while True:  # drain progress until the generator signals completion
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    await ws.send_json(item)
+                try:
+                    await ws.send_json({"type": "package", "package": task.result()})
+                except ValueError as exc:
+                    await ws.send_json({"type": "error", "detail": str(exc)})
+                except broker.BrokerError as exc:
+                    await ws.send_json({"type": "error", "detail": str(exc)})
+        except WebSocketDisconnect:
+            return
 
     @app.websocket("/ws/ask")
     async def ws_ask(ws: WebSocket) -> None:
