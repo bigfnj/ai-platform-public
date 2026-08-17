@@ -71,6 +71,10 @@ export type Scenario = {
   title: string
   fit: string
   situation: string
+  /** Generation stages for THIS scenario — a practice self-assessment differs from a pre-call
+   *  brief, so neither the checklist nor the tabs can be hardcoded. */
+  stages: Stage[]
+  tabs: { key: string; label: string }[]
   questions: ScenarioQuestion[]
 }
 

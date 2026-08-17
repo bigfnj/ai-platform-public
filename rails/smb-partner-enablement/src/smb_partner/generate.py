@@ -72,10 +72,23 @@ def _scrub_invented_numbers(text: str, context: str) -> tuple[str, list[str]]:
 # Per-pass generation budgets. The directional close is the headline output and gets room; the
 # supporting tabs are deliberately tight, because a partner skims them before a meeting.
 _BUDGETS = {"next_move": 320, "scenario_card": 520, "discovery": 420,
-            "customer_qa": 460, "roi": 380}
+            "customer_qa": 460, "roi": 380,
+            # Practice set: the gap analysis carries the most weight, since an honest read on what
+            # is missing is the whole reason a partner would run this.
+            "gap_analysis": 520, "partner_center": 420, "business_case": 420}
+
+#: Opening line by pass set. The practice set is a partner examining their own business, and
+#: telling the model it is "briefing a partner before a customer meeting" made it drift into
+#: pitching products at the partner rather than assessing them.
+_SUBJECT = {
+    "customer": "You are briefing a Microsoft SMB partner before a customer meeting.",
+    "practice": ("You are advising a Microsoft partner about their OWN business — their program "
+                 "standing, eligibility and practice. There is no end customer in this "
+                 "conversation. The reader is the subject."),
+}
 
 _BASE_RULES = (
-    "You are briefing a Microsoft SMB partner before a customer meeting. Use ONLY the provided "
+    "Use ONLY the provided "
     "context. If the context does not support a claim, leave it out — do not fill gaps from "
     "general knowledge. Never state a price, discount, margin, incentive rate or percentage "
     "unless it appears verbatim in the context. Be concrete and commercial; the reader is "
@@ -167,7 +180,89 @@ _HARD_RULES: dict[tuple[str, str], str] = {
     ("decision", "Nobody has been identified yet"):
         "No buying decision-maker has been identified. This is a qualification gap: the immediate "
         "next move is to find who signs, not to propose a solution.",
+    # --- Grow Your Practice: rules about the partner's own eligibility --------------------------
+    ("designation", "No, and we have not started"):
+        "This partner holds NO Solutions Partner designation. Designations gate benefits, the "
+        "co-sell position and incentive tiers, so any goal that depends on them is blocked until "
+        "one is attained. The work is the partner capability score, not a specialization.",
+    ("designation", "No — we hold a legacy Gold or Silver competency"):
+        "Legacy Gold and Silver competencies were RETIRED and do not confer a Solutions Partner "
+        "designation. Do not treat the legacy competency as current standing — Microsoft publishes "
+        "no automatic mapping, so attainment starts from the capability score.",
+    ("designation", "No, but we are working towards one"):
+        "No designation held yet. A specialization cannot substitute — the designation is the "
+        "prerequisite for it, not the other way around.",
+    ("transact", "Through a distributor, as an indirect reseller"):
+        "This partner is an INDIRECT reseller. CSP direct-bill has hard prerequisites they have "
+        "not met by definition: transacting as an indirect reseller for at least 12 months, USD 1 "
+        "million eligible CSP revenue at the PGA level over the preceding 12 months, and at least "
+        "one managed service, IP service or customer solution application. Do not describe "
+        "direct-bill as a near-term step without naming those gates.",
+    ("transact", "We do not transact licences at all"):
+        "This partner has no CSP position at all. Licence-based incentives, partner-of-record "
+        "visibility and CSP margin are all unavailable until they transact, whether directly or "
+        "through a distributor.",
+    ("managed", "No, we resell and do projects"):
+        "No managed service exists. This blocks CSP direct-bill, which requires at least one "
+        "managed service, IP service or customer solution application — and it means revenue is "
+        "project-dependent with no annuity.",
+    ("managed", "Yes, but it is bespoke per customer"):
+        "The managed service is bespoke rather than packaged, so it does not scale. Microsoft's "
+        "own guidance is repeatable, packaged motions; the work here is packaging, not building "
+        "something new.",
+    ("skilling", "Nobody, or we are not sure"):
+        "Skilling is unmeasured. Certifications are a scored category of the partner capability "
+        "score and they EXPIRE, so this is very likely the binding constraint on any designation "
+        "goal. Establish the current certified headcount before planning anything else.",
+    ("skilling", "One or two people"):
+        "Skilling rests on one or two individuals, which is both thin against the capability score "
+        "and a single-person dependency — one departure or one expiry can drop the designation.",
 }
+
+#: Claim shapes that assert an entitlement, offer or inclusion. These are the sentences a partner
+#: would repeat to a customer as fact, and the numeric guard cannot catch them because they carry
+#: no figure — a run recommending "a free trial of Microsoft 365 Defender for Business" slipped
+#: straight through it.
+_ENTITLEMENT = re.compile(
+    r"\b(free trial|no cost|no additional cost|at no charge|included (?:with|in)|"
+    r"comes with|bundled with|eligible for|entitled to|qualifies for|covered by)\b", re.I)
+
+#: Product-ish proper nouns, so the guard can check WHICH product a claim was made about.
+_PRODUCT = re.compile(
+    r"\b(?:Microsoft|Azure|Dynamics|Defender|Purview|Entra|Copilot|Teams|SharePoint|OneDrive|"
+    r"Intune|Viva|Fabric|Power\s?(?:BI|Apps|Automate|Platform)|Windows|Office|Business\s"
+    r"(?:Basic|Standard|Premium))(?:\s+[A-Z0-9][\w.-]*){0,4}")
+
+
+def _scrub_unsupported_entitlements(text: str, context: str) -> tuple[str, list[str]]:
+    """Drop sentences that assert an entitlement about a product the context never mentions.
+
+    Same principle as the numeric guard, aimed at the failure it could not see. A close once
+    recommended offering "a free trial of Microsoft 365 Defender for Business" — a plausible
+    sentence, no figures in it, and nothing in the retrieved material to support that such a trial
+    exists. A partner repeating that to a customer is making a commitment on Microsoft's behalf.
+
+    Deliberately narrow: it fires only when a sentence BOTH asserts an entitlement and names a
+    product absent from the context. A product mentioned descriptively is untouched.
+    """
+    removed: list[str] = []
+    kept: list[str] = []
+    haystack = context.lower()
+    for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
+        if _ENTITLEMENT.search(sentence):
+            products = {m.group(0).strip() for m in _PRODUCT.finditer(sentence)}
+            # Match on the head of the product name: the context may say "Defender for Business"
+            # where the model wrote "Microsoft 365 Defender for Business".
+            unsupported = [
+                p for p in products
+                if p.lower() not in haystack
+                and not any(tok in haystack for tok in (p.lower().split()[-2:] or [p.lower()]))
+            ]
+            if unsupported:
+                removed.append(sentence.strip())
+                continue
+        kept.append(sentence)
+    return " ".join(kept).strip(), removed
 
 
 def _constraints(resolved: list[dict[str, str]], scenario_id: str) -> list[str]:
@@ -243,7 +338,8 @@ def _build_scenario_card(scenario: dict[str, Any], resolved: list[dict[str, str]
     answered = [r for r in resolved if r["answer"] != scenarios.UNKNOWN_LABEL]
     unknown = [r for r in resolved if r["answer"] == scenarios.UNKNOWN_LABEL]
 
-    lines = [f"## Customer profile", "",
+    subject = "Practice profile" if scenario.get("pass_set") == "practice" else "Customer profile"
+    lines = [f"## {subject}", "",
              f"{scenario['title']} — {scenario['fit']}.", ""]
     if answered:
         for item in answered:
@@ -330,7 +426,7 @@ async def _retrieve(query: str, collections: list[str], k: int) -> list[dict]:
 
 async def _pass(kind: str, brief: str, instruction: str, query: str, collections: list[str],
                 k: int = 6, prefill: str = "", emit: Emit | None = None,
-                ) -> tuple[str, list[dict], list[str]]:
+                pass_set: str = "customer") -> tuple[str, list[dict], list[str]]:
     """One grounded generation pass.
 
     ``prefill`` seeds the assistant turn so the model *continues* a required opening rather than
@@ -351,7 +447,7 @@ async def _pass(kind: str, brief: str, instruction: str, query: str, collections
         ]})
     context = rag.build_context(hits) or "(no supporting context was retrieved)"
     messages = [
-        {"role": "system", "content": _BASE_RULES},
+        {"role": "system", "content": _SUBJECT[pass_set] + " " + _BASE_RULES},
         {"role": "user", "content":
             f"{brief}\n\nReference material:\n{context}\n\n{instruction}"},
     ]
@@ -368,13 +464,17 @@ async def _pass(kind: str, brief: str, instruction: str, query: str, collections
     # Every pass is scrubbed, not just the value summary: an invented seat count in the scenario
     # card is exactly as damaging as an invented saving in the ROI.
     text, removed = _scrub_invented_numbers(text, context)
+    # Second guard, for the claims the first cannot see: an entitlement asserted about a product
+    # the context never mentions.
+    text, removed_ent = _scrub_unsupported_entitlements(text, context)
+    removed += removed_ent
     if removed:
-        log.info("pass %s: dropped %d sentence(s) with unsourced figures", kind, len(removed))
+        log.info("pass %s: dropped %d unsupported sentence(s)", kind, len(removed))
     return text.strip(), hits, removed
 
 
 # Each entry: (stage key, instruction, retrieval query suffix, extra collections, prefill).
-_PASSES: list[tuple[str, str, str, list[str], str]] = [
+_CUSTOMER_PASSES: list[tuple[str, str, str, list[str], str]] = [
     ("next_move",
      "Write the single most important next move for this partner, as one short paragraph "
      "beginning 'Your next move:'. Say what to lead with and what to propose concretely.\n\n"
@@ -416,6 +516,51 @@ _PASSES: list[tuple[str, str, str, list[str], str]] = [
      "## Where the value comes from\n"),
 ]
 
+#: The practice set. The subject is the partner's own business, so a "customer Q&A" or "discovery
+#: playbook" would be meaningless — what a partner wants here is an honest read on where they
+#: stand, what to check, and whether the investment is worth making.
+_PRACTICE_PASSES: list[tuple[str, str, str, list[str], str]] = [
+    ("next_move",
+     "Write the single most important next move for this partner's own business, as one short "
+     "paragraph beginning 'Your next move:'. Name the one thing to do first and why it unblocks "
+     "the others. Be direct about sequencing — if a prerequisite is missing, say plainly that the "
+     "stated goal is not reachable until it is met.",
+     "the fastest path to the partner's stated goal and what gates it",
+     ["program-structure", "designations", "csp-licensing"],
+     "Your next move: "),
+    ("gap_analysis",
+     "Write 'Where you stand' as an honest assessment against Microsoft's published requirements, "
+     "using the headings '## What you already have', '## What is missing', and '## What that means "
+     "for your goal'. Name the specific requirement each gap maps to. Do not soften a gap — a "
+     "partner who believes they are closer than they are will invest in the wrong thing.",
+     "designation attainment, capability score categories and direct-bill requirements",
+     ["designations", "program-structure", "managed-services"],
+     "## What you already have\n"),
+    ("partner_center",
+     "Write 'What to verify in Partner Center' as a short numbered list of specific things this "
+     "partner should check in their own dashboard, and what a bad answer would look like. Only "
+     "include checks the reference material actually describes. Where a number lives behind a "
+     "sign-in — the rate card, a capability score threshold — say to read it there rather than "
+     "quoting a figure.",
+     "Partner Center membership workspace, capability score, benefits and renewal status",
+     ["partner-center", "program-structure", "designations"],
+     ""),
+    ("business_case",
+     "Write 'The case to invest' with the headings '## What this unlocks', '## What it costs you', "
+     "and '## How to know it is working'. Under costs, describe the real shape of the investment — "
+     "skilling, audits, staff time — without inventing figures. Do not state any monetary amount, "
+     "percentage or multiplier that is not present verbatim in the reference material.",
+     "benefits unlocked by designation, incentives, co-op funds and managed services margin",
+     ["incentives-funding", "managed-services", "designations", "program-structure"],
+     "## What this unlocks\n"),
+]
+
+#: Which output set a scenario produces, keyed by its ``pass_set``.
+PASSES_BY_SET: dict[str, list[tuple[str, str, str, list[str], str]]] = {
+    "customer": _CUSTOMER_PASSES,
+    "practice": _PRACTICE_PASSES,
+}
+
 
 async def generate_package(scenario_id: str, answers: dict[str, str],
                            emit: Emit | None = None) -> dict[str, Any]:
@@ -429,6 +574,9 @@ async def generate_package(scenario_id: str, answers: dict[str, str],
     if scenario is None:
         raise ValueError(f"unknown scenario {scenario_id!r}")
     resolved = scenarios.resolve_answers(scenario_id, answers)
+    # Which artifacts this scenario produces. A practice self-assessment has no customer, so it
+    # generates a gap analysis and an investment case rather than discovery and objections.
+    passes = PASSES_BY_SET[scenario.get("pass_set", "customer")]
 
     async def send(event: str, payload: dict[str, Any]) -> None:
         if emit:
@@ -472,13 +620,14 @@ async def generate_package(scenario_id: str, answers: dict[str, str],
         "grounded": bool(probe),
     }
 
-    for key, instruction, query_suffix, extra, prefill in _PASSES:
+    for key, instruction, query_suffix, extra, prefill in passes:
         await send("stage", {"key": key, "state": "active"})
         query = f"{scenario['title']} {scenario['fit']} — {query_suffix}"
         collections = list(dict.fromkeys(scenario["collections"] + extra))
         try:
-            text, hits, removed = await _pass(key, brief, instruction, query, collections,
-                                              prefill=prefill, emit=emit)
+            text, hits, removed = await _pass(
+                key, brief, instruction, query, collections, prefill=prefill, emit=emit,
+                pass_set=scenario.get("pass_set", "customer"))
             package["outputs"][key] = text
             package["citations"][key] = [
                 {"source": h["source"], "collection": h["collection"], "title": h.get("title", "")}

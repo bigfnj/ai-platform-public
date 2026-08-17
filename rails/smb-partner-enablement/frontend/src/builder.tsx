@@ -75,13 +75,6 @@ function inline(s: string): (string | JSX.Element)[] {
 /** Mirrors `UNKNOWN_LABEL` in scenarios.py. */
 const UNKNOWN = 'Not sure yet'
 
-const OUTPUT_TABS: { key: string; label: string }[] = [
-  { key: 'scenario_card', label: 'Scenario Card' },
-  { key: 'discovery', label: 'Discovery Playbook' },
-  { key: 'customer_qa', label: 'Customer Q&A' },
-  { key: 'roi', label: 'Value Summary' },
-]
-
 function ReadAloud({ text }: { text: string }) {
   const [on, setOn] = useState(false)
   useEffect(() => () => stopSpeaking(), [])
@@ -191,7 +184,6 @@ type Step = 'pick' | 'ask' | 'run' | 'done'
 
 export default function Builder() {
   const [scenarios, setScenarios] = useState<Scenario[] | null>(null)
-  const [stages, setStages] = useState<Stage[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [step, setStep] = useState<Step>('pick')
@@ -211,15 +203,14 @@ export default function Builder() {
 
   useEffect(() => {
     getScenarios()
-      .then((r) => {
-        setScenarios(r.scenarios)
-        setStages(r.stages)
-      })
+      .then((r) => setScenarios(r.scenarios))
       .catch((e) => setLoadError(String(e.message || e)))
     return () => cancelRef.current?.()
   }, [])
 
   const scenario = scenarios?.find((s) => s.id === picked) ?? null
+  const stages: Stage[] = scenario?.stages ?? []
+  const tabs = scenario?.tabs ?? []
 
   const reset = () => {
     cancelRef.current?.()
@@ -281,7 +272,8 @@ export default function Builder() {
           setPkg(p)
           // Land on the first tab that actually produced content — a failed pass should not
           // greet the partner with an empty panel.
-          const first = OUTPUT_TABS.find((t) => (p.outputs[t.key] || '').trim())
+          const first = (scenarios?.find((x) => x.id === scenarioId)?.tabs ?? [])
+            .find((t) => (p.outputs[t.key] || '').trim())
           setOutTab(first?.key ?? 'scenario_card')
           setStep('done')
         },
@@ -443,7 +435,7 @@ export default function Builder() {
       )}
 
       <div className="tabs" role="tablist">
-        {OUTPUT_TABS.map((t) => {
+        {tabs.map((t) => {
           const empty = !(pkg?.outputs[t.key] || '').trim()
           return (
             <button

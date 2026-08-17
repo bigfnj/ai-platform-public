@@ -331,29 +331,210 @@ SCENARIOS: list[dict[str, Any]] = [
     },
 ]
 
-# Prepended once here rather than repeated in every literal, so the spine cannot drift between
-# scenarios and a change to it lands everywhere at the same time. Asked first because headcount and
-# the existing relationship are what a partner reaches for before industry detail.
+#: Manufacturing is one of the four industries for which Microsoft actually publishes frontline
+#: worker scenarios (the others being Retail, Healthcare and Financial Services). That matters:
+#: the research pass found Microsoft publishes NO restaurant or field-service frontline material,
+#: so `restaurant-group` leans on Retail's content. Adding a published industry rather than another
+#: hospitality variant means the corpus can genuinely ground the answers.
+_MANUFACTURING_SCENARIO: dict[str, Any] = {
+    "id": "manufacturing",
+    "icon": "🏭",
+    "title": "Manufacturing",
+    "fit": "Frontline + Security for shop-floor operations",
+    "situation": (
+        "SMB manufacturer with a shop floor running on paper and whiteboards, an office on "
+        "email, and quality records nobody can find quickly."
+    ),
+    "collections": _BASE_COLLECTIONS + ["partner-center", "designations"],
+    "questions": [
+        _q("floor_office",
+           "How does the shop floor get information from the office?",
+           "This is the frontline gap in one question. A shop floor cut off from the office is "
+           "both the operational problem and the unlicensed-seat opportunity.",
+           [("Printed sheets and a whiteboard", "no digital layer; greenfield frontline deployment"),
+            ("A supervisor relays it verbally", "single point of failure; nothing recorded"),
+            ("Personal phones and group chat", "shadow IT; no audit trail; offboarding risk"),
+            ("A shop-floor system they already use", "mature; integration rather than greenfield")]),
+        _q("accounts",
+           "Do the people on the floor have work accounts?",
+           "Decides the licence mix, and frontline seats cost far less per user than a full "
+           "knowledge-worker licence. Getting this wrong is how a quote comes back uncompetitive.",
+           [("No — only the office has them", "large unlicensed frontline population"),
+            ("Supervisors do, operators do not", "mixed estate; frontline seats for operators"),
+            ("Everyone has one", "all licensed; upgrade rather than net-new seats"),
+            ("A few shared logins on the floor", "shared credentials; a real security finding")]),
+        _q("records",
+           "How are quality and compliance records kept?",
+           "In manufacturing this is usually a customer-audit requirement, not an internal "
+           "preference — which makes it budgeted rather than aspirational.",
+           [("Paper forms in a filing cabinet", "paper-bound; digitisation and retention case"),
+            ("Spreadsheets on a shared drive", "fragile; version and retention risk"),
+            ("A quality system that works", "mature; focus elsewhere"),
+            ("It comes up every audit and hurts", "acute pain; strongest compliance case")]),
+        _q("legacy",
+           "What is running on machines you would rather not touch?",
+           "Separates a real modernisation conversation from a productivity one, and warns you "
+           "where an unsupported dependency will block the whole project.",
+           [("Software tied to specific production machines", "OT dependency; migration constraints"),
+            ("An old ERP or stock system", "line-of-business modernisation"),
+            ("File shares and email on an office server", "infrastructure lift; identity modernisation"),
+            ("Nothing much — they are mostly cloud", "no migration motion; lead with frontline")]),
+        _q("trigger",
+           "What is forcing the conversation now?",
+           "A manufacturer without a trigger will defer indefinitely. The trigger also tells you "
+           "which budget this comes out of.",
+           [("A customer audit or certification demand", "external deadline; compliance budget"),
+            ("Hardware or software going out of support", "support-cost pressure"),
+            ("They are hiring or adding a shift", "scale event; onboarding pain"),
+            ("Nothing specific yet", "no urgency; qualify hard before investing effort")]),
+    ],
+}
+
+SCENARIOS.append(_MANUFACTURING_SCENARIO)
+
+
+#: The one scenario where the subject is the partner's own business rather than a customer.
+#:
+#: Added because the corpus knew a great deal that no scenario could reach. A retrieval audit
+#: across all four customer scenarios showed `program-structure` — eight files on MAICPP
+#: membership, enrollment, benefits packages, roles and renewal — winning **zero** retrievals,
+#: with `incentives-funding` and `managed-services` barely registering. Every scenario was the
+#: same conversation shape, so the program knowledge sat unreachable.
+#:
+#: The diagnostic spine does not apply here: headcount and "is this already your customer" are
+#: questions about a customer. This scenario asks its own six.
+_PRACTICE_SCENARIO: dict[str, Any] = {
+    "id": "grow-your-practice",
+    "icon": "📈",
+    "title": "Grow Your Practice",
+    "fit": "Designations, direct-bill and recurring revenue",
+    "situation": (
+        "You are the customer this time. Where your own Microsoft practice stands, what it is "
+        "eligible for, and what to fix first."
+    ),
+    "pass_set": "practice",
+    "spine": False,
+    "collections": ["program-structure", "designations", "incentives-funding",
+                    "managed-services", "csp-licensing", "partner-center"],
+    "questions": [
+        _q("designation",
+           "Do you hold a Solutions Partner designation today?",
+           "The designation is the gate. Without one you cannot access the benefits, the "
+           "co-sell position or the incentive tiers that everything else here depends on.",
+           [("Yes, one or more", "designated; focus on renewal risk and specializations"),
+            ("No, but we are working towards one", "in progress; the capability score is the work"),
+            ("No — we hold a legacy Gold or Silver competency", "legacy; competencies retired, needs migration"),
+            ("No, and we have not started", "greenfield; start with the capability score")]),
+        _q("transact",
+           "How do you transact Microsoft licences?",
+           "Decides which commercial levers you actually have. Indirect resellers buy through a "
+           "distributor; direct-bill partners own the billing relationship and the obligations "
+           "that come with it.",
+           [("Through a distributor, as an indirect reseller", "indirect; distributor-mediated margin"),
+            ("Direct-bill — we invoice the customer", "direct-bill; owns billing and credit risk"),
+            ("Both, depending on the customer", "hybrid; mixed obligations"),
+            ("We do not transact licences at all", "services-only; no CSP position")]),
+        _q("managed",
+           "Do you sell a managed service today?",
+           "Microsoft requires at least one managed service, IP service or customer solution "
+           "application to reach CSP direct-bill — and managed services are where the recurring "
+           "margin lives rather than in the licence itself.",
+           [("Yes, a packaged offer with defined tiers", "mature practice; scale and specialize"),
+            ("Yes, but it is bespoke per customer", "no repeatability; packaging is the work"),
+            ("No, we resell and do projects", "project-dependent revenue; annuity gap"),
+            ("No, we are purely services", "no recurring licence base")]),
+        _q("copilot_practice",
+           "Where does your Copilot practice stand?",
+           "Microsoft's largest current SMB investment area. The gap between running trials and "
+           "having a repeatable, packaged motion is where most partners are stuck.",
+           [("We have deployed it to paying customers", "proven; scale and add governance services"),
+            ("We have run trials but nothing has converted", "conversion problem; the follow-through is missing"),
+            ("We talk about it but have not run one", "no proof points; a trial is the next step"),
+            ("Not on our roadmap yet", "not started; the readiness conversation comes first")]),
+        _q("skilling",
+           "How many people hold current Microsoft certifications?",
+           "Skilling is a scored category in the capability score, and certifications expire — a "
+           "designation can lapse without a single person leaving the business.",
+           [("Nobody, or we are not sure", "unmeasured; skilling is likely the binding constraint"),
+            ("One or two people", "thin; single-person dependency risk"),
+            ("A handful across the team", "workable on the SMB track"),
+            ("A deliberate, tracked programme", "mature; protect against expiry")]),
+        _q("goal",
+           "What are you actually trying to achieve this year?",
+           "Everything above is capability. This is the goal it should serve, and it decides "
+           "which gap is worth closing first.",
+           [("Attain or add a designation", "designation attainment path"),
+            ("Move to CSP direct-bill", "direct-bill eligibility path"),
+            ("Build recurring revenue", "managed services and annuity path"),
+            ("Grow the Copilot and AI business", "AI practice build-out")]),
+    ],
+}
+
+SCENARIOS.append(_PRACTICE_SCENARIO)
+
+# The spine is prepended once here rather than repeated in every literal, so it cannot drift and a
+# change lands everywhere at once. Scenarios can opt out (``spine: False``) — the spine asks about
+# a customer, which is meaningless when the subject is the partner's own business.
 for _scenario in SCENARIOS:
-    _scenario["questions"] = _spine() + _scenario["questions"]
+    _scenario.setdefault("pass_set", "customer")
+    if _scenario.pop("spine", True):
+        _scenario["questions"] = _spine() + _scenario["questions"]
 
 SCENARIOS_BY_ID: dict[str, dict[str, Any]] = {s["id"]: s for s in SCENARIOS}
 
 # The generation stages. Each is a REAL grounded pass, not decoration — the UI shows these
 # ticking through, and the original prototype's checklist did the same. The label is what a
 # partner sees; ``key`` names the output it produces.
-#: Order matches execution order, so the checklist never shows a later line finishing first. The
-#: scenario card sits early because it is assembled deterministically rather than generated — it
-#: completes almost instantly, which is itself worth seeing.
-STAGES: list[dict[str, str]] = [
+# --- output shapes ----------------------------------------------------------------------------
+#
+# Not every scenario produces the same artifacts. Four of them are a partner preparing for a
+# CUSTOMER conversation, so they want a discovery playbook and objection handling. "Grow Your
+# Practice" is a partner examining their OWN business — a "Customer Q&A" tab there would be
+# nonsense. So a scenario declares its ``pass_set`` and the stages, tabs and generation
+# instructions all follow from it.
+
+#: Stage order matches execution order, so the checklist never shows a later line finishing first.
+#: The scenario card sits early because it is assembled deterministically rather than generated.
+_COMMON_STAGES = [
     {"key": "analyze", "label": "Analyzing diagnostic answers…"},
     {"key": "ground", "label": "Grounding in Microsoft product and program guidance…"},
-    {"key": "scenario_card", "label": "Assembling the scenario card…"},
-    {"key": "next_move", "label": "Determining the directional close…"},
-    {"key": "discovery", "label": "Generating discovery playbook…"},
-    {"key": "customer_qa", "label": "Building customer Q&A pack…"},
-    {"key": "roi", "label": "Drafting the value summary…"},
 ]
+
+STAGE_SETS: dict[str, list[dict[str, str]]] = {
+    "customer": _COMMON_STAGES + [
+        {"key": "scenario_card", "label": "Assembling the scenario card…"},
+        {"key": "next_move", "label": "Determining the directional close…"},
+        {"key": "discovery", "label": "Generating discovery playbook…"},
+        {"key": "customer_qa", "label": "Building customer Q&A pack…"},
+        {"key": "roi", "label": "Drafting the value summary…"},
+    ],
+    "practice": _COMMON_STAGES + [
+        {"key": "scenario_card", "label": "Assembling your practice profile…"},
+        {"key": "next_move", "label": "Determining your next move…"},
+        {"key": "gap_analysis", "label": "Assessing where you stand…"},
+        {"key": "partner_center", "label": "Listing what to verify in Partner Center…"},
+        {"key": "business_case", "label": "Drafting the case to invest…"},
+    ],
+}
+
+#: The tabs the package view shows, in order. First entry is the default tab.
+TAB_SETS: dict[str, list[dict[str, str]]] = {
+    "customer": [
+        {"key": "scenario_card", "label": "Scenario Card"},
+        {"key": "discovery", "label": "Discovery Playbook"},
+        {"key": "customer_qa", "label": "Customer Q&A"},
+        {"key": "roi", "label": "Value Summary"},
+    ],
+    "practice": [
+        {"key": "scenario_card", "label": "Practice Profile"},
+        {"key": "gap_analysis", "label": "Where You Stand"},
+        {"key": "partner_center", "label": "What to Verify"},
+        {"key": "business_case", "label": "The Case to Invest"},
+    ],
+}
+
+#: Retained for any caller that predates per-scenario stages.
+STAGES: list[dict[str, str]] = STAGE_SETS["customer"]
 
 
 def public_view() -> list[dict[str, Any]]:
@@ -363,6 +544,10 @@ def public_view() -> list[dict[str, Any]]:
         {
             "id": s["id"], "icon": s["icon"], "title": s["title"],
             "fit": s["fit"], "situation": s["situation"],
+            # Stages and tabs ride along per scenario: a practice self-assessment produces
+            # different artifacts than a customer pre-call brief, and the UI must not hardcode one.
+            "stages": STAGE_SETS[s.get("pass_set", "customer")],
+            "tabs": TAB_SETS[s.get("pass_set", "customer")],
             "questions": [
                 {"id": q["id"], "prompt": q["prompt"], "why": q["why"],
                  "options": [o["label"] for o in q["options"]]}
