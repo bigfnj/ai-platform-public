@@ -322,7 +322,7 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 }
 
 /* --- attention rows -------------------------------------------------------- */
-.cw-att-list { display: flex; flex-direction: column; gap: 8px; }
+.cw-att-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 8px; }
 .cw-att {
   display: flex; align-items: flex-start; gap: 12px;
   background: var(--s1); border: 1px solid var(--bd); border-radius: var(--rad);
@@ -397,4 +397,63 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 .cw-rel-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px; opacity: 0.75;
+}
+
+/* --- co-work prompts reference panel --------------------------------------- */
+.cw-prompts {
+  margin-bottom: 18px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rad);
+  padding: 14px 15px;
+}
+
+.cw-prompts-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px;
+}
+
+.cw-prompt-job {
+  background: var(--s1); border: 1px solid var(--bd); border-radius: 10px;
+  overflow: hidden; transition: box-shadow 0.15s;
+}
+.cw-prompt-job.open { box-shadow: var(--sh); border-color: var(--ac); }
+
+.cw-prompt-hd {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; background: none; border: none; padding: 10px 13px;
+  cursor: pointer; text-align: left; font: inherit; color: var(--ink);
+}
+.cw-prompt-hd:hover { background: var(--s2); }
+
+.cw-prompt-icon { font-size: 18px; line-height: 1; flex: none; }
+.cw-prompt-meta { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.cw-prompt-meta strong { font-size: 13px; font-weight: 650; }
+.cw-prompt-chevron { font-size: 10px; color: var(--mut); flex: none; }
+
+.cw-prompt-desc {
+  margin: 0; padding: 0 13px 10px 41px;
+  font-size: 11.5px; color: var(--mut); line-height: 1.45;
+}
+
+.cw-prompt-body {
+  border-top: 1px solid var(--bd);
+  padding: 12px 14px 14px;
+  max-height: 420px; overflow-y: auto;
+  font-size: 12px; line-height: 1.6; color: var(--sec);
+}
+.cw-prompt-body p { margin: 0 0 7px; }
+.cw-prompt-body h1, .cw-prompt-body h2 {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--mut); margin: 12px 0 5px;
+}
+.cw-prompt-body h3 { font-size: 12.5px; font-weight: 650; color: var(--ink); margin: 10px 0 4px; }
+.cw-prompt-body strong { color: var(--ink); font-weight: 650; }
+.cw-prompt-body ul, .cw-prompt-body ol { margin: 0 0 7px; padding-left: 17px; }
+.cw-prompt-body li { margin: 0 0 3px; }
+.cw-prompt-body code, .cw-prompt-body pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; background: var(--s2); border-radius: 5px;
+}
+.cw-prompt-body code { padding: 1px 5px; border: 1px solid var(--bd); }
+.cw-prompt-body pre {
+  padding: 9px 11px; margin: 0 0 8px; overflow-x: auto;
+  border: 1px solid var(--bd); white-space: pre-wrap; word-break: break-word;
 }

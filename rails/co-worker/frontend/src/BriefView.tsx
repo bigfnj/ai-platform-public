@@ -5,7 +5,7 @@
 // hits the same PATCH endpoint the card grid uses and the two views stay in sync.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJSON, postJSON } from './api'
-import { renderInline } from './markdown'
+import { renderInline, renderMarkdown } from './markdown'
 import {
   CATEGORY_META,
   URGENCY_META,
@@ -15,6 +15,7 @@ import {
   type BriefStatus,
   type Status,
 } from './types'
+import { COWORK_JOBS } from './prompts'
 
 function ageLabel(hours: number | undefined): { text: string; cls: string } {
   if (hours === undefined) return { text: 'never', cls: 'red' }
@@ -82,6 +83,43 @@ function ListBlock({ title, icon, items }: { title: string; icon: string; items:
   )
 }
 
+// --- co-work prompts reference panel ----------------------------------------
+
+function CoWorkPrompts() {
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  return (
+    <div className="cw-prompts">
+      <div className="cw-prompts-grid">
+        {COWORK_JOBS.map((job) => {
+          const isOpen = expanded === job.id
+          return (
+            <div key={job.id} className={`cw-prompt-job${isOpen ? ' open' : ''}`}>
+              <button
+                className="cw-prompt-hd"
+                onClick={() => setExpanded(isOpen ? null : job.id)}
+              >
+                <span className="cw-prompt-icon">{job.icon}</span>
+                <span className="cw-prompt-meta">
+                  <strong>{job.title}</strong>
+                  <span className="cw-sub">{job.schedule}</span>
+                </span>
+                <span className="cw-prompt-chevron">{isOpen ? '▲' : '▼'}</span>
+              </button>
+              <p className="cw-prompt-desc">{job.description}</p>
+              {isOpen && (
+                <div className="cw-prompt-body">
+                  {renderMarkdown(job.prompt)}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function BriefView({
   triaged,
   onStatus,
@@ -94,6 +132,7 @@ export default function BriefView({
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [showPrompts, setShowPrompts] = useState(false)
   const poll = useRef<number | null>(null)
 
   const load = useCallback(() => {
@@ -165,10 +204,19 @@ export default function BriefView({
           )}
         </div>
         <span className="cw-spacer" />
+        <button
+          className={`cw-btn${showPrompts ? ' primary' : ''}`}
+          onClick={() => setShowPrompts((v) => !v)}
+          title="View the exact prompts for each scheduled co-work job"
+        >
+          📋 Co-Work Prompts
+        </button>
         <button className="cw-btn primary" onClick={refresh} disabled={busy}>
           {busy ? 'Synthesizing…' : '⟳ Re-synthesize'}
         </button>
       </div>
+
+      {showPrompts && <CoWorkPrompts />}
 
       {note && <div className={busy ? 'cw-note' : 'cw-err'}>{note}</div>}
       {err && <div className="cw-err">Couldn't load the brief: {err}</div>}
