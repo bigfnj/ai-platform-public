@@ -85,6 +85,7 @@ Write-Log "enabled apps: $apps"
 $paths = Get-ComposePaths -Mode $RuntimeMode
 $cargs = @('--env-file', $paths.Env, '-f', $paths.Compose)
 $cargs += Get-ComposeProfiles -Apps $apps
+Initialize-ComposeVolumes -ComposeArgs $cargs -Mode $RuntimeMode   # external volumes must pre-exist
 $cargs += @('up', '-d')
 Invoke-Compose -Arguments $cargs -Mode $RuntimeMode
 if ($LASTEXITCODE -ne 0) { Write-Log "compose up failed (exit $LASTEXITCODE)"; exit 1 }

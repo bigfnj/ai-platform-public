@@ -263,6 +263,7 @@ function Invoke-Provision {
     $paths = Get-ComposePaths
     $cargs = @('--progress', 'plain', '--env-file', $paths.Env, '-f', $paths.Compose)
     $cargs += Get-ComposeProfiles -Apps $EnabledApps
+    Initialize-ComposeVolumes -ComposeArgs $cargs   # external volumes must exist before `up`
     $cargs += @('up', '-d', '--build')
     Invoke-Compose -Arguments $cargs
     if ($LASTEXITCODE -ne 0) { throw "compose up failed ($RuntimeMode mode; see the log)." }

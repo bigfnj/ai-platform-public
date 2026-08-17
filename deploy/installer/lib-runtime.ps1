@@ -280,6 +280,53 @@ function Invoke-Compose {
   }
 }
 
+# podman, docker and wsl-docker all take the same `volume` subcommands; only the entry point differs.
+function Invoke-VolumeCli {
+  param([string[]]$CliArgs, [string]$Mode = $RuntimeMode)
+  switch ($Mode) {
+    'podman' { & podman @CliArgs 2>&1 }
+    'wsl'    { & wsl.exe @(@('docker') + $CliArgs) 2>&1 }
+    default  { & docker @CliArgs 2>&1 }
+  }
+}
+
+# Create any named volume the compose file expects but the runtime does not have yet.
+#
+# The compose file declares its volumes `external: true` (see docker-compose.installer.yml for why),
+# and Compose refuses to create an external volume - so on a fresh install `up` would fail with
+# "external volume not found" unless something makes them first. That is this function.
+#
+# The compose file stays the source of truth for the list: `config --volumes` prints the keys, and
+# the external name is "<project>_<key>" - the same rule as the ${COMPOSE_PROJECT_NAME:-platform}
+# interpolation in the file. Idempotent, so it is safe on every startup, not just at install.
+function Initialize-ComposeVolumes {
+  param([string[]]$ComposeArgs, [string]$Mode = $RuntimeMode)
+
+  $keys = @(Invoke-Compose -Arguments ($ComposeArgs + @('config', '--volumes')) -Mode $Mode |
+            Where-Object { $_ -match '^[a-z0-9_-]+$' })
+  if ($keys.Count -eq 0) { return }   # compose could not render; let `up` report the real error
+
+  # A FAILED listing must never be read as "nothing exists". Podman's SSH transport can drop while
+  # the containers keep serving (healthz 200, `podman volume ls` exit 125), and treating that as an
+  # empty runtime would try to re-create live volumes on every startup - burying the real fault.
+  $existing = @(Invoke-VolumeCli -CliArgs @('volume', 'ls', '--format', '{{.Name}}') -Mode $Mode |
+                ForEach-Object { [string]$_ })
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log "WARNING: could not list volumes (exit $LASTEXITCODE): $($existing -join ' ')"
+    Write-Log '  skipping volume pre-create; `up` will report the real error if one is missing.'
+    return
+  }
+
+  $project = if ($env:COMPOSE_PROJECT_NAME) { $env:COMPOSE_PROJECT_NAME } else { 'platform' }
+  foreach ($k in $keys) {
+    $name = "${project}_$k"
+    if ($existing -contains $name) { continue }
+    $out = @(Invoke-VolumeCli -CliArgs @('volume', 'create', $name) -Mode $Mode | ForEach-Object { [string]$_ })
+    if ($LASTEXITCODE -eq 0) { Write-Log "created volume $name" }
+    else { Write-Log "WARNING: could not create volume $name (exit $LASTEXITCODE): $($out -join ' ')" }
+  }
+}
+
 # Absolute paths as the selected runtime's compose needs to see them.
 function Get-ComposePaths {
   param([string]$Mode = $RuntimeMode)

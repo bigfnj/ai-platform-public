@@ -108,9 +108,28 @@ services:
       - caddy_config:/config
     restart: always
 
+# Declared external so a volume that already exists - restored from a backup, or carried across the
+# Docker -> Podman migration - is adopted as-is instead of drawing "volume already exists but was not
+# created by Docker Compose" on every single `up`.
+#
+# Two consequences, both deliberate:
+#   * Compose does NOT apply the project prefix to an external volume, so `name:` is explicit.
+#   * Compose does NOT create an external volume, so a missing one is an error rather than a silent
+#     empty volume where the auth DB used to be. Initialize-ComposeVolumes (lib-runtime.ps1) creates
+#     any that are missing before `up` runs, which is what makes a fresh install work.
 volumes:
   recipe_book_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_recipe_book_data
   gateway_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_gateway_data
   co_worker_inbox:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_co_worker_inbox
   caddy_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_caddy_data
   caddy_config:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_caddy_config
