@@ -108,6 +108,45 @@ function Get-PodmanMachineMemoryAdvice {
   } catch { return '' }
 }
 
+# Reap an api proxy left holding \\.\pipe\<machine> after the VM is gone.
+#
+# `podman machine start` aborts with "could not start api proxy since expected pipe is not available"
+# when gvproxy (and its podman parent) from a previous run is still alive on that pipe. An unclean
+# stop is the usual trigger, but the nastier one is a change of account: the watchdog service runs as
+# LocalSystem, and a SYSTEM-owned gvproxy cannot be killed from the user's session - so the machine
+# becomes unstartable by ANYONE until something with the right rights reaps the orphan. `podman
+# machine stop` does not do it; it reports success and leaves the proxy running.
+#
+# Only safe with the VM down - a running machine legitimately needs its proxy.
+function Clear-StalePodmanProxy {
+  if ((Get-PodmanMachineState) -eq 'running') { return $false }
+
+  # gvproxy serves nothing but a podman machine, so a survivor with the VM down is always stale.
+  # A long-lived podman.exe is the api-proxy parent; a transient CLI call against a stopped machine
+  # exits in about a second, so anything older than 30 s is the orphan and not a command in flight.
+  # An unreadable StartTime means the process belongs to another account, which is the case we want.
+  $stale = @(Get-Process gvproxy -ErrorAction SilentlyContinue) + @(
+    Get-Process podman -ErrorAction SilentlyContinue | Where-Object {
+      $_.Id -ne $PID -and (try { $_.StartTime -lt (Get-Date).AddSeconds(-30) } catch { $true })
+    }
+  )
+
+  $reaped = 0
+  foreach ($p in $stale) {
+    try {
+      Stop-Process -Id $p.Id -Force -ErrorAction Stop
+      Write-Log "reaped stale $($p.Name) (pid $($p.Id)) holding the machine api pipe"
+      $reaped++
+    }
+    catch {
+      Write-Log "could not reap $($p.Name) pid $($p.Id): $($_.Exception.Message)"
+      Write-Log '  it belongs to another account - the platform-watchdog service (LocalSystem) can.'
+    }
+  }
+  if ($reaped -gt 0) { Start-Sleep -Seconds 2 }
+  return ($reaped -gt 0)
+}
+
 # Create the machine if absent, then start it. The FIRST hyperv machine init needs admin (it writes
 # machine-scope registry keys); Podman 6.0 no longer needs admin for start/stop. Returns $true when
 # the machine ends up running.
@@ -120,9 +159,9 @@ function Initialize-PodmanMachine {
     # sides. (The Hyper-V provider shares host dirs over 9p; the WSL provider automounts /mnt/<drive>.)
     $iargs = @('machine', 'init', '--provider', $Provider, '--cpus', $Cpus, '--memory', $MemoryMb, '--disk-size', $DiskGb)
     if ($Provider -eq 'hyperv') { $iargs += @('-v', "${Root}:${Root}") }
-    # Tee-Object passes its input DOWN the pipeline; without Out-Null those lines become part of this
-    # function's return value, and `-not <non-empty array>` is $false — a failure that reads as success.
-    & podman @iargs 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
+    # Write-NativeLine passes its input DOWN the pipeline; without Out-Null those lines become part of
+    # this function's return value, and `-not <non-empty array>` is $false — a failure reading as success.
+    & podman @iargs 2>&1 | Write-NativeLine | Out-Null
     if ($LASTEXITCODE -ne 0) {
       Write-Log 'podman machine init failed. The first Hyper-V machine needs an ADMIN shell (and the'
       Write-Log 'Hyper-V feature + "Hyper-V Administrators" membership); see docs/INSTALL.md.'
@@ -137,15 +176,26 @@ function Initialize-PodmanMachine {
   }
   if ($state -ne 'running') {
     Write-Log 'starting the podman machine...'
-    & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    & podman machine start 2>&1 | Write-NativeLine | Out-Null
+    # Capture it now: every helper below runs podman/Hyper-V calls that overwrite $LASTEXITCODE.
+    $rc = $LASTEXITCODE
+
+    # A stale api proxy blocks every start attempt, and its error text says nothing about memory -
+    # so clear that first, before blaming the startup reservation.
+    if ($rc -ne 0 -and (Clear-StalePodmanProxy)) {
+      Write-Log 'retrying the machine start after clearing a stale api proxy...'
+      & podman machine start 2>&1 | Write-NativeLine | Out-Null
+      $rc = $LASTEXITCODE
+    }
+
+    if ($rc -ne 0) {
       # Most common cause on a memory-tight box: not enough free RAM for the startup reservation.
-      Write-Log "podman machine start failed (exit $LASTEXITCODE); retrying with a smaller startup reservation..."
+      Write-Log "podman machine start failed (exit $rc); retrying with a smaller startup reservation..."
       if ($Provider -eq 'hyperv') {
         $advice = Get-PodmanMachineMemoryAdvice
         if ($advice) { Write-Log "  $advice" }
         Set-PodmanMachineStartupRam -MaxMb $MemoryMb | Out-Null
-        & podman machine start 2>&1 | Tee-Object -FilePath $LogFile -Append | Out-Null
+        & podman machine start 2>&1 | Write-NativeLine | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Log "podman machine start still failing (exit $LASTEXITCODE)." }
       }
     }
