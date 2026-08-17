@@ -97,8 +97,9 @@ def validate(inbox: Path, quiet: bool = False) -> int:
         print(f"inbox not found: {inbox}", file=sys.stderr)
         return 2
 
-    # Exclude dotfiles: .state.json matches *.json and is valid JSON.
-    files = sorted(p for p in inbox.glob("*.json") if not p.name.startswith("."))
+    # Exclude dotfiles (.state.json) and the synthesis output (brief.json is not an item).
+    files = sorted(p for p in inbox.glob("*.json")
+                   if not p.name.startswith(".") and p.name != "brief.json")
     errors: list[str] = []
     warnings: list[str] = []
 
