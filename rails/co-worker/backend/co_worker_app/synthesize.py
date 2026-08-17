@@ -21,7 +21,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -90,26 +90,50 @@ def _triage_sort_key(item: dict) -> tuple:
     return (noise, client, prio, -float(mtime))
 
 
-def _condense(items: list[dict], state: dict[str, str]) -> list[dict]:
-    """Unresolved items, stripped to decision-relevant fields, within the char budget.
+def _condense(
+    items: list[dict],
+    state: dict[str, str],
+    today: "date | None" = None,
+) -> tuple[list[dict], dict[int, str]]:
+    """Unresolved items, numbered 1..N, stripped to decision-relevant fields, within budget.
 
-    `body` is dropped entirely: it is ~48% of the payload and `title` + `why` already
-    carry the signal the ranking needs. A model that sees 147 titles beats one that
-    sees 35 full bodies and never learns the other 112 exist.
+    Returns (payload_rows, idx_to_id) where payload_rows carry integer _idx instead of
+    _id — the model emits a number, Python maps it back. Eliminates verbatim-copy errors
+    that cause unresolved_id warnings in the UI.
+
+    Hard-filtered before the model sees anything (not just deprioritised):
+    - noise / fyi items
+    - non-client items whose `when` date is more than 14 days ago
     """
-    KEEP = ("_id", "type", "source", "priority", "title", "why", "from",
+    KEEP = ("type", "source", "priority", "title", "why", "from",
             "when", "due", "client", "period")
+
+    def _age_days(item: dict) -> int:
+        if today is None:
+            return 0
+        w = item.get("when")
+        if not w:
+            return 0
+        try:
+            d = date.fromisoformat(str(w)[:10])
+            return max(0, (today - d).days)
+        except Exception:
+            return 0
 
     live = [
         item for item in items
         if state.get(str(item.get("_id", "")), "open") not in ("done", "dismissed")
+        and item.get("type") not in ("noise", "fyi")
+        and (item.get("client") or _age_days(item) <= 14)
     ]
     live.sort(key=_triage_sort_key)
 
     out: list[dict] = []
+    idx_to_id: dict[int, str] = {}
     used = 0
-    for item in live:
-        row = {k: item[k] for k in KEEP if k in item and item[k] is not None}
+    for idx, item in enumerate(live, start=1):
+        row: dict = {"_idx": idx}
+        row.update({k: item[k] for k in KEEP if k in item and item[k] is not None})
         if isinstance(row.get("why"), str) and len(row["why"]) > WHY_CLIP:
             row["why"] = row["why"][:WHY_CLIP] + "…"
         if isinstance(row.get("title"), str) and len(row["title"]) > TITLE_CLIP:
@@ -118,87 +142,74 @@ def _condense(items: list[dict], state: dict[str, str]) -> list[dict]:
         if used + cost > ITEMS_CHAR_BUDGET:
             break
         out.append(row)
+        idx_to_id[idx] = str(item.get("_id", ""))
         used += cost
 
     if len(out) < len(live):
         _log.warning(
-            "synthesis: context budget trimmed %d of %d unresolved items "
-            "(lowest-priority/noise dropped first)",
-            len(live) - len(out), len(live),
+            "synthesis: context budget trimmed to %d of %d unresolved items "
+            "(lowest-priority dropped first)",
+            len(out), len(live),
         )
-    return out
+    return out, idx_to_id
 
 
 def _build_prompt(
-    items: list[dict],
-    state: dict[str, str],
+    n_items: int,
+    n_triaged: int,
+    payload: list[dict],
     now_iso: str,
     today: str,
     period: str,
 ) -> str:
-    n_total = len(items)
-    n_triaged = sum(
-        1 for i in items
-        if state.get(str(i.get("_id", "")), "open") in ("done", "dismissed")
-    )
-
-    unresolved = _condense(items, state)
-
     schema_example = json.dumps({
         "generated": now_iso,
         "period": period,
-        "items_considered": n_total,
+        "items_considered": n_items,
         "items_triaged": n_triaged,
         "attention": [
             {
-                "id": "<_id copied verbatim from an inbox item below>",
+                "id": 7,
                 "category": "client",
-                "headline": "<direct instruction — what to do and why urgent>",
+                "headline": "Reply to Priya Sharma re: SOW milestone 3 — asked Tuesday, no response yet",
                 "urgency": "today",
-                "why": "<one sentence: consequence of not acting>",
+                "why": "Milestone sign-off gates the next invoice cycle.",
             }
         ],
-        "client_pulse": "<2-3 sentences on overall state of client threads>",
-        "dangling": ["<specific commitment not yet resolved>"],
-        "missed": ["<thread where someone is waiting — include sender + topic>"],
-        "agenda_gaps": ["<meeting you own with no agenda — include name and date>"],
-        "suppressed": n_total - n_triaged - 10,
-        "synthesis_note": "<optional: anything unusual, or null>",
+        "client_pulse": "Two of three client threads are waiting on a reply from you.",
+        "dangling": ["Promised the architecture diagram to Dan by EOW — not sent"],
+        "missed": ["Priya Sharma (client) — SOW milestone 3, last message Tuesday"],
+        "agenda_gaps": ["Delivery sync Thu 2pm — you organised it, no agenda set"],
+        "suppressed": 0,
+        "synthesis_note": None,
     }, indent=2)
 
-    items_block = json.dumps(unresolved, separators=(",", ":"), default=str)
+    items_block = json.dumps(payload, separators=(",", ":"), default=str)
 
     return f"""\
 Today is {today}. Period: {period}.
 
-{n_total} items harvested. {n_triaged} already triaged (done/dismissed) — excluded below.
+{n_items} items harvested. {n_triaged} already triaged (done/dismissed). \
+Items below are the unresolved set after pre-filtering: noise, FYIs, and \
+non-client items older than 14 days have been removed.
 
 Produce a JSON executive brief with this EXACT schema:
 {schema_example}
 
-Field value rules — the example above shows ONE example value per field, not the choices:
+Field value rules:
 - "category" must be EXACTLY ONE of: client, dangling, missed, agenda-gap, other
 - "urgency" must be EXACTLY ONE of: today, this-week, soon
 - Never emit a pipe-separated list. Choose the single best value.
-- "id" must be copied verbatim from an item's "_id" below, or triage cannot round-trip.
+- "id" must be the integer _idx of the item from the list below.
 
 Attention list rules:
-- MAX 10 items, ordered by urgency: today → this-week → soon
-- Priority order: client > dangling > missed > agenda-gap > other
+- MAX 10 items
 - Headline: direct instruction, never a description
   GOOD: "Reply to Priya Sharma re: SOW milestone 3 — asked Tuesday, no response yet"
   BAD: "Email from Priya about SOW"
 - Only include items where inaction has a real consequence THIS WEEK
 
-Do NOT surface:
-- FYIs, newsletters, automated digests, or status emails with no action implied
-- Recurring meetings with established purpose (standups, weekly syncs with agendas)
-- Internal items older than 14 days (client items: no age limit)
-- Items already triaged done/dismissed
-
-Set "suppressed" to (items_considered - items_triaged - len(attention)).
-
-Unresolved inbox items ({len(unresolved)} items):
+Unresolved inbox items ({len(payload)} items):
 {items_block}"""
 
 
@@ -282,22 +293,26 @@ def _pick_enum(value: Any, allowed: tuple[str, ...], default: str) -> str:
     return default
 
 
-def _normalize(brief: dict, valid_ids: set[str]) -> dict:
-    """Make the model's output safe to render, and report what was unusable."""
+def _normalize(brief: dict, idx_to_id: dict[int, str]) -> dict:
+    """Make the model's output safe to render. Resolves integer _idx back to item _id."""
+    valid_ids = set(idx_to_id.values())
     clean: list[dict] = []
     dropped = 0
     for raw in brief.get("attention") or []:
         if not isinstance(raw, dict):
             dropped += 1
             continue
-        item_id = str(raw.get("id") or "").strip()
         headline = str(raw.get("headline") or "").strip()
         if not headline:
             dropped += 1
             continue
-        # An id that doesn't resolve means the triage buttons would silently no-op.
-        # Keep the insight, but flag it so the UI can hide the controls.
-        resolved = item_id in valid_ids
+        # Model returns the integer _idx; resolve to the actual _id for triage round-trip.
+        raw_id = raw.get("id")
+        try:
+            item_id = idx_to_id.get(int(raw_id), "")
+        except (TypeError, ValueError):
+            item_id = str(raw_id or "").strip()
+        resolved = bool(item_id) and item_id in valid_ids
         clean.append({
             "id": item_id,
             "category": _pick_enum(raw.get("category"), CATEGORIES, "other"),
@@ -307,7 +322,7 @@ def _normalize(brief: dict, valid_ids: set[str]) -> dict:
             "unresolved_id": not resolved,
         })
         if not resolved:
-            _log.warning("synthesis: attention id %r not found in inbox", item_id)
+            _log.warning("synthesis: attention id %r (raw_idx=%r) not resolved", item_id, raw_id)
 
     brief["attention"] = clean[:10]
     if dropped:
@@ -370,8 +385,17 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     today = now.strftime("%A, %B %d %Y")
     period = _dominant_period(items, now)
 
-    prompt = _build_prompt(items, state, now_iso, today, period)
-    _log.info("synthesis: %d items total, prompt %d chars", len(items), len(prompt))
+    n_items = len(items)
+    n_triaged = sum(
+        1 for i in items
+        if state.get(str(i.get("_id", "")), "open") in ("done", "dismissed")
+    )
+    payload, idx_to_id = _condense(items, state, today=now.date())
+    prompt = _build_prompt(n_items, n_triaged, payload, now_iso, today, period)
+    _log.info(
+        "synthesis: %d items total, %d in payload after pre-filter, prompt %d chars",
+        n_items, len(payload), len(prompt),
+    )
 
     if dry_run:
         print("=== SYSTEM ===")
@@ -383,32 +407,24 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     raw = _call_broker(prompt, settings.broker_url, settings.broker_auth_token)
     _log.info("synthesis: broker returned %d chars", len(raw))
 
-    brief = _normalize(_extract_json(raw), {str(i.get("_id")) for i in items})
+    brief = _normalize(_extract_json(raw), idx_to_id)
 
-    # Guarantee required top-level keys regardless of model compliance
-    brief.setdefault("generated", now_iso)
-    brief.setdefault("period", period)
-    brief.setdefault("items_considered", len(items))
-    brief.setdefault("items_triaged", sum(
-        1 for i in items
-        if state.get(str(i.get("_id", "")), "open") in ("done", "dismissed")
-    ))
+    # Override all counted fields in Python — do not trust model arithmetic.
+    brief["generated"] = now_iso
+    brief["period"] = period
+    brief["items_considered"] = n_items
+    brief["items_triaged"] = n_triaged
     brief.setdefault("attention", [])
-    brief.setdefault("suppressed", 0)
+    brief["suppressed"] = max(0, n_items - n_triaged - len(brief["attention"]))
 
-    # How much the local model actually saw. A trimmed run is a real caveat on the
-    # brief's completeness, so it travels with the brief rather than living in a log.
-    sent = len(_condense(items, state))
-    unresolved_total = sum(
-        1 for i in items
-        if state.get(str(i.get("_id", "")), "open") not in ("done", "dismissed")
-    )
-    brief["items_read"] = sent
-    if sent < unresolved_total:
-        brief["truncated"] = unresolved_total - sent
+    # How much the local model actually saw.
+    n_unresolved = n_items - n_triaged
+    brief["items_read"] = len(payload)
+    if len(payload) < n_unresolved:
+        brief["truncated"] = n_unresolved - len(payload)
 
-    # Record source signature so the staleness check can compare (item_count, newest_mtime)
-    # against what was actually summarised, not whatever is on disk at read time.
+    # Source signature so the staleness check can compare (item_count, newest_mtime)
+    # against what was summarised, not whatever is on disk at read time.
     item_files = [p for p in inbox.glob("*.json")
                   if not p.name.startswith(".") and p.name != BRIEF_FILE]
     sig_count = len(item_files)
@@ -416,7 +432,6 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     brief["_source_signature"] = [sig_count, sig_mtime]
 
     write_json(inbox / BRIEF_FILE, brief)
-
     _log.info(
         "synthesis: wrote brief.json (%d attention items, %d suppressed)",
         len(brief.get("attention", [])),
