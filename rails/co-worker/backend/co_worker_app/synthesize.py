@@ -169,17 +169,17 @@ def _build_prompt(
         "items_triaged": n_triaged,
         "attention": [
             {
-                "id": 7,
-                "category": "client",
-                "headline": "Reply to Alex Chen re: Q3 roadmap deliverable — asked Tuesday, no response yet",
-                "urgency": "today",
-                "why": "Milestone sign-off gates the next invoice cycle.",
+                "id": "<INTEGER _idx FROM ITEM LIST>",
+                "category": "<client|dangling|missed|agenda-gap|other>",
+                "headline": "<DIRECT ACTION: verb + who + what + why urgent>",
+                "urgency": "<today|this-week|soon>",
+                "why": "<ONE SENTENCE: consequence of not acting>",
             }
         ],
-        "client_pulse": "Two of three client threads are waiting on a reply from you.",
-        "dangling": ["Promised the architecture diagram to Dan by EOW — not sent"],
-        "missed": ["Alex Chen (client) — Q3 roadmap deliverable, last message Tuesday"],
-        "agenda_gaps": ["Delivery sync Thu 2pm — you organised it, no agenda set"],
+        "client_pulse": "<2-3 SENTENCES: overall state of client threads>",
+        "dangling": ["<SPECIFIC COMMITMENT with no resolution signal>"],
+        "missed": ["<PERSON (role) — topic, last contact date>"],
+        "agenda_gaps": ["<MEETING NAME date — you organised it, no agenda>"],
         "suppressed": 0,
         "synthesis_note": None,
     }, indent=2)
@@ -193,21 +193,23 @@ Today is {today}. Period: {period}.
 Items below are the unresolved set after pre-filtering: noise, FYIs, and \
 non-client items older than 14 days have been removed.
 
-Produce a JSON executive brief with this EXACT schema:
+Produce a JSON executive brief matching this schema EXACTLY.
+CRITICAL: The schema below shows STRUCTURE ONLY. Every <...> placeholder \
+and quoted string is a template — replace ALL of them with real content \
+from the inbox items. Never copy schema text into your output.
+
 {schema_example}
 
-Field value rules:
-- "category" must be EXACTLY ONE of: client, dangling, missed, agenda-gap, other
-- "urgency" must be EXACTLY ONE of: today, this-week, soon
-- Never emit a pipe-separated list. Choose the single best value.
-- "id" must be the integer _idx of the item from the list below.
+Field rules:
+- "id" must be the INTEGER _idx from the item list below (e.g. 3, 17, 42)
+- "category": exactly one of client | dangling | missed | agenda-gap | other
+- "urgency": exactly one of today | this-week | soon
+- "headline": a direct instruction — verb + who + what + why urgent
+  EXAMPLE PATTERN: "Reply to [name] re: [topic] — [urgency signal]"
+  NOT a description: never "Email from X about Y"
 
-Attention list rules:
-- MAX 10 items
-- Headline: direct instruction, never a description
-  GOOD: "Reply to Alex Chen re: Q3 roadmap deliverable — asked Tuesday, no response yet"
-  BAD: "Email from Priya about SOW"
-- Only include items where inaction has a real consequence THIS WEEK
+Attention list: include 5–10 items where inaction costs something THIS WEEK. \
+Prioritise client > dangling > missed > agenda-gap > other.
 
 Unresolved inbox items ({len(payload)} items):
 {items_block}"""
