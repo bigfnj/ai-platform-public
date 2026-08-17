@@ -45,34 +45,51 @@ models stay warm. The seam is already in place — this is a config flip, not a 
 
 ---
 
-## 2. Scenario Builder — the four-question diagnostic
+## 2. Scenario Builder — DONE (2026-08-17)
 
-The rail's headline flow, intentionally left unwired pending guided rebuild.
+Six scenarios, 6–8 questions each, five-part grounded package, live reasoning trace. See the
+README for the three honesty mechanisms (computed constraints, two output guards, deterministic
+scenario card).
 
-- [ ] Author the 4 questions per scenario in `frontend/src/scenarios.ts` (only Retail Chain Q1
-      was recovered verbatim from the demo capture)
-- [ ] Generation pass: answers + scenario → the four outputs (Scenario Card, Discovery
-      Playbook, Customer Q&A, ROI Summary) grounded in the SME corpus
-- [ ] The "Your next move" directional close — the actual payload, per `reference/README.md`
-- [ ] The generation checklist UI (each line is a real stage, not decoration)
-- [ ] Read-aloud on each output tab
+Remaining polish, none blocking:
 
-**Design constraint:** the ROI figures in the original were 3B-model output and one tile was
-visibly broken. Any numbers surfaced here must come from the corpus or be labelled as
-partner-supplied inputs, never generated.
+- [ ] **Restaurant Group is the least-grounded scenario.** Microsoft publishes frontline material
+      for exactly four industries — Retail, Healthcare, Financial Services, Manufacturing — and
+      none for restaurants or field services, so this one leans on Retail's content. Kept for
+      fidelity to the original hackathon demo. Healthcare and Financial Services are the
+      remaining grounded industries if more breadth is wanted.
+- [ ] **`_HARD_RULES` has no test.** It is the highest-consequence table in the rail — a wrong
+      entry produces confident, unexecutable advice. Worth a unit test per rule.
+- [ ] The entitlement guard matches on the last two tokens of a product name, which is a
+      heuristic. A curated product vocabulary extracted from the corpus would be tighter.
+
+## 3. Knowledge base — DONE (2026-08-14/17)
+
+67 sourced files, 13 collections, ~1,050 chunks. Every file carries a source URL, an as-of date
+and a currency warning. Every collection now wins retrievals.
+
+- [ ] **Freshness sweep.** `program-updates/` is the most perishable content in the corpus — every
+      figure is a list price or a dated promotion. The monthly Partner Center announcements page
+      (`learn.microsoft.com/en-us/partner-center/announcements/<year>-<month>`) is the best
+      currency source. Re-check anything older than one fiscal year.
+- [ ] The four field-earned collections are empty by design and need the team's real material.
+
+## 4. Mobile: wire the Scenario Builder flow
+
+Dan's second pillar was "portable from web to mobile", and "the voice is going to carry it" — a
+partner between meetings, on a phone. Today the mobile build only *lists* the scenarios; Chat
+works, the diagnostic does not.
+
+- [ ] Port the question flow, checklist + trace, and package view into `frontend/mobile/App.tsx`
+- [ ] Read-aloud per output section
+
+Most of the work is layout rather than logic: the answers already stack vertically, the trace
+already collapses below the checklist at narrow widths, and `getScenarios()` is already wired
+there. The components are surface-agnostic.
 
 ---
 
-## 3. Knowledge base — replace the scaffolding
-
-- [ ] Every `00-overview.md` under `seed/knowledge-base/` is placeholder and says so
-- [ ] Real material must carry a source and an "As of" date — SMB program mechanics reset each
-      Microsoft fiscal year, and the assistant repeats whatever is written verbatim
-- [ ] Consider a freshness check that surfaces content older than one fiscal year
-
----
-
-## 4. Deployment
+## 5. Deployment
 
 - [ ] Add `smb-partner-enablement` to `PLATFORM_ENABLED_APPS` in the install clone's
       `deploy/.env` (currently `terminal-fun,recipe-book,co-worker`)
@@ -84,6 +101,10 @@ partner-supplied inputs, never generated.
 
 ## 5. Smaller items
 
+- [x] ~~Stale chunks survived re-ingest~~ — fixed 2026-08-17. An emptied collection reported
+      "empty" and skipped without clearing, and a deleted folder was never iterated at all; 17
+      orphaned placeholder chunks were being retrieved and cited as sourced material. Found by
+      reading the live reasoning trace.
 - [ ] **Ingest on a bind mount.** The seed tree is baked into the image, so content edits need a
       rebuild. Bind-mounting `seed/knowledge-base` would make authoring iterative.
 - [ ] **Upload path is admin-only** and re-embeds a whole collection per upload. Fine at current

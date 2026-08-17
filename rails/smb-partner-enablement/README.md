@@ -13,12 +13,28 @@ answered only from curated SME material, with citations.
 | | |
 |---|---|
 | ✅ Backend | Retrieval, grounded ask (buffered + streamed), ingest, capabilities |
-| ✅ SME corpus | Six collections with an authoring contract — **content is placeholder** |
+| ✅ SME corpus | **67 sourced files across 13 collections** (~1,050 chunks), every file carrying a source URL, an as-of date and a currency warning |
+| ✅ Scenario Builder | **Six scenarios**, 6–8 questions each, five-part grounded package, live reasoning trace |
 | ✅ Desktop rail | Three tabs + AI status + live mobile preview |
-| ✅ Mobile surface | Standalone voice-first build at `/smb-partner-enablement/m/` |
 | ✅ Platform wiring | Broker roles, gateway registration, compose service |
-| ⛔ Scenario Builder | The four-question diagnostic and generated package are **not wired** |
-| ⛔ Server-side voice | Kokoro is unavailable on this platform — see [`MODELS.md`](MODELS.md) |
+| ◐ Mobile surface | Standalone build at `/smb-partner-enablement/m/`; Chat works, the Scenario Builder flow is **not yet wired there** |
+| ⛔ Server-side voice | Kokoro is unavailable on this platform — see [`MODELS.md`](MODELS.md) and [`BACKLOG.md`](BACKLOG.md) |
+| ⛔ Deployed | Not in `PLATFORM_ENABLED_APPS`, so it does **not** appear at `localhost:1111` yet |
+
+### How the Scenario Builder stays honest
+
+Three mechanisms, each added after watching the model get something wrong:
+
+- **Hard constraints are computed, not inferred.** A rule table maps an answer to a limit the
+  model may not contradict — the pooled 300-seat Business-family cap, the sub-300-employee scope
+  of the partner-led Copilot trial, the Microsoft-managed-account requirement for deal
+  registration, and "foundation before AI" rules that stop a Copilot recommendation when MFA is
+  off or there is no CRM.
+- **Two output guards.** Any sentence carrying a figure — or asserting an entitlement about a
+  product — that is absent from the retrieved context is dropped, and the suppression count is
+  shown to the partner rather than hidden.
+- **The Scenario Card is assembled in code**, not generated, because nothing in it needs
+  judgement and as a model pass it just echoed the partner's own answers back.
 
 ## The two resident models
 
@@ -99,5 +115,22 @@ citation titles, so write them the way a partner would ask. The full contract �
 every file carries a source and a date — is in
 [`seed/knowledge-base/README.md`](seed/knowledge-base/README.md).
 
-Everything currently in there is scaffolding that says so. Until it is replaced, answers will be
-correctly reported as ungrounded, which is the intended behaviour rather than a bug.
+The corpus is real: 67 files across 13 collections, researched from public Microsoft sources and
+audited against them. Two rules matter most when adding to it.
+
+**Never state a rate, margin, threshold or fee you cannot cite.** Much of the incentive detail is
+partner-confidential and lives only in the Partner Center rate card. "Check the current rate card"
+is a genuinely useful answer; an invented percentage loses a deal. The 15% partner earned credit
+and the 60/40 rebate split that circulate are *worked examples* inside Microsoft's docs, not rate
+cards.
+
+**Disambiguate near-identical policies in the heading itself.** A heading reading "Can I get a
+refund if I renew or purchase by mistake?" retrieved strongly for "how long do I have to cancel an
+annual subscription I sold by mistake" — and the assistant answered **30 days** (the MAICPP
+membership window) when the correct answer was **7 calendar days** (New Commerce). The chunk was
+accurate but unscoped. Retrieval hands over a chunk without its neighbours, so the disambiguation
+has to travel inside it.
+
+Four collections — `discovery/`, `objection-handling/`, `solution-plays/`, `customer-stories/` —
+are deliberately empty with authoring READMEs. They are for field-earned material that comes from
+real partner conversations rather than documentation.
