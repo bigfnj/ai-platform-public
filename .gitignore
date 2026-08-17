@@ -36,6 +36,11 @@ Thumbs.db
 # rails removed from the active lean stack but still present on some dev workstation disks
 rails/bouquet/
 
+# co-worker harvest PROMPTS — they embed the owner's real name, work email, job title, employer
+# and local Claude scheduled-job paths. THIS REPO IS PUBLIC. Keep them machine-local; BriefView
+# imports this module, so a public clone needs a sanitised prompts.example.ts instead.
+rails/co-worker/frontend/src/prompts.ts
+
 # AI-assistant leftovers — keep agent context/memory/rules out of the public repo
 .claude/
 CLAUDE.md
