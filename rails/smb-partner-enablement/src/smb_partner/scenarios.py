@@ -10,8 +10,16 @@ Authoring rules, learned from the original prototype and the knowledge base:
 * **Every answer must change the recommendation.** A question whose answers all produce the
   same output is theatre. Each option below carries ``signal`` — the retrieval terms and
   commercial consequence it implies — which is what the generator actually consumes.
-* **Ask what a partner already knows.** These are answerable from memory after one customer
-  call. Anything needing research belongs in discovery, not the diagnostic.
+* **Ask what a partner can actually observe.** A question is only valid if a rep could answer it
+  from a website, a first conversation, or Partner Center. An early draft asked "what is the split
+  between frontline staff and office or knowledge workers?" — a rep does not know a customer's org
+  chart before the call, and "knowledge worker" is Microsoft's vocabulary, not the customer's.
+  Worse, it pushed the licensing analysis back onto the partner, which is the job this tool exists
+  to do. It became "who has a work email account today?": observable, phrased as the customer
+  would say it, and mapping onto the same licence-mix signal.
+* **Every question offers "Not sure yet."** See ``UNKNOWN_LABEL``. An unknown is routed into the
+  Discovery Playbook rather than guessed, because a package built on a wrong premise is worse than
+  one that admits a gap.
 * **Only ask what the corpus can act on.** Seat counts, current footprint and trigger events
   map onto real licensing and eligibility rules (the 300-seat pooled cap, the SMB designation
   track, deal-registration account management). Questions the corpus cannot ground produce
@@ -25,14 +33,26 @@ from typing import Any
 _BASE_COLLECTIONS = ["smb-segment", "csp-licensing", "solution-plays"]
 
 
+#: Appended to every question. A partner prepping between meetings will not know everything, and
+#: a forced guess is worse than an admission — it produces a confident package built on a wrong
+#: premise. Answering "not sure" routes the question into the Discovery Playbook instead, which
+#: is the honest behaviour: the tool turns what you don't know into what to ask.
+UNKNOWN_LABEL = "Not sure yet"
+_UNKNOWN_SIGNAL = "PARTNER DOES NOT KNOW — must be established on the call, do not assume"
+
+
 def _q(qid: str, prompt: str, why: str, options: list[tuple[str, str]]) -> dict[str, Any]:
     """A diagnostic question. ``options`` pairs the partner-facing label with the signal the
-    generator uses — the label is for a human, the signal is for retrieval and reasoning."""
+    generator uses — the label is for a human, the signal is for retrieval and reasoning.
+
+    ``UNKNOWN_LABEL`` is appended automatically so no question can be authored without an out.
+    """
     return {
         "id": qid,
         "prompt": prompt,
         "why": why,
-        "options": [{"label": label, "signal": signal} for label, signal in options],
+        "options": [{"label": label, "signal": signal} for label, signal in options]
+        + [{"label": UNKNOWN_LABEL, "signal": _UNKNOWN_SIGNAL}],
     }
 
 
@@ -66,13 +86,14 @@ SCENARIOS: list[dict[str, Any]] = [
                 ("Spreadsheets emailed out", "partial digital; scheduling chaos; no real-time change"),
                 ("An existing scheduling product", "displacement sale; integration and switching cost")]),
             _q("workforce",
-               "What is the split between frontline staff and office or knowledge workers?",
-               "Decides the licence mix. Frontline SKUs are far cheaper per seat, and getting this "
-               "split wrong is the most common way an SMB retail quote comes back uncompetitive.",
-               [("Almost entirely frontline", "F-SKU heavy; minimal knowledge-worker licensing"),
-                ("Mostly frontline, a small head office", "mixed estate; F-SKUs plus a few Business Premium"),
-                ("Roughly an even split", "mixed estate; careful per-user assignment needed"),
-                ("Mostly office-based", "knowledge-worker licensing; frontline is the smaller motion")]),
+               "Who at this business has a work email account today?",
+               "This is the licence-mix question asked in a way the customer can actually answer. "
+               "Staff with no work account are frontline seats, which cost far less per user — and "
+               "that gap is usually where the conversation opens.",
+               [("Everyone, including store staff", "all staff already licensed; upgrade not net-new seats"),
+                ("Managers and head office only", "store staff unlicensed; frontline seat opportunity"),
+                ("Head office only", "large unlicensed frontline population; strongest frontline case"),
+                ("Almost nobody — they use personal email", "greenfield; identity and governance risk")]),
             _q("footprint",
                "What Microsoft licensing does the customer have today?",
                "Determines whether this is a new-customer acquisition, an upgrade motion, or a "

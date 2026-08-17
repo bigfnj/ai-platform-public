@@ -54,7 +54,13 @@
 .smbp .grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* auto-FIT, not auto-fill: on a wide viewport auto-fill leaves empty tracks and the cards
+     bunch up against the left edge. Capped and centred so the picker stays balanced. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  justify-content: center;
+  margin-inline: auto;
+  max-width: 1100px;
+  width: 100%;
 }
 .smbp .card h4 {
   margin: 0 0 8px;
@@ -67,7 +73,7 @@
 
 /* Scenario cards are clickable cards, so they need a focus ring and a hover affordance. */
 .smbp .scenario {
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   font: inherit;
   color: inherit;
@@ -202,4 +208,100 @@
   /* On an actual phone the preview is pointless — hide the affordance rather than framing a
      phone inside a phone. */
   .smbp .mobile-fab { display: none; }
+}
+
+/* --- scenario builder: diagnostic --------------------------------------- */
+.smbp .qhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.smbp .qbar {
+  height: 3px;
+  background: var(--bd);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 10px 0 16px;
+}
+.smbp .qbar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+/* "Why this matters" is the coaching, so it reads as an aside rather than body copy. */
+.smbp .why {
+  border-left: 2px solid var(--accent);
+  padding: 6px 0 6px 12px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.smbp .opts {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+.smbp .opt {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 14px;
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.smbp .opt:hover,
+.smbp .opt:focus-visible {
+  border-color: var(--accent);
+  background: var(--s1);
+}
+
+/* --- scenario builder: generation checklist ----------------------------- */
+.smbp .checklist { list-style: none; margin: 12px 0; padding: 0; }
+.smbp .ck {
+  align-items: baseline;
+  color: var(--muted);
+  display: flex;
+  font-size: 14px;
+  gap: 10px;
+  padding: 6px 0;
+}
+.smbp .ck .ckmark { width: 1em; flex: none; }
+.smbp .ck.active { color: var(--ink); }
+.smbp .ck.active .ckmark { color: var(--accent); }
+.smbp .ck.done .ckmark { color: var(--accent); }
+.smbp .ck.error { color: #f87171; }
+
+/* --- scenario builder: the package -------------------------------------- */
+/* The directional close is the payload — the original prototype's whole point was that it
+   ends with an action, not a link list. So it is visually the loudest thing on the page. */
+.smbp .nextmove {
+  background: var(--s2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+.smbp .nextmove .md p:first-child { margin-top: 0; }
+.smbp .nextmove .md p:last-child { margin-bottom: 8px; }
+.smbp .tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.smbp .md h4 { font-size: 14px; margin: 16px 0 6px; }
+.smbp .md h5 { color: var(--muted); font-size: 13px; margin: 12px 0 4px; }
+.smbp .md p { line-height: 1.55; margin: 0 0 10px; }
+.smbp .md ul { margin: 0 0 10px; padding-left: 20px; }
+.smbp .md li { line-height: 1.55; margin-bottom: 6px; }
+/* The honest out — visually subordinate to the real answers, not a fifth peer option. */
+.smbp .opt.unsure {
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  width: 100%;
 }

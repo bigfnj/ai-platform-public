@@ -33,6 +33,67 @@ export const canListen = () => RecognitionCtor !== undefined
 
 let current: HTMLAudioElement | null = null
 
+/**
+ * Pick the best available system voice.
+ *
+ * This matters more than it looks. Web Speech defaults to the platform's *first* voice, which on
+ * Windows is a legacy SAPI5 voice (David / Zira / Mark) — the flat robotic one. Sitting alongside
+ * them, unused, are Microsoft's neural voices ("Microsoft Ava Online (Natural)" and friends) and,
+ * in Chrome, Google's network voices. Both are dramatically better, and selecting one is free.
+ *
+ * This is a stopgap, not the destination: real voice quality for this rail means Kokoro through
+ * the broker (see BACKLOG.md). Until that lands, this is the difference between a demo that
+ * sounds broken and one that sounds acceptable.
+ */
+const VOICE_TIERS: ((v: SpeechSynthesisVoice) => boolean)[] = [
+  (v) => /natural/i.test(v.name),          // Microsoft neural (Edge/Windows)
+  (v) => /online/i.test(v.name),           // Microsoft network voices
+  (v) => /google/i.test(v.name),           // Chrome network voices
+  (v) => !/david|zira|mark|hazel/i.test(v.name), // anything but the known-flat legacy set
+  () => true,
+]
+
+let chosen: SpeechSynthesisVoice | null = null
+
+function pickVoice(lang: string): SpeechSynthesisVoice | null {
+  if (!canSpeak()) return null
+  // getVoices() is empty until the engine populates it, so this is re-resolved until it succeeds
+  // rather than cached from a first empty call.
+  const all = globalThis.speechSynthesis.getVoices()
+  if (!all.length) return null
+  if (chosen && all.includes(chosen)) return chosen
+  const want = (lang || 'en-US').slice(0, 2).toLowerCase()
+  const candidates = all.filter((v) => v.lang?.toLowerCase().startsWith(want))
+  const pool = candidates.length ? candidates : all
+  for (const tier of VOICE_TIERS) {
+    const hit = pool.find(tier)
+    if (hit) {
+      chosen = hit
+      return hit
+    }
+  }
+  return pool[0] ?? null
+}
+
+/** Names of the voices actually available, best first — useful when diagnosing bad playback. */
+export function availableVoices(): string[] {
+  if (!canSpeak()) return []
+  const all = globalThis.speechSynthesis.getVoices()
+  const best = pickVoice('en-US')
+  return all
+    .map((v) => (v === best ? `${v.name} (${v.lang}) ← selected` : `${v.name} (${v.lang})`))
+    .sort((a) => (a.includes('← selected') ? -1 : 0))
+}
+
+if (typeof globalThis.speechSynthesis !== 'undefined') {
+  // Chrome and Edge populate the voice list asynchronously; without this the first utterance of
+  // a session gets the default voice even though a better one arrives moments later.
+  globalThis.speechSynthesis.addEventListener?.('voiceschanged', () => {
+    chosen = null
+    pickVoice('en-US')
+  })
+}
+
 export function stopSpeaking() {
   if (canSpeak()) globalThis.speechSynthesis.cancel()
   if (current) {
@@ -63,6 +124,11 @@ export function speak(payload: VoicePayload | undefined, onEnd?: () => void): vo
   }
   const utterance = new SpeechSynthesisUtterance(payload.text)
   utterance.lang = payload.lang === 'en' ? 'en-US' : payload.lang
+  const voice = pickVoice(utterance.lang)
+  if (voice) utterance.voice = voice
+  // Slightly slower than default: the legacy voices in particular run too fast to follow when
+  // reading a licensing recommendation aloud.
+  utterance.rate = 0.95
   utterance.onend = () => onEnd?.()
   utterance.onerror = () => onEnd?.()
   globalThis.speechSynthesis.speak(utterance)

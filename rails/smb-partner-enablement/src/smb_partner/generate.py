@@ -81,7 +81,10 @@ _BASE_RULES = (
     "selling, not studying. Write plain markdown with short paragraphs.\n\n"
     "CRITICAL: do NOT restate, summarise or list the customer's situation or the diagnostic "
     "answers back to the reader. They already know them. Produce ONLY what you are asked for, "
-    "starting immediately with the requested content and no introduction."
+    "starting immediately with the requested content and no introduction.\n\n"
+    "Never contradict what the partner told you, and never assert a fact about the customer that "
+    "the brief does not state. If the brief says something is not yet known, treat it as unknown — "
+    "do not infer it from the scenario description."
 )
 
 # Low temperature: these are briefing artifacts, not creative writing, and a 3B model drifts
@@ -89,13 +92,33 @@ _BASE_RULES = (
 _OPTIONS_BASE = {"temperature": 0.2, "top_p": 0.9}
 
 
+def _split_known(resolved: list[dict[str, str]]) -> tuple[list[dict], list[dict]]:
+    """Separate answered questions from the ones the partner flagged as unknown."""
+    known = [r for r in resolved if r["answer"] != scenarios.UNKNOWN_LABEL]
+    unknown = [r for r in resolved if r["answer"] == scenarios.UNKNOWN_LABEL]
+    return known, unknown
+
+
 def _brief(scenario: dict[str, Any], resolved: list[dict[str, str]]) -> str:
     """The customer picture, assembled from the diagnostic answers. This is stage one — it is
-    genuine work (it is what every later pass is conditioned on), not a loading message."""
+    genuine work (it is what every later pass is conditioned on), not a loading message.
+
+    Unknowns are stated as unknowns. If they were merely omitted the model would fill the gap from
+    the scenario description and present the guess as fact, which is the exact failure the
+    "Not sure yet" option exists to prevent.
+    """
+    known, unknown = _split_known(resolved)
     lines = [f"Scenario: {scenario['title']} — {scenario['fit']}",
-             f"Situation: {scenario['situation']}", "", "Diagnostic answers:"]
-    for item in resolved:
-        lines.append(f"- {item['question']} → {item['answer']} ({item['signal']})")
+             f"Situation: {scenario['situation']}", ""]
+    if known:
+        lines.append("What the partner knows:")
+        for item in known:
+            lines.append(f"- {item['question']} → {item['answer']} ({item['signal']})")
+    if unknown:
+        lines += ["", "What the partner does NOT yet know — treat as open questions, never assume "
+                      "an answer, and do not build a recommendation that depends on them:"]
+        for item in unknown:
+            lines.append(f"- {item['question']}")
     return "\n".join(lines)
 
 
@@ -159,8 +182,11 @@ _PASSES: list[tuple[str, str, str, list[str], str]] = [
      "## Customer profile\n"),
     ("discovery",
      "Write a Discovery Playbook: five questions this partner should ask on the call. For each, "
-     "give the question in bold and one sentence on the signal a good answer gives. Order them "
-     "so the first question opens the conversation naturally.",
+     "give the question in bold and one sentence on the signal a good answer gives.\n\n"
+     "Two rules on which questions to pick. Anything listed under 'What the partner does NOT yet "
+     "know' must appear FIRST, rephrased as a question the partner can put to the customer in "
+     "plain language. And do NOT re-ask anything already answered under 'What the partner knows' "
+     "— the partner told you that, so asking it back wastes one of the five slots.",
      "discovery and qualification questions for this customer situation",
      ["smb-segment", "mcem"],
      "**"),

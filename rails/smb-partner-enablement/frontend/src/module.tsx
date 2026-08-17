@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { askStream, getCapabilities } from './api'
-import { SCENARIOS } from './scenarios'
+import Builder from './builder'
 import type { Capabilities, Turn } from './types'
 import { canListen, listen, speak, stopSpeaking } from './voice'
 import './theme.css'
@@ -78,57 +78,6 @@ function About() {
         </p>
       </div>
     </>
-  )
-}
-
-function Builder() {
-  const [picked, setPicked] = useState<string | null>(null)
-  const scenario = SCENARIOS.find((s) => s.id === picked)
-  if (!scenario) {
-    return (
-      <>
-        <div className="center">
-          <h2 style={{ margin: '8px 0' }}>Tell me about your customer</h2>
-          <p className="muted">What industry are they in and what's driving this conversation?</p>
-        </div>
-        <div className="grid">
-          {SCENARIOS.map((s) => (
-            <button key={s.id} className="card scenario" onClick={() => setPicked(s.id)}>
-              <div className="icon">{s.icon}</div>
-              <div className="title">{s.title}</div>
-              <div className="fit">{s.fit}</div>
-              <p className="muted">{s.situation}</p>
-            </button>
-          ))}
-        </div>
-        <p className="muted center" style={{ fontSize: 12 }}>
-          These scenarios represent common SMB partner situations. Select the one closest to your
-          customer's situation to begin your pre-call readiness diagnostic.
-        </p>
-      </>
-    )
-  }
-  return (
-    <div className="card">
-      <button className="ghost" onClick={() => setPicked(null)}>
-        ‹ Back
-      </button>
-      <h3>
-        {scenario.icon} {scenario.title}
-      </h3>
-      <p className="fit" style={{ color: 'var(--accent)' }}>
-        {scenario.fit}
-      </p>
-      <p className="muted">
-        The four-question diagnostic and the generated package are not wired yet. The question
-        set lives in <code>src/scenarios.ts</code> and is authored against the SME material in{' '}
-        <code>seed/knowledge-base/discovery/</code>; the generation pass reuses the same grounded
-        ask path as Voice Chat. See <code>reference/README.md</code> for the target flow.
-      </p>
-      <p className="muted">
-        {scenario.questions.length} of 4 questions defined for this scenario.
-      </p>
-    </div>
   )
 }
 

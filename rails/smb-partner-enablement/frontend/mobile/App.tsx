@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { askStream, getCapabilities } from '../src/api'
-import { SCENARIOS } from '../src/scenarios'
-import type { Capabilities, Turn } from '../src/types'
+import { askStream, getCapabilities, getScenarios } from '../src/api'
+import type { Capabilities, Scenario, Turn } from '../src/types'
 import { canListen, listen, speak, stopSpeaking } from '../src/voice'
 
 type Tab = 'about' | 'builder' | 'chat'
@@ -173,10 +172,18 @@ function Chat({ caps }: { caps: Capabilities | null }) {
 export default function App() {
   const [tab, setTab] = useState<Tab>('chat')
   const [caps, setCaps] = useState<Capabilities | null>(null)
+  const [scenarios, setScenarios] = useState<Scenario[]>([])
 
   useEffect(() => {
     getCapabilities().then(setCaps).catch(() => setCaps(null))
     return () => stopSpeaking()
+  }, [])
+
+  // Scenarios come from the backend so both surfaces stay in step with the generator.
+  useEffect(() => {
+    getScenarios()
+      .then((r) => setScenarios(r.scenarios))
+      .catch(() => setScenarios([]))
   }, [])
 
   return (
@@ -220,7 +227,7 @@ export default function App() {
         {tab === 'builder' && (
           <div className="pad">
             <h2>Tell me about your customer</h2>
-            {SCENARIOS.map((s) => (
+            {scenarios.map((s) => (
               <div className="scard" key={s.id}>
                 <div className="icon">{s.icon}</div>
                 <div>
@@ -231,7 +238,9 @@ export default function App() {
               </div>
             ))}
             <p className="muted">
-              The four-question diagnostic is not wired yet — ask in Chat in the meantime.
+              {scenarios.length === 0
+                ? 'Loading scenarios…'
+                : 'The four-question diagnostic lands here once the desktop flow settles — ask in Chat in the meantime.'}
             </p>
           </div>
         )}

@@ -1,4 +1,12 @@
-import type { Answer, Capabilities, Collection } from './types'
+import type {
+  Answer,
+  Capabilities,
+  Collection,
+  Scenario,
+  ScenarioPackage,
+  Stage,
+  StageEvent,
+} from './types'
 
 // Both surfaces are served under the rail id by the gateway (the desktop remote at
 // /smb-partner-enablement/, the mobile SPA at /smb-partner-enablement/m/), so one absolute
@@ -32,6 +40,45 @@ export const ask = (body: {
   speak?: boolean
   voice_backend?: string
 }) => json<Answer>('/api/ask', { method: 'POST', body: JSON.stringify(body) })
+
+export const getScenarios = () =>
+  json<{ scenarios: Scenario[]; stages: Stage[] }>('/api/scenarios')
+
+export type PackageHandlers = {
+  onStage?: (e: StageEvent) => void
+  onPackage?: (p: ScenarioPackage) => void
+  onError?: (detail: string) => void
+}
+
+/**
+ * Streamed package generation. Five grounded passes run server-side and each reports a stage
+ * event, which is what lets the checklist show real progress instead of a spinner — the whole
+ * run is ~20s, long enough that an unexplained wait reads as broken.
+ *
+ * `POST /api/scenario/generate` returns the same package in one shot for clients that cannot
+ * hold a socket open; this path is preferred because it is the only one that shows progress.
+ */
+export function generatePackage(
+  body: { scenario_id: string; answers: Record<string, string> },
+  handlers: PackageHandlers,
+): () => void {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const ws = new WebSocket(`${proto}://${location.host}${BASE}/ws/scenario`)
+  ws.onopen = () => ws.send(JSON.stringify(body))
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data)
+    if (msg.type === 'stage') handlers.onStage?.(msg as StageEvent)
+    else if (msg.type === 'package') {
+      handlers.onPackage?.(msg.package)
+      ws.close()
+    } else if (msg.type === 'error') {
+      handlers.onError?.(msg.detail)
+      ws.close()
+    }
+  }
+  ws.onerror = () => handlers.onError?.('connection failed')
+  return () => ws.close()
+}
 
 export type StreamHandlers = {
   onCitations?: (c: Answer['citations'], grounded: boolean) => void
