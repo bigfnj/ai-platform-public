@@ -171,14 +171,14 @@ def _build_prompt(
             {
                 "id": 7,
                 "category": "client",
-                "headline": "Reply to Priya Sharma re: SOW milestone 3 — asked Tuesday, no response yet",
+                "headline": "Reply to Alex Chen re: Q3 roadmap deliverable — asked Tuesday, no response yet",
                 "urgency": "today",
                 "why": "Milestone sign-off gates the next invoice cycle.",
             }
         ],
         "client_pulse": "Two of three client threads are waiting on a reply from you.",
         "dangling": ["Promised the architecture diagram to Dan by EOW — not sent"],
-        "missed": ["Priya Sharma (client) — SOW milestone 3, last message Tuesday"],
+        "missed": ["Alex Chen (client) — Q3 roadmap deliverable, last message Tuesday"],
         "agenda_gaps": ["Delivery sync Thu 2pm — you organised it, no agenda set"],
         "suppressed": 0,
         "synthesis_note": None,
@@ -205,7 +205,7 @@ Field value rules:
 Attention list rules:
 - MAX 10 items
 - Headline: direct instruction, never a description
-  GOOD: "Reply to Priya Sharma re: SOW milestone 3 — asked Tuesday, no response yet"
+  GOOD: "Reply to Alex Chen re: Q3 roadmap deliverable — asked Tuesday, no response yet"
   BAD: "Email from Priya about SOW"
 - Only include items where inaction has a real consequence THIS WEEK
 
