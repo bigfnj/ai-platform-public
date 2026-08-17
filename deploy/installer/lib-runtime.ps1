@@ -245,6 +245,27 @@ function Get-ComposeProfiles {
 # Run `compose <args>` against whichever runtime is selected. Podman is driven with the standalone
 # docker-compose.exe over its Docker-compatible API pipe (the reference Compose implementation, so
 # profiles / ${VAR:-default} / depends_on all behave exactly as they did under Docker).
+function Write-NativeLine {
+  # Log-and-forward one line of native-tool output.
+  #
+  # Compose reports progress AND warnings on stderr, so `2>&1` is needed to capture them - but in
+  # PS 5.1 that wraps every stderr line in a NativeCommandError ErrorRecord, which the host renders
+  # as a red multi-line block with a source-line caret. A benign "volume already exists but was not
+  # created by Docker Compose" warning then reads exactly like a crash. Casting to [string] flattens
+  # the record back to the text the tool actually wrote.
+  #
+  # It also fixes the log: Tee-Object has no -Encoding on PS 5.1 and writes UTF-16 while Write-Log
+  # appends UTF-8 - which is why deploy/logs/startup.log came out as "C o n t a i n e r".
+  #
+  # Output still flows down the pipeline: smoke-test.ps1 reads `compose config --services` from it.
+  param([Parameter(ValueFromPipeline = $true)]$InputObject)
+  process {
+    $line = [string]$InputObject
+    try { Add-Content -Path $LogFile -Value $line -Encoding utf8 -ErrorAction Stop } catch {}
+    $line
+  }
+}
+
 function Invoke-Compose {
   param([string[]]$Arguments, [string]$Mode = $RuntimeMode)
   switch ($Mode) {
@@ -252,10 +273,10 @@ function Invoke-Compose {
       # No DOCKER_HOST needed when Docker isn't installed (podman claims //./pipe/docker_engine),
       # but set it explicitly so the target is never ambiguous.
       if (-not $env:DOCKER_HOST) { $env:DOCKER_HOST = "npipe:////./pipe/$PodmanMachine" }
-      & docker-compose @Arguments 2>&1 | Tee-Object -FilePath $LogFile -Append
+      & docker-compose @Arguments 2>&1 | Write-NativeLine
     }
-    'wsl' { & wsl.exe @(@('docker', 'compose') + $Arguments) 2>&1 | Tee-Object -FilePath $LogFile -Append }
-    default { & docker @(@('compose') + $Arguments) 2>&1 | Tee-Object -FilePath $LogFile -Append }
+    'wsl' { & wsl.exe @(@('docker', 'compose') + $Arguments) 2>&1 | Write-NativeLine }
+    default { & docker @(@('compose') + $Arguments) 2>&1 | Write-NativeLine }
   }
 }
 

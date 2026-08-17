@@ -72,9 +72,18 @@ try {
     & $NssmExe set $svc AppParameters       $psArgs                            2>&1 | Out-File $out -Append -Encoding utf8
     & $NssmExe set $svc AppDirectory        $Installer                         2>&1 | Out-File $out -Append -Encoding utf8
     & $NssmExe set $svc DisplayName         'AI-Platform Watchdog'             2>&1 | Out-File $out -Append -Encoding utf8
-    & $NssmExe set $svc Description         'Monitors AI-Platform health every 5 min; restarts the Podman stack on failure.' 2>&1 | Out-File $out -Append -Encoding utf8
+    & $NssmExe set $svc Description         'Starts the AI-Platform stack at boot and restarts it if health checks fail.' 2>&1 | Out-File $out -Append -Encoding utf8
     & $NssmExe set $svc Start               SERVICE_AUTO_START                 2>&1 | Out-File $out -Append -Encoding utf8
     & $NssmExe set $svc AppStopMethodSkip   6                                  2>&1 | Out-File $out -Append -Encoding utf8
+
+    # The watchdog cold-starts the podman machine, so it must not run before Hyper-V's VM management
+    # service is up. Without this the first boot attempt fails and recovery waits out a retry cycle.
+    & $NssmExe set $svc DependOnService     vmms                               2>&1 | Out-File $out -Append -Encoding utf8
+
+    # The loop is infinite; any exit is a fault. Restart it, but back off so a crash-loop cannot spin.
+    & $NssmExe set $svc AppExit Default     Restart                            2>&1 | Out-File $out -Append -Encoding utf8
+    & $NssmExe set $svc AppRestartDelay     15000                              2>&1 | Out-File $out -Append -Encoding utf8
+    & $NssmExe set $svc AppThrottle         10000                              2>&1 | Out-File $out -Append -Encoding utf8
 
     # Inject the user profile env so Podman finds its machine config + SSH key
     $envExtra = @(

@@ -1,18 +1,34 @@
 # AI-Platform Watchdog Service
 
-Monitors platform health every 5 minutes and recovers the Podman stack if it goes down
-mid-session — without requiring a reboot or manual intervention.
+Owns the platform lifecycle: brings the stack up at boot, and recovers it if it goes down
+mid-session — without a logon, a reboot, or any manual intervention.
 
 ## Architecture
 
 ```
-SCM (auto-start)
+SCM (auto-start, after vmms)
   └─ platform-watchdog  (NSSM, LocalSystem)
-       └─ platform-watchdog.ps1  (infinite loop)
-            ├─ GET localhost:1111/api/platform/healthz  every 5 min
-            ├─ two consecutive failures (30 s apart) → recovery
-            └─ platform-startup.ps1  (restart machine + compose up)
+       └─ platform-watchdog.ps1
+            ├─ COLD START  health check first; if down, platform-startup.ps1,
+            │              retried 6× at 30 s while Hyper-V finishes booting
+            └─ STEADY STATE  GET localhost:1111/api/platform/healthz every 5 min
+                 ├─ two consecutive failures (30 s apart) → recovery
+                 └─ platform-startup.ps1  (restart machine + compose up)
 ```
+
+### Cold start
+
+The service checks health **before** doing anything, so restarting it mid-session never
+bounces a platform that is already up. If the platform is down — the normal case at boot —
+it runs `platform-startup.ps1` immediately and retries, because the service starts early
+and Hyper-V may not be ready to start the podman machine on the first try.
+
+The service declares a dependency on **`vmms`** (Hyper-V Virtual Machine Management) so the
+SCM does not start it before the hypervisor can serve it.
+
+Because cold start lives here, **no logon Startup shortcut is required.** The platform is up
+before anyone logs on. (If you migrated from an earlier build, delete any leftover
+`AI-Platform*.lnk` from `shell:startup` — otherwise the stack is started twice at logon.)
 
 The service runs as **LocalSystem** with the logged-in user's profile paths injected
 via NSSM `AppEnvironmentExtra`, so Podman can find its machine config and SSH key:
