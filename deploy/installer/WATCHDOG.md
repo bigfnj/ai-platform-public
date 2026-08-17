@@ -9,26 +9,52 @@ mid-session — without a logon, a reboot, or any manual intervention.
 SCM (auto-start, after vmms)
   └─ platform-watchdog  (NSSM, LocalSystem)
        └─ platform-watchdog.ps1
-            ├─ COLD START  health check first; if down, platform-startup.ps1,
-            │              retried 6× at 30 s while Hyper-V finishes booting
-            └─ STEADY STATE  GET localhost:1111/api/platform/healthz every 5 min
+            ├─ COLD START  health check first; wait briefly for a logon, then
+            │              platform-startup.ps1, retried 6× at 30 s
+            └─ STEADY STATE  GET localhost:1111/api/platform/healthz every 60 s
                  ├─ two consecutive failures (30 s apart) → recovery
-                 └─ platform-startup.ps1  (restart machine + compose up)
+                 ├─ skipped while a docker-compose command is running
+                 └─ SYSTEM-owned machine + user logged on → handoff
 ```
+
+### Who starts the podman machine matters
+
+`gvproxy` creates `\\.\pipe\podman-machine-default` with a DACL belonging to **whichever
+account started the machine.** When LocalSystem starts it, the interactive user gets
+`permission denied` from `docker-compose` for the rest of the session — no rebuilds, no
+`compose up` — even though the platform serves fine on :1111.
+
+It gets worse: `podman machine stop` does **not** reap the proxy, and a standard user cannot
+kill a SYSTEM-owned one. The machine then becomes unstartable by *anyone* —
+`could not start api proxy since expected pipe is not available`. `Clear-StalePodmanProxy`
+in `lib-runtime.ps1` exists to break that deadlock, and only LocalSystem can run it.
+
+So the rule is: **whenever somebody is logged on, the platform is started in their session**,
+via a scheduled task with an Interactive principal (the one handoff that needs no stored
+password). LocalSystem starts it only when nobody is logged on, and hands it back — stop,
+reap, restart in session — as soon as somebody logs on. A failed handoff is attempted **once**
+and then logged, because falling back to a LocalSystem start would otherwise bounce the
+platform every minute forever.
 
 ### Cold start
 
 The service checks health **before** doing anything, so restarting it mid-session never
 bounces a platform that is already up. If the platform is down — the normal case at boot —
-it runs `platform-startup.ps1` immediately and retries, because the service starts early
-and Hyper-V may not be ready to start the podman machine on the first try.
+it waits up to 3 minutes for a logon (so it can start in the right session), then runs
+`platform-startup.ps1` and retries, because the service starts early and Hyper-V may not be
+ready to start the podman machine on the first try.
 
 The service declares a dependency on **`vmms`** (Hyper-V Virtual Machine Management) so the
 SCM does not start it before the hypervisor can serve it.
 
-Because cold start lives here, **no logon Startup shortcut is required.** The platform is up
-before anyone logs on. (If you migrated from an earlier build, delete any leftover
-`AI-Platform*.lnk` from `shell:startup` — otherwise the stack is started twice at logon.)
+The logon Startup shortcut (`AI-Platform startup.lnk` → `platform-startup-launcher.vbs`) is
+**still installed**, as a belt-and-braces path that always yields a user-owned machine. The
+two starters cannot collide: `platform-startup.ps1` takes a lock file
+(`deploy/logs/startup.lock`) and the loser exits without doing anything.
+
+If you migrated from an earlier build, delete any leftover `AI-Platform (Podman).lnk` from
+`shell:startup` — that one targets `powershell.exe -WindowStyle Hidden`, which Windows
+Terminal ignores, so it shows a console window at every logon *and* double-starts the stack.
 
 The service runs as **LocalSystem** with the logged-in user's profile paths injected
 via NSSM `AppEnvironmentExtra`, so Podman can find its machine config and SSH key:

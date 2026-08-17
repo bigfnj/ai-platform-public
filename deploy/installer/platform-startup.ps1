@@ -52,6 +52,52 @@ if (-not $RuntimeMode) {
   $RuntimeMode = if (Get-Command podman -ErrorAction SilentlyContinue) { 'podman' } else { 'desktop' }
 }
 
+# Two things can start the platform: the logon Startup shortcut, and the platform-watchdog service
+# (which also triggers this script in the user's session). Two concurrent `podman machine start`
+# runs fight over \\.\pipe\<machine> and can leave the machine unstartable by ANY account, so
+# serialise them. A lock FILE rather than a Global\ mutex: creating a Global object needs a
+# privilege a standard user does not have, and these two callers run under different accounts.
+$LockFile = Join-Path $LogDir 'startup.lock'
+
+function Enter-StartupLock {
+  for ($i = 0; $i -lt 60; $i++) {
+    if (Test-Path $LockFile) {
+      # Honour a live lock, but drop one whose owner died or wedged - a run that exits early (or is
+      # killed) would otherwise deadlock every future startup behind a file nobody owns.
+      $stale = $false
+      try {
+        $info = Get-Content $LockFile -Raw -ErrorAction Stop | ConvertFrom-Json
+        if (-not (Get-Process -Id $info.pid -ErrorAction SilentlyContinue)) { $stale = $true }
+        elseif (((Get-Date) - [datetime]$info.at).TotalMinutes -gt 10) { $stale = $true }
+      } catch { $stale = $true }
+
+      if ($stale) { Remove-Item $LockFile -Force -ErrorAction SilentlyContinue }
+      else { Start-Sleep -Seconds 5; continue }
+    }
+    try {
+      # CreateNew + no sharing: whoever wins the race owns the lock and the loser retries.
+      $fs = [System.IO.File]::Open($LockFile, 'CreateNew', 'Write', 'None')
+      $bytes = [Text.Encoding]::UTF8.GetBytes((@{ pid = $PID; at = (Get-Date).ToString('o') } | ConvertTo-Json -Compress))
+      $fs.Write($bytes, 0, $bytes.Length)
+      $fs.Close()
+      return $true
+    } catch { Start-Sleep -Seconds 2 }
+  }
+  return $false
+}
+
+function Exit-StartupLock {
+  try {
+    $info = Get-Content $LockFile -Raw -ErrorAction Stop | ConvertFrom-Json
+    if ($info.pid -eq $PID) { Remove-Item $LockFile -Force -ErrorAction SilentlyContinue }
+  } catch {}
+}
+
+if (-not (Enter-StartupLock)) {
+  Write-Log 'another startup run holds the lock and has not finished; leaving the work to it.'
+  exit 0
+}
+
 Write-Log "=== AI-Platform startup ($RuntimeMode) ==="
 
 $envFile = Join-Path $Root 'deploy\.env'
@@ -101,3 +147,4 @@ try {
   Write-Log 'WARNING: the gateway did not answer on :1111 - check `podman ps` and the container logs.'
 }
 Write-Log '=== startup done ==='
+Exit-StartupLock

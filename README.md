@@ -32,6 +32,7 @@ gateway, entitlement-gated, with all model work routed through the broker. The s
 | **workstation** | 💻 | A browser terminal into the host over SSH. Highest-privilege rail, entitlement-gated to a single owner. |
 | **terminal-fun** | 🕹️ | Self-hosted terminal games and toys with an in-terminal AI helper. Sandboxed, no host access. |
 | **ai-playground** | 🛝 | A multi-demo rail: a RAG-over-documents demo (local or NVIDIA NIM generation, WebSocket token streaming) plus an Embedding Lab that benchmarks embedders head-to-head (GPU vs CPU-ONNX) with optional CPU cross-encoder reranking. |
+| **smb-partner-enablement** | 🤝 | Microsoft Partner Network SME assistant for the SMB segment: a grounded knowledge base (CSP licensing, designations, MCEM, incentives, Partner Center) behind RAG, plus a Scenario Builder that turns a short diagnostic into a meeting kit. Includes a standalone mobile build. |
 
 Rails enforce identity in-rail too, not just at the gateway: jobs and data are owner-scoped where a
 rail is multi-user, and requests fail closed without the gateway's trusted identity header.
@@ -88,3 +89,9 @@ docker compose up -d --build --no-deps <service>
 # local: http://localhost:1111
 # (platform.localhost is intercepted by some corporate proxies — use the plain localhost form)
 ```
+
+You do not normally run any of this by hand. On Windows the **`platform-watchdog`** service
+(NSSM, LocalSystem, auto-start) owns the lifecycle: it brings the stack up at boot and restarts
+it if health checks fail. It deliberately starts the platform *in the logged-on user's session*
+so the podman machine — and its API pipe — belongs to you and your `docker-compose` keeps
+working. See [`deploy/installer/WATCHDOG.md`](deploy/installer/WATCHDOG.md).
