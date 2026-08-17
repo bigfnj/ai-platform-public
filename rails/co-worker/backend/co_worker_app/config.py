@@ -31,5 +31,13 @@ class Settings(BaseSettings):
     broker_url: str = "http://host.docker.internal:11500"
     broker_auth_token: str = ""
 
+    # Synthesize-on-staleness: auto-trigger a synthesis pass when the brief is older than
+    # the current inbox. Set CO_WORKER_AUTO_SYNTHESIZE=false to disable entirely.
+    auto_synthesize: bool = True
+    # Minimum seconds between auto-triggered attempts (not applied to manual clicks).
+    auto_synthesize_min_interval_s: int = 900
+    # Tolerance for clock skew / filesystem timestamp granularity on the Windows bind mount.
+    auto_synthesize_mtime_epsilon_s: float = 2.0
+
 
 settings = Settings()

@@ -135,12 +135,22 @@ export default function BriefView({
   const [note, setNote] = useState('')
   const [showPrompts, setShowPrompts] = useState(false)
   const poll = useRef<number | null>(null)
+  const startPollingRef = useRef<(() => void) | undefined>(undefined)
 
   const load = useCallback(() => {
     setLoading(true)
     setErr('')
     getJSON<Brief>('/api/brief')
-      .then((b) => { setBrief(b); setLoading(false) })
+      .then((b) => {
+        setBrief(b)
+        setLoading(false)
+        if (b.stale_source) {
+          setNote('Harvest data changed since the last pass — re-synthesizing…')
+          postJSON('/api/brief/refresh?auto=1')
+            .then(() => { setBusy(true); startPollingRef.current?.() })
+            .catch(() => { setNote('') }) // 409 (already running) or cooldown — leave stale brief
+        }
+      })
       .catch((e) => { setErr(String(e)); setLoading(false) })
   }, [])
 
@@ -169,6 +179,8 @@ export default function BriefView({
       }
     }, 3000)
   }, [load])
+
+  startPollingRef.current = startPolling
 
   const refresh = useCallback(async () => {
     setBusy(true)

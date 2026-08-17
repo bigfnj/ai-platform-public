@@ -86,6 +86,20 @@ The pass deliberately drops:
 `suppressed` makes the volume of that filtering visible. If it looks wrong, the raw
 grid is one tab away — nothing is ever hidden, only deprioritised.
 
+## Backend-injected fields
+
+These are added by `synthesize.py` or `main.py` and are never written by the harvest loops.
+They are safe to ignore by anything that reads `brief.json` directly.
+
+| Field | Written by | Notes |
+|---|---|---|
+| `_source_signature` | `synthesize.py` | `[item_count, newest_item_mtime]` — the identity of the inbox when this brief was produced. Used by `_brief_is_stale()` in `main.py` to detect genuine staleness without a mtime comparison that misses deletions. |
+| `_mtime` | `GET /api/brief` | File mtime of `brief.json` — added at read time, not stored. |
+| `age_hours` | `GET /api/brief` | `(now - _mtime) / 3600`. |
+| `stale` | `GET /api/brief` | `age_hours > 12` (time-based, advisory). |
+| `stale_source` | `GET /api/brief` | True when `_source_signature` says the inbox changed since synthesis (and `CO_WORKER_AUTO_SYNTHESIZE` is on). The frontend auto-triggers a refresh when this is true. |
+| `stale_reason` | `GET /api/brief` | Human-readable reason — "item count changed (209 -> 211)", "an item was rewritten after the last synthesis", "brief predates staleness tracking". |
+
 ## Operational notes
 
 - **Atomic write.** `mkstemp` + `os.replace`, same as `.state.json`. A torn brief would

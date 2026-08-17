@@ -407,6 +407,14 @@ def synthesize(inbox: Path, dry_run: bool = False) -> dict:
     if sent < unresolved_total:
         brief["truncated"] = unresolved_total - sent
 
+    # Record source signature so the staleness check can compare (item_count, newest_mtime)
+    # against what was actually summarised, not whatever is on disk at read time.
+    item_files = [p for p in inbox.glob("*.json")
+                  if not p.name.startswith(".") and p.name != BRIEF_FILE]
+    sig_count = len(item_files)
+    sig_mtime = max((p.stat().st_mtime for p in item_files), default=0.0)
+    brief["_source_signature"] = [sig_count, sig_mtime]
+
     write_json(inbox / BRIEF_FILE, brief)
 
     _log.info(

@@ -221,6 +221,10 @@ export interface Brief {
   items_read?: number
   /** Set when the context budget forced items to be dropped. */
   truncated?: number
+  /** True when the inbox has changed since the brief was synthesized (and auto_synthesize is on). */
+  stale_source?: boolean
+  /** Human-readable reason for staleness (item count changed, item rewritten, etc.). */
+  stale_reason?: string | null
 }
 
 export interface BriefStatus {

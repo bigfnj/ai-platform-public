@@ -44,7 +44,7 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from co_worker_app.atomicio import write_json
@@ -52,6 +52,8 @@ from co_worker_app.config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 _log = logging.getLogger("co-worker")
+
+_last_auto_attempt: float = 0.0  # epoch seconds; guards auto-synthesis rate
 
 app = FastAPI(title="Co-Worker", version="0.2.0")
 
@@ -149,6 +151,41 @@ def _collect(
             continue
         items.append(item)
     return items, skipped
+
+
+# --- staleness helpers -------------------------------------------------------
+
+
+def _inbox_signature() -> tuple[int, float]:
+    """(item_count, newest_item_mtime) — identity of the current synthesis input set.
+
+    item_count catches additions and deletions; newest_mtime catches rewrites.
+    Stored inside brief.json so the signal survives a restart with no extra state file.
+    """
+    files = _item_files()
+    return len(files), max((p.stat().st_mtime for p in files), default=0.0)
+
+
+def _brief_is_stale(brief: dict[str, Any]) -> tuple[bool, str]:
+    """Has the source set changed since this brief was written?
+
+    Compares against the signature the synthesis pass recorded, NOT the brief
+    file's own mtime — that cannot detect deletions or mtime-preserving writes.
+    Returns (stale, reason). reason is empty when not stale.
+    """
+    count, newest = _inbox_signature()
+    sig = brief.get("_source_signature")
+
+    if not isinstance(sig, list) or len(sig) != 2:
+        return True, "brief predates staleness tracking"
+
+    old_count, old_newest = sig
+    if count != old_count:
+        return True, f"item count changed ({int(old_count)} -> {count})"
+    epsilon = settings.auto_synthesize_mtime_epsilon_s
+    if newest > float(old_newest) + epsilon:
+        return True, "an item was rewritten after the last synthesis"
+    return False, ""
 
 
 # --- routes ----------------------------------------------------------------
@@ -260,17 +297,35 @@ def brief_get(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
     age_h = (time.time() - p.stat().st_mtime) / 3600
     brief["age_hours"] = round(age_h, 1)
     brief["stale"] = age_h > 12
+
+    stale, reason = _brief_is_stale(brief)
+    brief["stale_source"] = stale and settings.auto_synthesize
+    brief["stale_reason"] = reason or None
+
     return brief
 
 
 @app.post("/api/brief/refresh")
-def brief_refresh(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
+def brief_refresh(
+    x_platform_user: str = Header(default="?"),
+    auto: bool = Query(default=False, description="True when triggered automatically by staleness detection; applies the cooldown floor."),
+) -> dict[str, Any]:
     """Queue a synthesis run. Returns immediately — poll /api/brief/status.
 
     Refuses rather than queues when a run is already in flight: two concurrent
     passes would race on brief.json and waste a model call.
+
+    ?auto=1 is set by the frontend's staleness auto-trigger. Manual clicks omit it
+    and always bypass the cooldown, so a human is never told to wait.
     """
+    global _last_auto_attempt
     from co_worker_app.synthesize import get_status, synthesize_background
+
+    if auto:
+        now = time.time()
+        if now - _last_auto_attempt < settings.auto_synthesize_min_interval_s:
+            return {"started": False, "reason": "cooldown", **get_status()}
+        _last_auto_attempt = now
 
     started = synthesize_background(_inbox())
     if not started:
