@@ -13,7 +13,10 @@ Routes:
   GET   /api/brief/status   whether a synthesis run is in flight
 
 The brief is the LANDING VIEW: 147 raw items are not actionable, so a synthesis pass
-(frontier model via the broker) reduces them to what actually needs attention this week.
+(local model via the broker — @co-worker-synthesis role, currently gemma3:4b) reduces
+them to what actually needs attention this week. Re-synthesize re-summarizes existing
+inbox items; it does NOT refresh the harvest. Only the co-work harvest loops (which hold
+M365 credentials) can update the underlying inbox/*.json files.
 The raw card grid remains available as a second tab. Synthesis writes inbox/brief.json;
 this backend only ever reads that file — no model call happens on the read path.
 
