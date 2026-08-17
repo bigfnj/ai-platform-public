@@ -134,25 +134,149 @@ _HARD_RULES: dict[tuple[str, str], str] = {
     ("sites", "2–5 sites"):
         "A customer this small is very unlikely to be a Microsoft-managed account, so Azure IP "
         "co-sell deal registration is probably NOT available. Give the partner-led path instead.",
-    ("size", "300 or more"):
-        "Past the pooled 300-seat Business-family cap — Enterprise licensing (E3/E5) is required "
-        "and the partner-led Copilot trial, scoped under 300 employees, does not apply.",
-    ("sellers", "300 or more"):
-        "Past the pooled 300-seat Business-family cap — Enterprise licensing (E3/E5) is required.",
+    ("sites", "More than 50 sites"):
+        "A group this size is likely a Microsoft-managed account, so co-sell and deal registration "
+        "are plausibly available — but confirm managed status in Partner Center rather than "
+        "assuming it.",
+    # --- foundation-before-AI rules -------------------------------------------------------------
+    # These exist because the corpus is explicit that Microsoft positions security as the
+    # prerequisite for AI readiness in SMB, and because selling Copilot onto a broken foundation is
+    # how these deals unravel after signature.
+    ("mfa", "No"):
+        "Multi-factor authentication is NOT deployed. This is a foundational security gap. Lead "
+        "with the security foundation — Microsoft positions security as the prerequisite for AI "
+        "readiness — and do NOT make Copilot the headline recommendation for this customer.",
+    ("mfa", "They think so but nobody has checked"):
+        "Security posture is unverified. Recommend an assessment as the first engagement rather "
+        "than a product, because every later recommendation depends on what it finds.",
+    ("crm", "Paper, whiteboards or memory"):
+        "There is NO system of record for customer data. Copilot for Sales works on top of CRM "
+        "data, so it cannot deliver value here yet. Do not recommend Copilot for Sales as the "
+        "answer — the CRM foundation comes first.",
+    ("crm", "A CRM nobody keeps up to date"):
+        "The CRM exists but is not maintained, so this is an adoption problem rather than a tooling "
+        "problem. AI over stale data will underperform and damage trust; address adoption first.",
+    ("files", "Scattered across several of these"):
+        "Client files are spread across multiple unmanaged locations. Governance and AI both "
+        "require knowing where data is, so discovery and consolidation precede any Copilot or "
+        "Purview recommendation.",
+    ("itowner", "An outside IT company"):
+        "An incumbent IT provider holds this account. Any recommendation has to account for them — "
+        "either partner with them or displace them deliberately — and they will likely be in the "
+        "room for the technical decision.",
+    ("decision", "Nobody has been identified yet"):
+        "No buying decision-maker has been identified. This is a qualification gap: the immediate "
+        "next move is to find who signs, not to propose a solution.",
 }
 
 
 def _constraints(resolved: list[dict[str, str]], scenario_id: str) -> list[str]:
     """Collect the hard rules triggered by this set of answers."""
-    scenario = scenarios.SCENARIOS_BY_ID.get(scenario_id, {})
-    prompts = {q["prompt"]: q["id"] for q in scenario.get("questions", [])}
     out: list[str] = []
     for item in resolved:
-        qid = prompts.get(item["question"])
-        rule = _HARD_RULES.get((qid or "", item["answer"]))
+        rule = _HARD_RULES.get((item.get("id", ""), item["answer"]))
         if rule and rule not in out:
             out.append(rule)
     return out
+
+
+#: Licensing path implied by headcount. Derived, not generated: the mapping is a published rule
+#: (the pooled 300-seat Business-family cap) and a model has no business re-deciding it per run.
+_LICENCE_PATH: dict[str, str] = {
+    "More than 300":
+        "**Enterprise licensing (E3 or E5).** This customer is past the pooled 300-seat cap that "
+        "applies across Business Basic, Standard and Premium combined, so the Business family "
+        "cannot be the primary plan. The partner-led Copilot trial does not apply either — it is "
+        "scoped to customers under 300 employees.",
+    "100–300":
+        "**Business family, but plan for the ceiling.** Business Premium fits today, though the "
+        "300-seat cap is pooled across all Business plans and this customer is close enough to it "
+        "that growth should be part of the conversation now rather than at renewal.",
+    "25–100":
+        "**Business Premium is the natural fit** — it carries the security and compliance layer "
+        "Microsoft positions as the prerequisite for AI adoption, and it sits inside the "
+        "300-seat Business-family cap with room to grow.",
+    "Fewer than 25":
+        "**Business Premium, and the whole business fits one trial.** The partner-led Copilot "
+        "trial covers 25 seats, so at this size a trial can include everyone rather than a "
+        "selected pilot group.",
+}
+
+#: Frontline signal → licence-mix note. Keyed on the answers that reveal unlicensed staff.
+_FRONTLINE_NOTE: dict[str, str] = {
+    "Managers and head office only":
+        "Store staff have no work account today, so they are frontline seats — materially cheaper "
+        "per user than a full knowledge-worker licence. That gap is usually where the commercial "
+        "conversation opens.",
+    "Head office only":
+        "Almost the entire workforce is unlicensed, which is the largest frontline seat "
+        "opportunity of any answer here.",
+    "Almost nobody — they use personal email":
+        "Nobody has a work account. Alongside the licensing opportunity this is an identity and "
+        "offboarding risk the customer has probably not considered.",
+    "No — they use personal phones and email":
+        "Site managers have no work account. Alongside the licensing opportunity this is an "
+        "identity and offboarding risk worth naming.",
+    "Managers do, floor staff do not":
+        "Floor staff are unlicensed and are frontline seats; managers are the knowledge-worker "
+        "population.",
+    "Only head office has them":
+        "Almost the entire workforce is unlicensed — the strongest frontline case available.",
+}
+
+
+def _build_scenario_card(scenario: dict[str, Any], resolved: list[dict[str, str]],
+                         constraints: list[str]) -> str:
+    """Assemble the Scenario Card in code rather than generating it.
+
+    This was a model pass and it was the weakest output in the package: asked for a card, a 3B
+    model bullet-listed the diagnostic answers back at the partner — "16–50 locations", "25–100
+    employees", "Upgrade motion" — which is information they had just typed in. It also, on one
+    run, restated a customer's licensing position as the opposite of what the answers said.
+
+    Nothing in this card requires judgement. The profile is the answers, the ruled-out list is the
+    deterministic constraint table, and the licensing path follows a published rule. Building it
+    here makes it correct by construction, removes a generation pass, and leaves the model to do
+    only the four jobs that genuinely need reasoning.
+    """
+    by_id = {r["id"]: r for r in resolved if r.get("id")}
+    answered = [r for r in resolved if r["answer"] != scenarios.UNKNOWN_LABEL]
+    unknown = [r for r in resolved if r["answer"] == scenarios.UNKNOWN_LABEL]
+
+    lines = [f"## Customer profile", "",
+             f"{scenario['title']} — {scenario['fit']}.", ""]
+    if answered:
+        for item in answered:
+            lines.append(f"- **{item['question']}** {item['answer']}")
+        lines.append("")
+
+    head = by_id.get("headcount", {}).get("answer", "")
+    path = _LICENCE_PATH.get(head)
+    if path:
+        lines += ["## Licensing path", "", path, ""]
+        for qid in ("workforce", "managers"):
+            note = _FRONTLINE_NOTE.get(by_id.get(qid, {}).get("answer", ""))
+            if note:
+                lines += [note, ""]
+                break
+
+    if constraints:
+        lines += ["## What this rules out", "",
+                  "These follow from the answers above and are not negotiable:", ""]
+        lines += [f"- {c}" for c in constraints]
+        lines.append("")
+
+    if unknown:
+        lines += ["## Still to establish", "",
+                  "You left these open, so nothing in this package assumes an answer. They lead "
+                  "the Discovery Playbook:", ""]
+        lines += [f"- {u['question']}" for u in unknown]
+        lines.append("")
+
+    lines += ["---", "",
+              "*Licensing figures and program mechanics change every Microsoft fiscal year. "
+              "Confirm the current price list and eligibility in Partner Center before quoting.*"]
+    return "\n".join(lines).strip()
 
 
 def _split_known(resolved: list[dict[str, str]]) -> tuple[list[dict], list[dict]]:
@@ -262,14 +386,6 @@ _PASSES: list[tuple[str, str, str, list[str], str]] = [
      "which solution to lead with, deal registration eligibility, and the Partner Center action",
      ["partner-center", "incentives-funding"],
      "Your next move: "),
-    ("scenario_card",
-     "Write a Scenario Card with these markdown headings and nothing else: '## Customer profile', "
-     "'## Primary pain', '## Microsoft solution fit', '## Licensing considerations', "
-     "'## Deal registration path'. Under Licensing considerations, name only products and rules "
-     "that appear in the context — include any seat-count ceiling that applies.",
-     "licensing families, seat limits and solution fit for this customer profile",
-     ["csp-licensing", "designations"],
-     "## Customer profile\n"),
     ("discovery",
      "Write a Discovery Playbook: five questions this partner should ask on the call. For each, "
      "give the question in bold and one sentence on the signal a good answer gives.\n\n"
@@ -337,14 +453,22 @@ async def generate_package(scenario_id: str, answers: dict[str, str],
     await send("stage", {"key": "ground", "state": "done",
                          "grounded": bool(probe), "sources": len(probe)})
 
+    # The scenario card is assembled, not generated — see _build_scenario_card. It is reported as
+    # a stage because it IS a real step; it simply completes immediately.
+    await send("stage", {"key": "scenario_card", "state": "active"})
+    card = _build_scenario_card(scenario, resolved, constraints)
+    await send("stage", {"key": "scenario_card", "state": "done", "deterministic": True})
+
     package: dict[str, Any] = {
         "scenario": {k: scenario[k] for k in ("id", "title", "icon", "fit", "situation")},
         "answers": resolved,
         # Surfaced so the UI can show the partner what the tool ruled out and why — a constraint
         # the assistant silently obeyed teaches nothing.
         "constraints": constraints,
-        "outputs": {},
-        "citations": {},
+        "outputs": {"scenario_card": card},
+        # No citations: this card restates the partner's own answers and applies published rules,
+        # so there is no retrieved passage to attribute it to.
+        "citations": {"scenario_card": []},
         "grounded": bool(probe),
     }
 
