@@ -95,11 +95,14 @@ def replace_collection(name: str, label: str, origin: str, rows: list[dict],
     return len(rows)
 
 
-def delete_collection(name: str) -> None:
+def delete_collection(name: str) -> int:
+    """Drop a collection and its chunks. Returns how many chunks were removed, which ingest
+    reports so a silent cleanup is visible rather than mysterious."""
     with connect() as conn:
-        conn.execute("DELETE FROM chunks WHERE collection = ?", (name,))
+        removed = conn.execute("DELETE FROM chunks WHERE collection = ?", (name,)).rowcount
         conn.execute("DELETE FROM collections WHERE name = ?", (name,))
     reload_matrix()
+    return max(removed, 0)
 
 
 def reload_matrix() -> None:

@@ -20,15 +20,16 @@ dated, or from the partner's own inputs.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from smb_partner import broker, config, rag, scenarios, store
 
 log = logging.getLogger("smb_partner.generate")
 
-Emit = Callable[[str, dict[str, Any]], None]
+Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 # A 3B model reliably opens by restating its input. These are the shapes it produces; they are
 # stripped rather than prompted away, because prompting alone did not hold.
@@ -92,6 +93,68 @@ _BASE_RULES = (
 _OPTIONS_BASE = {"temperature": 0.2, "top_p": 0.9}
 
 
+#: Hard rules derived deterministically from an answer, keyed by ``(question id, answer label)``.
+#:
+#: These are constraints, not hints. An A/B run over identical retailers differing only in
+#: headcount showed the model surfacing the 300-seat cap in the scenario card while its directional
+#: close still recommended "upgrading to Business Premium" for a 300+ seat customer — advice that
+#: cannot be executed. A 3B model will not reliably derive a hard limit from retrieved prose, so
+#: the limit is computed here and handed over as something it may not contradict.
+#:
+#: Only rules the knowledge base actually supports belong here. Each maps to sourced material:
+#: the pooled Business-family cap, the sub-300-employee scope of the partner-led Copilot trial,
+#: and the Microsoft-managed-account requirement for co-sell deal registration.
+_HARD_RULES: dict[tuple[str, str], str] = {
+    ("headcount", "More than 300"):
+        "This customer is PAST the pooled 300-seat Microsoft 365 Business-family cap. Business "
+        "Basic, Business Standard and Business Premium are NOT viable as the primary plan — "
+        "Enterprise licensing (E3/E5) is required. Do not recommend a Business-family plan as the "
+        "answer, and do not offer the partner-led Copilot trial, which is scoped to customers "
+        "under 300 employees.",
+    ("headcount", "Fewer than 25"):
+        "The entire business fits inside a single 25-seat Copilot trial cohort, so a trial can "
+        "cover everyone rather than a pilot group.",
+    ("relationship", "Yes, but another partner holds the tenant"):
+        "You do NOT have tenant visibility and cannot inspect or transact on this tenant. Any "
+        "advice that depends on reading Partner Center data is not executable until the partner "
+        "relationship changes — lead with that, not with a product recommendation.",
+    ("relationship", "No — I'm trying to win them"):
+        "This is net-new. You have no tenant visibility and no existing incentive position, so "
+        "do not describe this as an upgrade or renewal motion.",
+    # Deal registration requires a Microsoft-managed account, and smaller customers usually are
+    # not managed. Stated unconditionally at the small end because it is the single most useful
+    # correction the tool can make — a partner chasing an unavailable registration wastes the deal.
+    ("locations", "2–5 locations"):
+        "A customer this small is very unlikely to be a Microsoft-managed account, so Azure IP "
+        "co-sell deal registration is probably NOT available. Do not recommend registering the "
+        "deal; give the partner-led path instead.",
+    ("locations", "6–15 locations"):
+        "A customer this size is more likely unmanaged than managed, so co-sell deal registration "
+        "may well be unavailable. Tell the partner to confirm managed status before relying on it.",
+    ("sites", "2–5 sites"):
+        "A customer this small is very unlikely to be a Microsoft-managed account, so Azure IP "
+        "co-sell deal registration is probably NOT available. Give the partner-led path instead.",
+    ("size", "300 or more"):
+        "Past the pooled 300-seat Business-family cap — Enterprise licensing (E3/E5) is required "
+        "and the partner-led Copilot trial, scoped under 300 employees, does not apply.",
+    ("sellers", "300 or more"):
+        "Past the pooled 300-seat Business-family cap — Enterprise licensing (E3/E5) is required.",
+}
+
+
+def _constraints(resolved: list[dict[str, str]], scenario_id: str) -> list[str]:
+    """Collect the hard rules triggered by this set of answers."""
+    scenario = scenarios.SCENARIOS_BY_ID.get(scenario_id, {})
+    prompts = {q["prompt"]: q["id"] for q in scenario.get("questions", [])}
+    out: list[str] = []
+    for item in resolved:
+        qid = prompts.get(item["question"])
+        rule = _HARD_RULES.get((qid or "", item["answer"]))
+        if rule and rule not in out:
+            out.append(rule)
+    return out
+
+
 def _split_known(resolved: list[dict[str, str]]) -> tuple[list[dict], list[dict]]:
     """Separate answered questions from the ones the partner flagged as unknown."""
     known = [r for r in resolved if r["answer"] != scenarios.UNKNOWN_LABEL]
@@ -99,7 +162,8 @@ def _split_known(resolved: list[dict[str, str]]) -> tuple[list[dict], list[dict]
     return known, unknown
 
 
-def _brief(scenario: dict[str, Any], resolved: list[dict[str, str]]) -> str:
+def _brief(scenario: dict[str, Any], resolved: list[dict[str, str]],
+           constraints: list[str] | None = None) -> str:
     """The customer picture, assembled from the diagnostic answers. This is stage one — it is
     genuine work (it is what every later pass is conditioned on), not a loading message.
 
@@ -119,27 +183,48 @@ def _brief(scenario: dict[str, Any], resolved: list[dict[str, str]]) -> str:
                       "an answer, and do not build a recommendation that depends on them:"]
         for item in unknown:
             lines.append(f"- {item['question']}")
+    # Last, and therefore closest to the instruction — a 3B model weights the end of a long
+    # prompt more heavily than the middle.
+    if constraints:
+        lines += ["", "NON-NEGOTIABLE CONSTRAINTS. These are established facts about this "
+                      "customer's eligibility. Every recommendation you make must comply with "
+                      "them, and you must not suggest anything they rule out:"]
+        for rule in constraints:
+            lines.append(f"- {rule}")
     return "\n".join(lines)
 
 
-def _retrieve(query: str, collections: list[str], k: int) -> list[dict]:
-    chunks, matrix = store.snapshot()
-    if not chunks:
-        return []
-    return rag.rank(query, chunks, matrix, k=k, collections=set(collections))
+async def _retrieve(query: str, collections: list[str], k: int) -> list[dict]:
+    """Retrieval embeds the query over blocking HTTP, so it runs off the event loop."""
+    def _work() -> list[dict]:
+        chunks, matrix = store.snapshot()
+        if not chunks:
+            return []
+        return rag.rank(query, chunks, matrix, k=k, collections=set(collections))
+    return await asyncio.to_thread(_work)
 
 
-def _pass(kind: str, brief: str, instruction: str, query: str, collections: list[str],
-          k: int = 6, prefill: str = "") -> tuple[str, list[dict], list[str]]:
+async def _pass(kind: str, brief: str, instruction: str, query: str, collections: list[str],
+                k: int = 6, prefill: str = "", emit: Emit | None = None,
+                ) -> tuple[str, list[dict], list[str]]:
     """One grounded generation pass.
 
     ``prefill`` seeds the assistant turn so the model *continues* a required opening rather than
     reformatting around it — without it, asked to begin with "Your next move:", the model put
     that phrase at the very end after a page of restatement.
 
-    Returns the text, the hits it was grounded on, and any sentences dropped by the numeric guard.
+    Emits its retrieval and then its tokens, so the UI can show what the pass is standing on and
+    what it is producing. Returns the text, the hits, and any sentences dropped by the guard.
     """
-    hits = _retrieve(query, collections, k)
+    hits = await _retrieve(query, collections, k)
+    if emit:
+        # The retrieval is the most legible part of the reasoning — it shows which sourced material
+        # this pass stands on, and how well each piece matched.
+        await emit("retrieval", {"key": kind, "query": query, "hits": [
+            {"title": h.get("title", ""), "source": h["source"],
+             "collection": h["collection"], "score": round(float(h["score"]), 3)}
+            for h in hits
+        ]})
     context = rag.build_context(hits) or "(no supporting context was retrieved)"
     messages = [
         {"role": "system", "content": _BASE_RULES},
@@ -148,9 +233,14 @@ def _pass(kind: str, brief: str, instruction: str, query: str, collections: list
     ]
     if prefill:
         messages.append({"role": "assistant", "content": prefill})
-    text = broker.chat(config.RAG_MODEL, messages,
-                       options={**_OPTIONS_BASE, "num_predict": _BUDGETS.get(kind, 400)})
-    text = _strip_preamble(prefill + text if prefill else text)
+    parts: list[str] = []
+    async for delta in broker.chat_stream(
+            config.RAG_MODEL, messages,
+            options={**_OPTIONS_BASE, "num_predict": _BUDGETS.get(kind, 400)}):
+        parts.append(delta)
+        if emit:
+            await emit("token", {"key": kind, "token": delta})
+    text = _strip_preamble(prefill + "".join(parts) if prefill else "".join(parts))
     # Every pass is scrubbed, not just the value summary: an invented seat count in the scenario
     # card is exactly as damaging as an invented saving in the ROI.
     text, removed = _scrub_invented_numbers(text, context)
@@ -211,8 +301,8 @@ _PASSES: list[tuple[str, str, str, list[str], str]] = [
 ]
 
 
-def generate_package(scenario_id: str, answers: dict[str, str],
-                     emit: Emit | None = None) -> dict[str, Any]:
+async def generate_package(scenario_id: str, answers: dict[str, str],
+                           emit: Emit | None = None) -> dict[str, Any]:
     """Run the full diagnostic → package generation, reporting progress through ``emit``.
 
     ``emit(event, payload)`` receives ``stage`` events as each pass starts and completes. A pass
@@ -223,34 +313,48 @@ def generate_package(scenario_id: str, answers: dict[str, str],
     if scenario is None:
         raise ValueError(f"unknown scenario {scenario_id!r}")
     resolved = scenarios.resolve_answers(scenario_id, answers)
-    send = emit or (lambda *_: None)
 
-    send("stage", {"key": "analyze", "state": "active"})
-    brief = _brief(scenario, resolved)
-    send("stage", {"key": "analyze", "state": "done"})
+    async def send(event: str, payload: dict[str, Any]) -> None:
+        if emit:
+            await emit(event, payload)
+
+    await send("stage", {"key": "analyze", "state": "active"})
+    # Constraints are computed deterministically, not generated — this is the step where the rail
+    # decides what is and is not executable for this customer.
+    constraints = _constraints(resolved, scenario_id)
+    brief = _brief(scenario, resolved, constraints)
+    known, unknown = _split_known(resolved)
+    # Reported individually so the UI can name the rules that fired. A constraint the assistant
+    # silently obeyed demonstrates nothing; one the partner can read is the product.
+    await send("analysis", {"known": len(known), "unknown": [u["question"] for u in unknown],
+                            "constraints": constraints})
+    await send("stage", {"key": "analyze", "state": "done", "constraints": len(constraints)})
 
     # The grounding stage is real: it proves the corpus can serve this scenario at all, and its
     # result is surfaced so an empty knowledge base is visible rather than silently degrading.
-    send("stage", {"key": "ground", "state": "active"})
-    probe = _retrieve(f"{scenario['title']} {scenario['fit']}", scenario["collections"], 4)
-    send("stage", {"key": "ground", "state": "done",
-                   "grounded": bool(probe), "sources": len(probe)})
+    await send("stage", {"key": "ground", "state": "active"})
+    probe = await _retrieve(f"{scenario['title']} {scenario['fit']}", scenario["collections"], 4)
+    await send("stage", {"key": "ground", "state": "done",
+                         "grounded": bool(probe), "sources": len(probe)})
 
     package: dict[str, Any] = {
         "scenario": {k: scenario[k] for k in ("id", "title", "icon", "fit", "situation")},
         "answers": resolved,
+        # Surfaced so the UI can show the partner what the tool ruled out and why — a constraint
+        # the assistant silently obeyed teaches nothing.
+        "constraints": constraints,
         "outputs": {},
         "citations": {},
         "grounded": bool(probe),
     }
 
     for key, instruction, query_suffix, extra, prefill in _PASSES:
-        send("stage", {"key": key, "state": "active"})
+        await send("stage", {"key": key, "state": "active"})
         query = f"{scenario['title']} {scenario['fit']} — {query_suffix}"
         collections = list(dict.fromkeys(scenario["collections"] + extra))
         try:
-            text, hits, removed = _pass(key, brief, instruction, query, collections,
-                                        prefill=prefill)
+            text, hits, removed = await _pass(key, brief, instruction, query, collections,
+                                              prefill=prefill, emit=emit)
             package["outputs"][key] = text
             package["citations"][key] = [
                 {"source": h["source"], "collection": h["collection"], "title": h.get("title", "")}
@@ -260,12 +364,12 @@ def generate_package(scenario_id: str, answers: dict[str, str],
                 # Surfaced, not hidden: a partner should know the assistant suppressed a figure
                 # rather than wonder why the summary reads thin.
                 package.setdefault("suppressed", {})[key] = len(removed)
-            send("stage", {"key": key, "state": "done", "suppressed": len(removed)})
+            await send("stage", {"key": key, "state": "done", "suppressed": len(removed)})
         except broker.BrokerError as exc:
             log.warning("pass %s failed: %s", key, exc)
             package["outputs"][key] = ""
             package["citations"][key] = []
             package.setdefault("errors", {})[key] = str(exc)
-            send("stage", {"key": key, "state": "error", "detail": str(exc)})
+            await send("stage", {"key": key, "state": "error", "detail": str(exc)})
 
     return package

@@ -1,7 +1,9 @@
 import type {
+  AnalysisEvent,
   Answer,
   Capabilities,
   Collection,
+  RetrievalEvent,
   Scenario,
   ScenarioPackage,
   Stage,
@@ -46,6 +48,12 @@ export const getScenarios = () =>
 
 export type PackageHandlers = {
   onStage?: (e: StageEvent) => void
+  /** The deterministic analysis: open questions and the hard constraints that fired. */
+  onAnalysis?: (e: AnalysisEvent) => void
+  /** What a pass is standing on — sourced material and match scores. */
+  onRetrieval?: (e: RetrievalEvent) => void
+  /** Generation deltas for a pass, so the reasoning is visible as it happens. */
+  onToken?: (key: string, token: string) => void
   onPackage?: (p: ScenarioPackage) => void
   onError?: (detail: string) => void
 }
@@ -68,6 +76,9 @@ export function generatePackage(
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data)
     if (msg.type === 'stage') handlers.onStage?.(msg as StageEvent)
+    else if (msg.type === 'analysis') handlers.onAnalysis?.(msg as AnalysisEvent)
+    else if (msg.type === 'retrieval') handlers.onRetrieval?.(msg as RetrievalEvent)
+    else if (msg.type === 'token') handlers.onToken?.(msg.key, msg.token)
     else if (msg.type === 'package') {
       handlers.onPackage?.(msg.package)
       ws.close()

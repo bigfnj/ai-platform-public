@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { generatePackage, getScenarios } from './api'
 import { canSpeak, speak, stopSpeaking } from './voice'
 import type {
+  AnalysisEvent,
+  RetrievalEvent,
   Scenario,
   ScenarioPackage,
   Stage,
@@ -102,6 +104,89 @@ function ReadAloud({ text }: { text: string }) {
   )
 }
 
+/**
+ * The live reasoning trace shown beside the checklist.
+ *
+ * Everything here is real telemetry from the generation passes, not narration: the hard
+ * constraints came from a deterministic rule table, the retrievals are the actual chunks each
+ * pass is standing on with their cosine scores, and the text is the model's own output streaming
+ * in. Showing it is the point — a partner (or an audience) can see the tool reasoning over
+ * sourced Microsoft material rather than being asked to trust a spinner.
+ */
+function Trace({
+  analysis,
+  retrievals,
+  live,
+  activeKey,
+  stages,
+}: {
+  analysis: AnalysisEvent | null
+  retrievals: RetrievalEvent[]
+  live: Record<string, string>
+  activeKey: string | null
+  stages: Stage[]
+}) {
+  const endRef = useRef<HTMLDivElement | null>(null)
+  const label = (key: string) =>
+    stages.find((s) => s.key === key)?.label.replace(/…$/, '') ?? key
+
+  // Follow the tail as new reasoning arrives, which is what makes it read as live.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [retrievals.length, activeKey, live])
+
+  return (
+    <div className="trace" aria-live="polite" aria-label="Live reasoning">
+      <div className="tracehead">Live reasoning</div>
+
+      {analysis && (
+        <div className="tblock">
+          <div className="tkey">Diagnostic analysed</div>
+          <div className="tline">
+            {analysis.known} answer{analysis.known === 1 ? '' : 's'} given
+            {analysis.unknown.length > 0 && `, ${analysis.unknown.length} left open`}
+          </div>
+          {analysis.unknown.map((q) => (
+            <div key={q} className="tline open">open: {q}</div>
+          ))}
+          {analysis.constraints.length === 0 ? (
+            <div className="tline">No hard eligibility limits triggered.</div>
+          ) : (
+            analysis.constraints.map((c, i) => (
+              // Shown in full: these are the rules the answer is not allowed to violate, and
+              // they are the most defensible thing the rail produces.
+              <div key={i} className="tline rule">rule: {c}</div>
+            ))
+          )}
+        </div>
+      )}
+
+      {retrievals.map((r) => (
+        <div className="tblock" key={r.key}>
+          <div className="tkey">{label(r.key)}</div>
+          {r.hits.length === 0 ? (
+            <div className="tline open">nothing retrieved — this pass is ungrounded</div>
+          ) : (
+            r.hits.slice(0, 4).map((h, i) => (
+              <div key={i} className="tline">
+                <span className="tscore">{h.score.toFixed(2)}</span>
+                {h.title || h.source}
+                <span className="tsrc">{h.collection}</span>
+              </div>
+            ))
+          )}
+          {live[r.key] && (
+            <div className="tstream">{live[r.key].slice(-600)}</div>
+          )}
+        </div>
+      ))}
+
+      {!analysis && <div className="tline">Waiting for the first pass…</div>}
+      <div ref={endRef} />
+    </div>
+  )
+}
+
 type Step = 'pick' | 'ask' | 'run' | 'done'
 
 export default function Builder() {
@@ -117,6 +202,10 @@ export default function Builder() {
   const [stageState, setStageState] = useState<Record<string, StageState>>({})
   const [pkg, setPkg] = useState<ScenarioPackage | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
+  const [analysis, setAnalysis] = useState<AnalysisEvent | null>(null)
+  const [retrievals, setRetrievals] = useState<RetrievalEvent[]>([])
+  const [live, setLive] = useState<Record<string, string>>({})
+  const [activeKey, setActiveKey] = useState<string | null>(null)
   const [outTab, setOutTab] = useState('scenario_card')
   const cancelRef = useRef<(() => void) | null>(null)
 
@@ -144,6 +233,10 @@ export default function Builder() {
     setPkg(null)
     setRunError(null)
     setOutTab('scenario_card')
+    setAnalysis(null)
+    setRetrievals([])
+    setLive({})
+    setActiveKey(null)
   }
 
   const start = (scenarioId: string) => {
@@ -168,10 +261,22 @@ export default function Builder() {
     setStep('run')
     setRunError(null)
     setStageState(Object.fromEntries(stages.map((s) => [s.key, 'pending' as StageState])))
+    setAnalysis(null)
+    setRetrievals([])
+    setLive({})
+    setActiveKey(null)
     cancelRef.current = generatePackage(
       { scenario_id: scenarioId, answers: finalAnswers },
       {
-        onStage: (e) => setStageState((prev) => ({ ...prev, [e.key]: e.state })),
+        onStage: (e) => {
+          setStageState((prev) => ({ ...prev, [e.key]: e.state }))
+          if (e.state === 'active') setActiveKey(e.key)
+        },
+        onAnalysis: (e) => setAnalysis(e),
+        onRetrieval: (e) => setRetrievals((prev) => [...prev, e]),
+        // Appended per pass rather than one buffer, so the trace shows which pass produced what.
+        onToken: (key, token) =>
+          setLive((prev) => ({ ...prev, [key]: (prev[key] ?? '') + token })),
         onPackage: (p) => {
           setPkg(p)
           // Land on the first tab that actually produced content — a failed pass should not
@@ -217,7 +322,9 @@ export default function Builder() {
           ))}
         </div>
         <p className="muted center" style={{ fontSize: 12 }}>
-          Four questions, then a grounded pre-call package. Around twenty seconds.
+          {/* Question count varies by industry — depth follows the Microsoft surface area rather
+              than a fixed number, so the copy reads it off the data. */}
+          A short diagnostic, then a grounded pre-call package. Around twenty seconds.
         </p>
       </>
     )
@@ -260,27 +367,39 @@ export default function Builder() {
     )
   }
 
-  // --- Step 3: generation, with an honest checklist ------------------------
+  // --- Step 3: generation, with an honest checklist and a live trace -------
   if (step === 'run') {
     return (
       <div className="card">
         <h3>{scenario.icon} Building your pre-call package</h3>
-        <ul className="checklist">
-          {stages.map((s) => {
-            const st = stageState[s.key] ?? 'pending'
-            return (
-              <li key={s.key} className={`ck ${st}`}>
-                <span className="ckmark">
-                  {st === 'done' ? '✓' : st === 'error' ? '!' : st === 'active' ? '◍' : '○'}
-                </span>
-                {s.label}
-              </li>
-            )
-          })}
-        </ul>
-        <p className="muted" style={{ fontSize: 12 }}>
-          Each line is a separate grounded pass over the knowledge base, not a progress animation.
-        </p>
+        <div className="runsplit">
+          <div>
+            <ul className="checklist">
+              {stages.map((s) => {
+                const st = stageState[s.key] ?? 'pending'
+                return (
+                  <li key={s.key} className={`ck ${st}`}>
+                    <span className="ckmark">
+                      {st === 'done' ? '✓' : st === 'error' ? '!' : st === 'active' ? '◍' : '○'}
+                    </span>
+                    {s.label}
+                  </li>
+                )
+              })}
+            </ul>
+            <p className="muted" style={{ fontSize: 12 }}>
+              Each line is a separate grounded pass over the knowledge base, not a progress
+              animation.
+            </p>
+          </div>
+          <Trace
+            analysis={analysis}
+            retrievals={retrievals}
+            live={live}
+            activeKey={activeKey}
+            stages={stages}
+          />
+        </div>
       </div>
     )
   }

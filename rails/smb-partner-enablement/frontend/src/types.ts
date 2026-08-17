@@ -89,6 +89,20 @@ export type StageEvent = {
   sources?: number
 }
 
+/** Result of the deterministic first stage: what is open, and which hard rules fired. */
+export type AnalysisEvent = {
+  known: number
+  unknown: string[]
+  constraints: string[]
+}
+
+/** What a pass retrieved, and how well each piece matched. */
+export type RetrievalEvent = {
+  key: string
+  query: string
+  hits: { title: string; source: string; collection: string; score: number }[]
+}
+
 export type PackageCitation = { source: string; collection: string; title: string }
 
 export type ScenarioPackage = {

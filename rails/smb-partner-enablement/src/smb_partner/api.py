@@ -210,8 +210,7 @@ def create_api() -> FastAPI:
         """Buffered package generation. The WebSocket below is the better path — it reports each
         pass as it completes — but this exists for clients that cannot hold a socket open."""
         try:
-            return await asyncio.to_thread(
-                generate.generate_package, body.scenario_id, body.answers)
+            return await generate.generate_package(body.scenario_id, body.answers)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except broker.BrokerError as exc:
@@ -219,15 +218,17 @@ def create_api() -> FastAPI:
 
     @app.websocket("/ws/scenario")
     async def ws_scenario(ws: WebSocket) -> None:
-        """Streamed package generation, emitting a `stage` event per pass.
+        """Streamed package generation, reporting the reasoning as it happens.
 
-        Generation is blocking and runs in a worker thread, so progress cannot be awaited from
-        inside it. The callback therefore hands events to the event loop via
-        ``call_soon_threadsafe`` and this coroutine drains the queue — without that bridge the
-        stage events would either be lost or corrupt the socket from the wrong thread.
+        Four event types go out. `stage` marks a pass starting and finishing; `analysis` carries
+        the deterministic result of the first stage (open questions and the hard constraints that
+        fired); `retrieval` names the sourced material a pass is standing on and how well each
+        piece matched; `token` carries generation deltas.
+
+        Generation is natively async, so events are awaited straight onto the socket — no worker
+        thread and no queue bridge.
         """
         await ws.accept()
-        loop = asyncio.get_running_loop()
         try:
             while True:
                 raw = await ws.receive_text()
@@ -237,24 +238,13 @@ def create_api() -> FastAPI:
                     await ws.send_json({"type": "error", "detail": f"bad request: {exc}"})
                     continue
 
-                queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+                async def emit(event: str, payload: dict[str, Any]) -> None:
+                    await ws.send_json({"type": event, **payload})
 
-                def emit(event: str, payload: dict[str, Any]) -> None:
-                    loop.call_soon_threadsafe(queue.put_nowait, {"type": event, **payload})
-
-                task = asyncio.create_task(
-                    asyncio.to_thread(generate.generate_package,
-                                      body.scenario_id, body.answers, emit))
-                task.add_done_callback(
-                    lambda _t: loop.call_soon_threadsafe(queue.put_nowait, None))
-
-                while True:  # drain progress until the generator signals completion
-                    item = await queue.get()
-                    if item is None:
-                        break
-                    await ws.send_json(item)
                 try:
-                    await ws.send_json({"type": "package", "package": task.result()})
+                    package = await generate.generate_package(
+                        body.scenario_id, body.answers, emit)
+                    await ws.send_json({"type": "package", "package": package})
                 except ValueError as exc:
                     await ws.send_json({"type": "error", "detail": str(exc)})
                 except broker.BrokerError as exc:

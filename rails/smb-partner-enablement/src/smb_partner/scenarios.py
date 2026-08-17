@@ -5,8 +5,14 @@ rail, the mobile app and the package generator would otherwise drift.
 
 Authoring rules, learned from the original prototype and the knowledge base:
 
-* **Four questions, no more.** The product promise is two minutes. A fifth question is a
-  regression, not an enhancement.
+* **Six to eight questions, sized to the industry.** The original prototype asked four, but four
+  was a hackathon constraint rather than a finding. Depth should follow where the Microsoft surface
+  area actually is: a professional-services firm has privileged data, regulatory retention and a
+  real Business-Premium-versus-E3-plus-add-ons decision to surface, while a retail frontline
+  rollout is comparatively clean. Forcing both to the same length either pads one or truncates the
+  other. Two questions are a fixed spine (below); each scenario then adds four to six of its own.
+  The ceiling is real, though — past eight the "two minutes between meetings" promise breaks, and
+  Dan's framing of a partner on a phone is the whole point of the surface.
 * **Every answer must change the recommendation.** A question whose answers all produce the
   same output is theatre. Each option below carries ``signal`` — the retrieval terms and
   commercial consequence it implies — which is what the generator actually consumes.
@@ -54,6 +60,43 @@ def _q(qid: str, prompt: str, why: str, options: list[tuple[str, str]]) -> dict[
         "options": [{"label": label, "signal": signal} for label, signal in options]
         + [{"label": UNKNOWN_LABEL, "signal": _UNKNOWN_SIGNAL}],
     }
+
+
+def _spine() -> list[dict[str, Any]]:
+    """The two questions every scenario asks, because they gate Microsoft mechanics regardless of
+    industry. Both are deliberately mechanical rather than situational — situational questions
+    belong to the scenario, where the options can be phrased in that industry's language.
+
+    Headcount is here because the rail could not previously answer the most consequential SMB
+    licensing question at all: the Business family caps at 300 seats *pooled*, Copilot in 30 is
+    scoped to customers under 300 employees, and the trial cohort is 25 seats. Asking only about
+    store locations left all of that unreachable.
+
+    Partner-of-record is here because it redirects the entire close. If the partner already holds
+    the tenant, "check Partner Center" is actionable and this is an upgrade motion; if another
+    partner holds it, it is a displacement with none of the same visibility or incentives.
+    """
+    return [
+        _q("headcount",
+           "Roughly how many people work at this business?",
+           "The single most consequential number in SMB licensing. The Business family caps at "
+           "300 seats pooled across Basic, Standard and Premium, and the partner-led Copilot "
+           "trial is scoped to customers under 300 employees — cross that line and the whole "
+           "recommendation changes.",
+           [("Fewer than 25", "very small; single trial cohort covers the whole business"),
+            ("25–100", "core SMB; Business family fits comfortably"),
+            ("100–300", "upper SMB; approaching the pooled 300-seat Business cap"),
+            ("More than 300", "past the pooled Business cap; Enterprise licensing required")]),
+        _q("relationship",
+           "Is this already your customer?",
+           "Decides whether this is an upgrade you can see in Partner Center or a win you have to "
+           "take from someone else — which changes the licensing path, the incentives available, "
+           "and whether you can inspect the tenant at all.",
+           [("Yes — I'm their partner of record", "existing tenant visibility; upgrade motion; incentives available"),
+            ("Yes, but another partner holds the tenant", "shared account; no tenant visibility; transfer question"),
+            ("No — I'm trying to win them", "net-new acquisition; competitive displacement"),
+            ("No — they buy direct from Microsoft today", "direct-to-CSP transition motion")]),
+    ]
 
 
 SCENARIOS: list[dict[str, Any]] = [
@@ -240,6 +283,12 @@ SCENARIOS: list[dict[str, Any]] = [
         ],
     },
 ]
+
+# Prepended once here rather than repeated in every literal, so the spine cannot drift between
+# scenarios and a change to it lands everywhere at the same time. Asked first because headcount and
+# the existing relationship are what a partner reaches for before industry detail.
+for _scenario in SCENARIOS:
+    _scenario["questions"] = _spine() + _scenario["questions"]
 
 SCENARIOS_BY_ID: dict[str, dict[str, Any]] = {s["id"]: s for s in SCENARIOS}
 

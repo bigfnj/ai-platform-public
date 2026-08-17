@@ -53,8 +53,13 @@ def ingest_seed(*, force: bool = False) -> dict:
 
     prints = _load_fingerprints()
     report: list[dict] = []
+    # Seed collections currently in the index, so the two removal cases below can be detected:
+    # a folder that is now empty, and a folder that has been deleted outright.
+    indexed = {c["name"] for c in store.collections() if c.get("origin") == "seed"}
+    seen: set[str] = set()
     for folder in sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("_")):
         name = folder.name
+        seen.add(name)
         try:
             fp = _fingerprint(folder)
         except OSError as exc:
@@ -65,7 +70,12 @@ def ingest_seed(*, force: bool = False) -> dict:
             continue
         rows = rag.load_collection(folder, name)
         if not rows:
-            report.append({"collection": name, "status": "empty"})
+            # A collection that has *become* empty must be cleared, not skipped. Emptying a folder
+            # used to leave its old chunks indexed forever: placeholder scaffolding deleted from
+            # discovery/, objection-handling/, solution-plays/ and customer-stories/ kept being
+            # retrieved and cited for weeks of edits afterwards, because nothing ever removed it.
+            removed = store.delete_collection(name) if name in indexed else 0
+            report.append({"collection": name, "status": "empty", "removed": removed})
             prints[name] = fp
             continue
         try:
@@ -78,6 +88,14 @@ def ingest_seed(*, force: bool = False) -> dict:
         prints[name] = fp
         report.append({"collection": name, "status": "ingested", "chunks": count})
         log.info("ingested %s: %d chunks", name, count)
+
+    # A collection whose folder was deleted outright is never iterated above, so its chunks would
+    # otherwise survive indefinitely. Retiring `partner-programs/` hit exactly this.
+    for orphan in sorted(indexed - seen):
+        removed = store.delete_collection(orphan)
+        prints.pop(orphan, None)
+        report.append({"collection": orphan, "status": "removed", "removed": removed})
+        log.info("removed %s: folder no longer present (%s chunks)", orphan, removed)
 
     store.set_meta(_FINGERPRINT_KEY, json.dumps(prints))
     return {"root": str(root), "found": True, "collections": report}
