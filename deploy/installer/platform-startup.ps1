@@ -60,7 +60,9 @@ if (-not $RuntimeMode) {
 $LockFile = Join-Path $LogDir 'startup.lock'
 
 function Enter-StartupLock {
-  for ($i = 0; $i -lt 60; $i++) {
+  # 24 x 5 s = 2 min. If the other run has not finished by then it is either done enough that the
+  # platform is up, or it is in trouble - and a second concurrent machine start would not help either.
+  for ($i = 0; $i -lt 24; $i++) {
     if (Test-Path $LockFile) {
       # Honour a live lock, but drop one whose owner died or wedged - a run that exits early (or is
       # killed) would otherwise deadlock every future startup behind a file nobody owns.
