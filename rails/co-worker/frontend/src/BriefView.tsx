@@ -15,7 +15,8 @@ import {
   type BriefStatus,
   type Status,
 } from './types'
-import { COWORK_JOBS } from './prompts'
+import { COWORK_JOBS } from './prompts.example'
+// To use your own prompts: copy prompts.example.ts → prompts.ts (gitignored) and change this import.
 
 function ageLabel(hours: number | undefined): { text: string; cls: string } {
   if (hours === undefined) return { text: 'never', cls: 'red' }
@@ -267,18 +268,27 @@ export default function BriefView({
                 Nothing surfaced as needing action. {brief.suppressed ?? 0} items were
                 assessed and suppressed.
               </p>
-            ) : (
+            ) : (() => {
+              const open = attention.filter((a) => (triaged[a.id] ?? 'open') === 'open')
+              const done = attention.filter((a) => (triaged[a.id] ?? 'open') !== 'open')
+              return (
               <div className="cw-att-list">
-                {attention.map((a) => (
-                  <AttentionRow
-                    key={a.id}
-                    a={a}
-                    onStatus={onStatus}
-                    resolved={(triaged[a.id] ?? 'open') !== 'open'}
-                  />
+                {open.map((a) => (
+                  <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={false} />
                 ))}
+                {done.length > 0 && (
+                  <>
+                    <div className="cw-att-divider">
+                      <span>✓ cleared · {done.length}</span>
+                    </div>
+                    {done.map((a) => (
+                      <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={true} />
+                    ))}
+                  </>
+                )}
               </div>
-            )}
+              )
+            })()}
           </section>
 
           <ListBlock title="You promised — no resolution yet" icon="🪢" items={brief.dangling ?? []} />

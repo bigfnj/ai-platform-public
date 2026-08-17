@@ -332,8 +332,22 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 .cw-att.u-today { border-left-color: var(--p1); }
 .cw-att.u-this-week { border-left-color: var(--p2); }
 .cw-att.u-soon { border-left-color: var(--p3); }
-.cw-att.resolved { opacity: 0.5; }
+.cw-att.resolved { opacity: 0.45; }
 .cw-att.resolved .cw-att-head { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.cw-att-divider {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 10px;
+  margin: 4px 0 2px;
+}
+.cw-att-divider::before,
+.cw-att-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--bd);
+}
+.cw-att-divider span {
+  font-size: 10.5px; font-weight: 600; color: var(--mut);
+  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+}
 
 .cw-att-icon { font-size: 17px; line-height: 1.3; flex: none; }
 .cw-att-main { flex: 1; min-width: 0; }
