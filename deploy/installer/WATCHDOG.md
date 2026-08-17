@@ -11,9 +11,12 @@ SCM (auto-start, after vmms)
        └─ platform-watchdog.ps1
             ├─ COLD START  health check first; wait briefly for a logon, then
             │              platform-startup.ps1, retried 6× at 30 s
-            └─ STEADY STATE  GET localhost:1111/api/platform/healthz every 60 s
-                 ├─ two consecutive failures (30 s apart) → recovery
-                 ├─ skipped while a docker-compose command is running
+            └─ STEADY STATE  every 60 s (skipped while a compose command is running)
+                 ├─ GET localhost:1111/api/platform/healthz
+                 │    └─ two consecutive failures (30 s apart) → recovery
+                 ├─ Test-ControlPlane  (podman volume ls, 10 s timeout)
+                 │    └─ 2+ consecutive failures while healthz 200
+                 │         → Invoke-ForceRestartMachine (Stop-VM + clear proxy + handoff)
                  └─ SYSTEM-owned machine + user logged on → handoff
 ```
 
@@ -35,6 +38,26 @@ password). LocalSystem starts it only when nobody is logged on, and hands it bac
 reap, restart in session — as soon as somebody logs on. A failed handoff is attempted **once**
 and then logged, because falling back to a LocalSystem start would otherwise bounce the
 platform every minute forever.
+
+### Control-plane hardening
+
+`healthz 200` only proves the gateway container is responding. The podman SSH transport — the
+tunnel gvproxy uses to reach the VM's container API — can die independently. When that happens:
+
+- `docker-compose` commands fail (`npipe EOF`), so any compose-based recovery would be stuck.
+- `podman volume ls` exits 125 while :1111 keeps serving.
+- `Get-PodmanMachineState` returns 'stopped' (because `podman info` uses SSH), so
+  `podman machine start` tries to start a machine that is already running in Hyper-V and fails.
+
+The watchdog adds a second probe each cycle: `Test-ControlPlane` in `lib-runtime.ps1` runs
+`podman volume ls` with a 10-second timeout. After **two consecutive failures** while healthz is
+still 200, `Invoke-ForceRestartMachine` runs: it hard-stops the VM via Hyper-V (`Stop-VM
+-Force`, bypassing SSH), clears the orphan proxy, and restarts the platform in the user's session.
+
+As defense-in-depth, `Initialize-PodmanMachine` (Branch 3) also handles this case: if
+`podman machine start` fails but Hyper-V reports the VM is Running, it issues `Stop-VM -Force`
+and retries. This covers the window before the 2-cycle CP threshold is reached or when startup.ps1
+is called directly.
 
 ### Cold start
 

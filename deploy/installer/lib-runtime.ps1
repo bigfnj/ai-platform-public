@@ -147,6 +147,25 @@ function Clear-StalePodmanProxy {
   return ($reaped -gt 0)
 }
 
+# Probe the podman SSH transport with a hard 10-second timeout.
+#
+# `podman volume ls` must go through the SSH tunnel to the VM; if that path is broken the command
+# hangs indefinitely. Start-Job is avoided here because it inherits the caller's WMI session
+# (a problem inside the NSSM service context). System.Diagnostics.Process gives a clean timeout
+# without any of that baggage. Returns $true when the transport is alive (exit 0), $false otherwise.
+function Test-ControlPlane {
+  try {
+    $psi = [System.Diagnostics.ProcessStartInfo]::new(
+      'podman', 'volume ls --noheading --format {{.Name}}')
+    $psi.UseShellExecute         = $false
+    $psi.RedirectStandardOutput  = $true
+    $psi.RedirectStandardError   = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    if (-not $p.WaitForExit(10000)) { $p.Kill(); return $false }
+    return $p.ExitCode -eq 0
+  } catch { return $false }
+}
+
 # Create the machine if absent, then start it. The FIRST hyperv machine init needs admin (it writes
 # machine-scope registry keys); Podman 6.0 no longer needs admin for start/stop. Returns $true when
 # the machine ends up running.
@@ -196,7 +215,32 @@ function Initialize-PodmanMachine {
         if ($advice) { Write-Log "  $advice" }
         Set-PodmanMachineStartupRam -MaxMb $MemoryMb | Out-Null
         & podman machine start 2>&1 | Write-NativeLine | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Log "podman machine start still failing (exit $LASTEXITCODE)." }
+        $rc = $LASTEXITCODE
+        if ($rc -ne 0) { Write-Log "podman machine start still failing (exit $rc)." }
+      }
+    }
+
+    # Branch 3: SSH transport dead but Hyper-V VM still running.
+    #
+    # When gvproxy's connection to the VM breaks, `podman info` (SSH) fails so Get-PodmanMachineState
+    # returns 'stopped'. But the Hyper-V VM is still up, and `podman machine start` fails because
+    # starting gvproxy would conflict with an existing one, or the VM rejects the start. Neither the
+    # stale-proxy nor the memory-reservation branch helps here: the issue is the broken transport,
+    # not a missing pipe or low RAM. The fix is to hard-stop the VM via Hyper-V (bypasses SSH),
+    # clear the orphan proxy, and retry from a clean state.
+    if ($rc -ne 0 -and $Provider -eq 'hyperv' -and
+        (Get-Command Get-VM -ErrorAction SilentlyContinue)) {
+      $vm = Get-VM -Name $PodmanMachine -ErrorAction SilentlyContinue
+      if ($vm -and $vm.State -eq 'Running') {
+        Write-Log ('VM is running in Hyper-V but podman cannot reach it (SSH transport dead); ' +
+                   'force-stopping to recover...')
+        Stop-VM -Name $PodmanMachine -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 5
+        Clear-StalePodmanProxy | Out-Null
+        Write-Log 'retrying machine start after force-stop...'
+        & podman machine start 2>&1 | Write-NativeLine | Out-Null
+        $rc = $LASTEXITCODE
+        if ($rc -ne 0) { Write-Log "machine start still failing after force-stop (exit $rc)." }
       }
     }
   }

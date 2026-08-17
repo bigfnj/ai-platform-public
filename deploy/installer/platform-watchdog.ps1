@@ -169,6 +169,23 @@ function Invoke-PlatformStartup($why) {
     Start-PlatformAsSystem
 }
 
+# Force-stop the Hyper-V VM, clear any stale proxy, then start the platform in the user's session.
+#
+# Used when the SSH transport is dead: `podman machine stop` uses SSH and will hang or fail, so we
+# bypass it with a direct Hyper-V hard-stop. Only safe to call from LocalSystem (which has the
+# rights to Stop-VM). After the stop, Clear-StalePodmanProxy and Invoke-PlatformStartup handle the
+# rest the same way as a normal recovery.
+function Invoke-ForceRestartMachine {
+    Write-Log 'force-stopping Hyper-V VM to recover a dead SSH transport...'
+    if (Get-Command Stop-VM -ErrorAction SilentlyContinue) {
+        Stop-VM -Name $PodmanMachine -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 5
+    }
+    else { Write-Log 'Hyper-V module not available; skipping Stop-VM (Clear-StalePodmanProxy will try)' }
+    Clear-StalePodmanProxy | Out-Null
+    Invoke-PlatformStartup 'control-plane recovery'
+}
+
 # Give a SYSTEM-owned machine back to the user who just logged on. Only LocalSystem can do this:
 # stopping the machine leaves the SYSTEM-owned gvproxy alive, and the user cannot kill it.
 function Invoke-MachineHandoff($user, $owner) {
@@ -219,12 +236,24 @@ try {
     # rights to register the task, say), Invoke-PlatformStartup falls back to LocalSystem - which
     # re-creates the very SYSTEM ownership that triggered the handoff. Retrying that would bounce
     # the platform every minute forever, so a failed attempt is logged once and then left alone.
-    $handoffDone = $false
+    $handoffDone  = $false
+    $cpFailCount  = 0   # consecutive cycles where Test-ControlPlane returned $false
 
     while ($true) {
         Start-Sleep -Seconds $PollSeconds
 
         if (Test-ComposeBusy) { continue }
+
+        # Control-plane probe: separate from the HTTP health check. Healthz 200 only proves the
+        # gateway is responding; the SSH transport to the VM can be dead at the same time (observed
+        # 2026-08-17: `podman volume ls` exit 125 while healthz 200). A dead transport means that
+        # any compose-based recovery will fail. Catching it here lets us restart proactively while
+        # the platform is still serving - a planned 30-second bounce beats a stuck recovery loop.
+        $cpAlive = Test-ControlPlane
+        if (-not $cpAlive) { $cpFailCount++ } else { $cpFailCount = 0 }
+        if (-not $cpAlive) {
+            Write-Log "control-plane probe failed ($cpFailCount consecutive cycle(s))"
+        }
 
         if (Test-Health) {
             # Healthy, but possibly owned by the wrong account: hand it over so the user can use
@@ -242,6 +271,19 @@ try {
                     }
                     else { Write-Log "machine now belongs to $user; compose is usable there." }
                 }
+            }
+
+            # Proactive control-plane recovery: SSH transport dead for 2+ cycles while healthz 200.
+            # The containers are serving fine right now but compose-based recovery would be stuck if
+            # a container went down. Restart the machine early, in a controlled way, before that
+            # happens. $handoffDone is reset so the new machine start triggers a fresh handoff check.
+            if (-not $cpAlive -and $cpFailCount -ge 2) {
+                Write-Log ("control plane unresponsive for $cpFailCount consecutive cycles; " +
+                           "restarting machine to restore compose access before a container " +
+                           "failure makes recovery impossible")
+                $handoffDone = $false
+                Invoke-ForceRestartMachine
+                $cpFailCount = 0
             }
             continue
         }
