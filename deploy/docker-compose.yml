@@ -219,6 +219,7 @@ services:
     image: co-worker-backend:latest
     environment:
       CO_WORKER_INBOX_DIR: /data/inbox
+      CO_WORKER_PROMPTS_DIR: /data/prompts
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
@@ -228,6 +229,10 @@ services:
       # path to it (see deploy/.env). Falls back to a named volume if unset, which
       # yields an empty dashboard rather than a startup failure.
       - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
+      # Bind-mount the scheduler's job directory so the prompts panel shows the real
+      # prompts. Mounted read-only — the backend never writes here.
+      # Falls back to an empty named volume, which hides the prompts panel.
+      - ${CO_WORKER_PROMPTS_MOUNT:-co_worker_prompts}:/data/prompts:ro
     expose:
       - "8860"
     restart: always
@@ -348,4 +353,5 @@ volumes:
   iep_cache:      # IEP app cache
   terminal_fun_data:  # terminal-fun per-user save/resume state (NetHack + Crawl)
   co_worker_inbox:    # fallback drop-zone when CO_WORKER_INBOX_MOUNT is unset (empty dashboard)
+  co_worker_prompts:  # fallback when CO_WORKER_PROMPTS_MOUNT is unset (hides prompts panel)
   smb_partner_data:   # SMB Partner chunk index + uploaded SME docs (seed KB baked into the image)
