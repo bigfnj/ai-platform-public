@@ -96,13 +96,13 @@ class BrokerSettings(BaseSettings):
     # the broker's own (Ollama-only) venv stays light. All paths are host-native
     # by design (the GPU layer runs native on Windows) and env-overridable
     # (BROKER_MEDIA_*). Set BROKER_MEDIA_ENABLED=false where there's no torch venv.
-    media_enabled: bool = True
+    media_enabled: bool = False
     # Interpreter with torch / diffusers / TTS + edu_media_core importable.
-    media_python: str = r"D:\.claude\projects\edu-suite\.venv\Scripts\python.exe"
+    media_python: str = ""
     # edu_media_core source root, prepended to the worker's sys.path.
-    media_core_src: str = r"D:\.claude\projects\edu-suite\packages\edu-media-core\src"
+    media_core_src: str = ""
     # XTTS reference voice clips (english_reference.wav / spanish_reference.wav).
-    media_voices_dir: str = r"D:\.claude\projects\edu-suite\shared\voices"
+    media_voices_dir: str = ""
     # Per-job timeout (seconds); a cold model load + a batch can be slow.
     media_timeout: float = 1200.0
 

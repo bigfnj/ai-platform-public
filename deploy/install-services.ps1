@@ -18,7 +18,7 @@
 #     (no re-download — contrary to the earlier "no cache env override" belief).
 #
 # RUN THIS IN AN ELEVATED (Administrator) PowerShell:
-#   powershell -ExecutionPolicy Bypass -File D:\.claude\projects\platform\deploy\install-services.ps1
+#   powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\ai-platform\deploy\install-services.ps1"
 #
 # Skip the Ollama service (if it already auto-starts) with:  -InstallOllama:$false
 
@@ -27,8 +27,8 @@ param([bool]$InstallOllama = $true)
 #Requires -RunAsAdministrator
 $ErrorActionPreference = 'Stop'
 
-$PlatformRoot = 'D:\.claude\projects\platform'
-$UserProfile  = 'C:\Users\Admin'
+$PlatformRoot = "$env:USERPROFILE\ai-platform"
+$UserProfile  = $env:USERPROFILE
 $BrokerPy     = "$PlatformRoot\.venv\Scripts\python.exe"
 $OllamaExe    = "$UserProfile\AppData\Local\Programs\Ollama\ollama.exe"
 $LogDir       = "$PlatformRoot\deploy\logs"
