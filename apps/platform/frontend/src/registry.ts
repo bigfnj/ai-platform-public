@@ -6,4 +6,5 @@ import type { AppEntry } from '@web-core'
 // as a remote. recipe-book/console were removed in the edu-suite-first recommit.
 export const APPS: AppEntry[] = [
   { id: 'edu-suite', label: 'EDU-Suite', icon: '🎓', status: 'ready' },
+  { id: 'smb-partner-enablement', label: 'SMB Partner', icon: '🤝', status: 'ready' },
 ]

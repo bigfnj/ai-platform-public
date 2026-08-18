@@ -14,6 +14,7 @@ const WorkstationModule = lazy(() => import('workstation/module'))
 const TerminalFunModule = lazy(() => import('terminal_fun/module'))
 const AiPlaygroundModule = lazy(() => import('ai_playground/module'))
 const CoWorkerModule = lazy(() => import('co_worker/module'))
+const SmbPartnerModule = lazy(() => import('smb_partner/module'))
 
 const STATUS_MS = 5000
 
@@ -269,6 +270,18 @@ export default function App() {
         }
       >
         <CoWorkerModule />
+      </Suspense>
+    )
+  } else if (activeEntry?.id === 'smb-partner-enablement') {
+    content = (
+      <Suspense
+        fallback={
+          <div className="module">
+            <div className="card"><div className="empty">Loading SMB Partner Enablement…</div></div>
+          </div>
+        }
+      >
+        <SmbPartnerModule />
       </Suspense>
     )
   } else if (activeEntry) {
