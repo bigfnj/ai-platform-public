@@ -62,6 +62,8 @@ services:
       # Executive-brief synthesis calls the broker on the @co-worker-synthesis role.
       CO_WORKER_BROKER_URL: http://host.docker.internal:11500
       CO_WORKER_BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      CO_WORKER_USER_NAME: ${CO_WORKER_USER_NAME:-}
+      CO_WORKER_USER_EMAIL: ${CO_WORKER_USER_EMAIL:-}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:

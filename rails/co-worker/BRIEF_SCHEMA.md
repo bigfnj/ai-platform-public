@@ -94,19 +94,48 @@ They are safe to ignore by anything that reads `brief.json` directly.
 | Field | Written by | Notes |
 |---|---|---|
 | `_source_signature` | `synthesize.py` | `[item_count, newest_item_mtime]` — the identity of the inbox when this brief was produced. Used by `_brief_is_stale()` in `main.py` to detect genuine staleness without a mtime comparison that misses deletions. |
+| `source` | `synthesize.py` | Which lane this brief covers; `null` on the merged `brief.json`. |
+| `items_eligible` | `synthesize.py` | Survived the noise/FYI/staleness filters. The denominator for `items_read`. |
+| `items_read` | `synthesize.py` | How many items actually reached the model. |
+| `items_filtered` | `synthesize.py` | Excluded on purpose (noise, FYI, stale non-client). **Not a shortfall** — do not report it as something the model missed. |
+| `truncated` | `synthesize.py` | Eligible items the context budget dropped **unread**. This *is* a shortfall, and the only one worth surfacing. Absent when zero. |
+| `passes` | `synthesize.py` | Merged brief only. Per-lane `{items_considered, items_eligible, items_read, items_filtered, attention, truncated}`. |
+| `failed_sources` | `synthesize.py` | Lanes whose pass raised and are therefore absent from the merge. |
 | `_mtime` | `GET /api/brief` | File mtime of `brief.json` — added at read time, not stored. |
 | `age_hours` | `GET /api/brief` | `(now - _mtime) / 3600`. |
 | `stale` | `GET /api/brief` | `age_hours > 12` (time-based, advisory). |
 | `stale_source` | `GET /api/brief` | True when `_source_signature` says the inbox changed since synthesis (and `CO_WORKER_AUTO_SYNTHESIZE` is on). The frontend auto-triggers a refresh when this is true. |
 | `stale_reason` | `GET /api/brief` | Human-readable reason — "item count changed (209 -> 211)", "an item was rewritten after the last synthesis", "brief predates staleness tracking". |
 
+## One pass per source
+
+Synthesis runs **one model call per source**, then merges the results into `brief.json`.
+Each lane also keeps its own `brief.<source>.json`, readable via `GET /api/brief?source=email`.
+
+This is not an optimisation, it is a correctness fix. A single combined pass over every
+unresolved item does not fit the local model's *usable* context. At ~450 chars per condensed
+item, 200 items is ~23K tokens — and while `num_ctx` is 32,768, a 4B model reading 23K tokens
+attends to a fraction of the middle. The old behaviour read about half the items and dropped
+the rest unseen. Per lane the payload lands around 2.5K–8K tokens, where the model actually
+reads everything it is given.
+
+Raising `ITEMS_CHAR_BUDGET` to "make it fit" is the wrong fix: it trades a *visible*
+truncation notice for *invisible* inattention.
+
+Lanes are discovered from the data, not hardcoded — `insights` items are a real source
+alongside email/calendar/teams, and a fixed list would silently drop them.
+
+A lane that raises is recorded in `failed_sources` and the other lanes still merge. Losing
+one pass must not lose the brief.
+
 ## Operational notes
 
 - **Atomic write.** `mkstemp` + `os.replace`, same as `.state.json`. A torn brief would
   break the landing view for every subsequent load.
-- **`brief.json` is NOT an item.** It lives in `inbox/` beside the items and is explicitly
-  excluded from the item glob in both `main.py` and `synthesize.py`. Forgetting that
-  exclusion renders it as a phantom card.
+- **Brief files are NOT items.** `brief.json` and every `brief.<source>.json` live in
+  `inbox/` beside the items and are excluded from the item glob in both `main.py` and
+  `synthesize.py` via the shared `is_brief_file()` predicate. Forgetting that exclusion
+  renders them as phantom cards *and* feeds them back in as synthesis input.
 - **One run at a time.** `synthesize_background()` holds a lock; a second request gets
   HTTP 409 rather than racing on the file.
 - **Failure preserves the old brief.** If the model call fails, the previous `brief.json`

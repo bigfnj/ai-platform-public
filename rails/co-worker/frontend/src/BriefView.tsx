@@ -8,11 +8,14 @@ import { getJSON, postJSON } from './api'
 import { renderInline, renderMarkdown } from './markdown'
 import {
   CATEGORY_META,
+  SOURCES,
   URGENCY_META,
   attentionRank,
   type AttentionItem,
   type Brief,
+  type BriefPass,
   type BriefStatus,
+  type Source,
   type Status,
 } from './types'
 import { COWORK_JOBS } from './prompts.example'
@@ -31,19 +34,30 @@ function AttentionRow({
   a,
   onStatus,
   resolved,
+  showSource,
 }: {
   a: AttentionItem
   onStatus: (id: string, status: Status) => void
   resolved: boolean
+  /** Merged view only — in a lane view every row has the same source, so it is noise. */
+  showSource?: boolean
 }) {
   const cm = CATEGORY_META[a.category] ?? CATEGORY_META.other
   const um = URGENCY_META[a.urgency]
+  const sm = a.source ? SOURCES.find((s) => s.id === a.source) : undefined
 
   return (
     <div className={`cw-att u-${a.urgency}${resolved ? ' resolved' : ''}`}>
       <span className="cw-att-icon" title={cm.label}>{cm.icon}</span>
       <div className="cw-att-main">
-        <div className="cw-att-head">{renderInline(a.headline, `${a.id}-h`)}</div>
+        <div className="cw-att-head">
+          {showSource && sm && (
+            <span className="cw-att-src" title={`Surfaced by the ${sm.label} pass`}>
+              {sm.icon}
+            </span>
+          )}
+          {renderInline(a.headline, `${a.id}-h`)}
+        </div>
         {a.why && <div className="cw-att-why">{a.why}</div>}
       </div>
       <div className="cw-att-side">
@@ -128,7 +142,12 @@ export default function BriefView({
   triaged: Record<string, Status>
   onStatus: (id: string, status: Status) => void
 }) {
+  // 'all' reads the merged brief.json; a Source reads that lane's brief.<source>.json.
+  const [lens, setLens] = useState<Source | 'all'>('all')
   const [brief, setBrief] = useState<Brief | null>(null)
+  // Per-lane coverage lives only on the merged brief, but the tab counts have to stay
+  // visible while a lane is selected — so it is kept separately from `brief`.
+  const [passes, setPasses] = useState<Record<string, BriefPass>>({})
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -137,14 +156,22 @@ export default function BriefView({
   const poll = useRef<number | null>(null)
   const startPollingRef = useRef<(() => void) | undefined>(undefined)
 
+  const qs = lens === 'all' ? '' : `?source=${lens}`
+  const lensLabel = lens === 'all'
+    ? 'Merged'
+    : SOURCES.find((s) => s.id === lens)?.label ?? lens
+
   const load = useCallback(() => {
     setLoading(true)
     setErr('')
-    getJSON<Brief>('/api/brief')
+    getJSON<Brief>(`/api/brief${qs}`)
       .then((b) => {
         setBrief(b)
         setLoading(false)
-        if (b.stale_source) {
+        if (b.passes) setPasses(b.passes)
+        // Only the merged view auto-refreshes: a lane refresh rebuilds just that lane,
+        // so letting three tabs each fire one would leave the merge inconsistent.
+        if (b.stale_source && lens === 'all') {
           setNote('Harvest data changed since the last pass — re-synthesizing…')
           postJSON('/api/brief/refresh?auto=1')
             .then(() => { setBusy(true); startPollingRef.current?.() })
@@ -152,7 +179,7 @@ export default function BriefView({
         }
       })
       .catch((e) => { setErr(String(e)); setLoading(false) })
-  }, [])
+  }, [qs, lens])
 
   useEffect(() => {
     load()
@@ -184,15 +211,17 @@ export default function BriefView({
 
   const refresh = useCallback(async () => {
     setBusy(true)
-    setNote('Synthesizing — reading every unresolved item…')
+    setNote(lens === 'all'
+      ? 'Synthesizing — one pass per source, then merging. This takes a few minutes.'
+      : `Synthesizing the ${lensLabel} pass…`)
     try {
-      await postJSON('/api/brief/refresh')
+      await postJSON(`/api/brief/refresh${qs}`)
       startPolling()
     } catch (e) {
       setBusy(false)
       setNote(String(e instanceof Error ? e.message : e))
     }
-  }, [startPolling])
+  }, [startPolling, qs, lens, lensLabel])
 
   const age = ageLabel(brief?.age_hours)
   const attention = (brief?.attention ?? [])
@@ -207,12 +236,13 @@ export default function BriefView({
     <div className="cw-brief">
       <div className="cw-brief-bar">
         <div className="cw-brief-meta">
-          <strong>Executive brief</strong>
+          <strong>{lens === 'all' ? 'Executive brief' : `${lensLabel} brief`}</strong>
           <span className={`cw-age ${age.cls}`}>● synthesized {age.text}</span>
           {brief?.items_considered !== undefined && (
             <span className="cw-sub">
-              {openCount} needing action · {brief.items_considered} items read ·{' '}
-              {brief.suppressed ?? 0} suppressed as noise
+              {openCount} needing action · {brief.items_read ?? 0} of{' '}
+              {brief.items_eligible ?? brief.items_read ?? 0} eligible items read ·{' '}
+              {brief.items_filtered ?? 0} filtered as noise
             </span>
           )}
         </div>
@@ -224,9 +254,42 @@ export default function BriefView({
         >
           📋 Co-Work Prompts
         </button>
-        <button className="cw-btn primary" onClick={refresh} disabled={busy}>
-          {busy ? 'Synthesizing…' : '⟳ Re-synthesize'}
+        <button
+          className="cw-btn primary"
+          onClick={refresh}
+          disabled={busy}
+          title={lens === 'all'
+            ? 'One pass per source, then rebuild the merged brief'
+            : `Re-run only the ${lensLabel} pass`}
+        >
+          {busy ? 'Synthesizing…' : lens === 'all' ? '⟳ Re-synthesize all' : `⟳ Re-synthesize ${lensLabel}`}
         </button>
+      </div>
+
+      {/* One lens per synthesis pass. The merged view is the top 10 across every lane;
+          a lane view is everything that lane's pass surfaced, which is where an item
+          ranked 11th overall is still findable. */}
+      <div className="cw-brief-lens">
+        <button
+          className={`cw-tab${lens === 'all' ? ' on' : ''}`}
+          onClick={() => setLens('all')}
+        >
+          ★ Merged
+        </button>
+        {SOURCES.map((s) => {
+          const p = passes[s.id]
+          return (
+            <button
+              key={s.id}
+              className={`cw-tab${lens === s.id ? ' on' : ''}`}
+              onClick={() => setLens(s.id)}
+              title={p ? `${p.attention} surfaced from ${p.items_read} items read` : undefined}
+            >
+              {s.icon} {s.label}
+              {p ? <span className="cw-tab-n">{p.attention}</span> : null}
+            </button>
+          )
+        })}
       </div>
 
       {showPrompts && <CoWorkPrompts />}
@@ -236,11 +299,18 @@ export default function BriefView({
 
       {brief?.truncated ? (
         <div className="cw-note">
-          <strong>Partial pass.</strong> The local model's context window only fit{' '}
-          {brief.items_read} of {(brief.items_read ?? 0) + brief.truncated} unresolved items —
-          the {brief.truncated} dropped were the lowest-priority and noise-typed ones. For a
-          complete synthesis, have the co-work harvest task write the brief instead (see{' '}
+          <strong>Partial pass.</strong> The context budget fit {brief.items_read} of{' '}
+          {brief.items_eligible ?? (brief.items_read ?? 0) + brief.truncated} eligible items —{' '}
+          {brief.truncated} were dropped unread, lowest-priority first. For a complete
+          synthesis, have the co-work harvest task write the brief instead (see{' '}
           <code>BRIEF_SCHEMA.md</code>).
+        </div>
+      ) : null}
+
+      {brief?.failed_sources?.length ? (
+        <div className="cw-err">
+          <strong>Incomplete merge.</strong> These passes failed and are not represented:{' '}
+          {brief.failed_sources.join(', ')}. Re-synthesize to retry.
         </div>
       ) : null}
 
@@ -286,7 +356,8 @@ export default function BriefView({
               return (
               <div className="cw-att-list">
                 {open.map((a) => (
-                  <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={false} />
+                  <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={false}
+                                showSource={lens === 'all'} />
                 ))}
                 {done.length > 0 && (
                   <>
@@ -294,7 +365,8 @@ export default function BriefView({
                       <span>✓ cleared · {done.length}</span>
                     </div>
                     {done.map((a) => (
-                      <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={true} />
+                      <AttentionRow key={a.id} a={a} onStatus={onStatus} resolved={true}
+                                    showSource={lens === 'all'} />
                     ))}
                   </>
                 )}
@@ -314,8 +386,14 @@ export default function BriefView({
           <p className="cw-brief-foot">
             Synthesized from {brief.items_considered ?? '?'} harvested items
             {brief.period ? ` · period ${brief.period}` : ''}
-            {brief.items_triaged ? ` · ${brief.items_triaged} already triaged` : ''}. Full
-            detail is in the <strong>All items</strong> tab.
+            {brief.items_triaged ? ` · ${brief.items_triaged} already triaged` : ''}
+            {lens === 'all' && Object.keys(passes).length > 0
+              ? ` · ${Object.keys(passes).length} passes: ` +
+                Object.entries(passes)
+                  .map(([s, p]) => `${s} ${p.items_read}`)
+                  .join(', ')
+              : ''}
+            . Full detail is in the <strong>All items</strong> tab.
           </p>
         </>
       )}

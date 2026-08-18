@@ -198,6 +198,16 @@ export interface AttentionItem {
   why?: string | null
   /** The id didn't match an inbox item — triage would no-op, so it's not offered. */
   unresolved_id?: boolean
+  /** Which per-source pass surfaced this. Set only on the merged brief. */
+  source?: Source
+}
+
+/** Per-lane coverage on the merged brief: what each pass considered and read. */
+export interface BriefPass {
+  items_considered: number
+  items_read: number
+  attention: number
+  truncated?: number
 }
 
 export interface Brief {
@@ -219,12 +229,22 @@ export interface Brief {
   message?: string
   /** How many items actually reached the model. */
   items_read?: number
-  /** Set when the context budget forced items to be dropped. */
+  /** Survived the noise/FYI/staleness filters — the denominator for items_read. */
+  items_eligible?: number
+  /** Excluded on purpose (noise, FYI, stale non-client). Not a shortfall. */
+  items_filtered?: number
+  /** Eligible items the context budget dropped unread. This IS a shortfall. */
   truncated?: number
   /** True when the inbox has changed since the brief was synthesized (and auto_synthesize is on). */
   stale_source?: boolean
   /** Human-readable reason for staleness (item count changed, item rewritten, etc.). */
   stale_reason?: string | null
+  /** Which lane this brief covers; null/undefined on the merged brief. */
+  source?: Source | null
+  /** Per-lane coverage, merged brief only — what each pass considered and read. */
+  passes?: Record<string, BriefPass>
+  /** Lanes whose pass errored and are therefore absent from the merge. */
+  failed_sources?: string[]
 }
 
 export interface BriefStatus {

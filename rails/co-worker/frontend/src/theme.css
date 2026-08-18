@@ -294,6 +294,17 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 .cw-age.amber { color: var(--p2); }
 .cw-age.red { color: var(--p1); }
 
+/* Lens row: one tab per synthesis pass, plus the merged view. */
+.cw-brief-lens { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 16px; }
+.cw-brief-lens .cw-tab-n {
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+  padding: 2px 6px; border-radius: 999px;
+  background: var(--s2); color: var(--mut); border: 1px solid var(--bd);
+}
+.cw-brief-lens .cw-tab.on .cw-tab-n {
+  background: rgba(255, 255, 255, 0.22); color: #fff; border-color: transparent;
+}
+
 .cw-pulse {
   background: var(--s1); border: 1px solid var(--bd); border-left: 3px solid var(--p1);
   border-radius: var(--rad); box-shadow: var(--sh);
@@ -353,6 +364,9 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
 .cw-att-main { flex: 1; min-width: 0; }
 .cw-att-head { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.45; }
 .cw-att-why { font-size: 12px; color: var(--mut); margin-top: 4px; line-height: 1.45; }
+
+/* Which pass surfaced this row. Merged view only — in a lane view it is all the same. */
+.cw-att-src { margin-right: 6px; font-size: 12px; opacity: 0.75; }
 
 .cw-att-side { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; flex: none; }
 .cw-urg {

@@ -9,7 +9,9 @@ Routes:
   PATCH /api/inbox/{id}   set triage status (open | done | dismissed)
   GET   /api/doc/{path}   fetch a narrative markdown brief from an inbox subfolder
   GET   /api/brief        the synthesized executive brief (curated, <=10 action items)
+                          ?source=email returns that lane's brief instead of the merge
   POST  /api/brief/refresh  queue a re-synthesis (returns immediately)
+                          ?source=email refreshes one lane; omit to rebuild all + merge
   GET   /api/brief/status   whether a synthesis run is in flight
 
 The brief is the LANDING VIEW: 147 raw items are not actionable, so a synthesis pass
@@ -17,6 +19,11 @@ The brief is the LANDING VIEW: 147 raw items are not actionable, so a synthesis 
 them to what actually needs attention this week. Re-synthesize re-summarizes existing
 inbox items; it does NOT refresh the harvest. Only the co-work harvest loops (which hold
 M365 credentials) can update the underlying inbox/*.json files.
+
+Synthesis runs ONE PASS PER SOURCE, merged into brief.json. A single combined pass over
+every unresolved item does not fit the local model's usable context: at ~200 items it
+could read about half and the rest were dropped unseen. Per lane the payload is small
+enough that every item is read. Each lane also keeps its own brief.<source>.json.
 The raw card grid remains available as a second tab. Synthesis writes inbox/brief.json;
 this backend only ever reads that file — no model call happens on the read path.
 
@@ -114,17 +121,20 @@ def _item_files(d: Path | None = None) -> list[Path]:
 
     Dotfiles are excluded: `.state.json` matches `*.json` and is valid JSON, so without
     this it gets served as a phantom 46th item. Found by the test suite, not in prod.
-    `brief.json` is excluded for the same reason but is NOT a dotfile — the synthesis
-    output lives beside the items and would otherwise render as an extra card.
+    Brief files are excluded for the same reason but are NOT dotfiles — the synthesis
+    output lives beside the items and would otherwise render as extra cards. That is
+    `brief.json` plus one `brief.<source>.json` per lane, hence the shared predicate.
 
     Pass a directory to read a different set (e.g. archive/); defaults to the live inbox.
     """
+    from co_worker_app.synthesize import is_brief_file
+
     d = d if d is not None else _inbox()
     if not d.exists():
         return []
     files = [
         p for p in d.glob("*.json")
-        if not p.name.startswith(".") and p.name != BRIEF_FILE
+        if not p.name.startswith(".") and not is_brief_file(p.name)
     ]
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
 
@@ -271,17 +281,30 @@ def archive_list(
 
 
 @app.get("/api/brief")
-def brief_get(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
+def brief_get(
+    source: str | None = Query(default=None, description="Read one lane's brief (email/calendar/teams); omit for the merged brief."),
+    x_platform_user: str = Header(default="?"),
+) -> dict[str, Any]:
     """The synthesized executive brief — the landing view.
 
     Pure file read. `stale` is advisory: the frontend colours the age signal and
     offers a refresh, but a stale brief is still far more useful than 147 cards.
+
+    `?source=email` returns that lane's brief. The merged brief.json is built from all
+    of them, so a lane brief is never newer than the merge but is always narrower —
+    useful when you want everything in one source rather than the top 10 overall.
     """
-    p = _inbox() / BRIEF_FILE
+    from co_worker_app.synthesize import brief_filename
+
+    if source is not None and ("/" in source or "\\" in source or source.startswith(".")):
+        raise HTTPException(status_code=400, detail="invalid source")
+
+    p = _inbox() / brief_filename(source)
     if not p.exists():
         return {
             "exists": False,
             "stale": True,
+            "source": source,
             "attention": [],
             "message": "No brief yet — run a synthesis pass to generate one.",
         }
@@ -309,11 +332,16 @@ def brief_get(x_platform_user: str = Header(default="?")) -> dict[str, Any]:
 def brief_refresh(
     x_platform_user: str = Header(default="?"),
     auto: bool = Query(default=False, description="True when triggered automatically by staleness detection; applies the cooldown floor."),
+    source: str | None = Query(default=None, description="Refresh only this lane. Omit to run every lane and rebuild the merge."),
 ) -> dict[str, Any]:
     """Queue a synthesis run. Returns immediately — poll /api/brief/status.
 
     Refuses rather than queues when a run is already in flight: two concurrent
     passes would race on brief.json and waste a model call.
+
+    With no `source`, runs one pass per lane and merges them into brief.json. That is
+    several sequential model calls, so it takes proportionally longer than the old
+    single pass — the tradeoff for every item actually being read.
 
     ?auto=1 is set by the frontend's staleness auto-trigger. Manual clicks omit it
     and always bypass the cooldown, so a human is never told to wait.
@@ -321,16 +349,19 @@ def brief_refresh(
     global _last_auto_attempt
     from co_worker_app.synthesize import get_status, synthesize_background
 
+    if source is not None and ("/" in source or "\\" in source or source.startswith(".")):
+        raise HTTPException(status_code=400, detail="invalid source")
+
     if auto:
         now = time.time()
         if now - _last_auto_attempt < settings.auto_synthesize_min_interval_s:
             return {"started": False, "reason": "cooldown", **get_status()}
         _last_auto_attempt = now
 
-    started = synthesize_background(_inbox())
+    started = synthesize_background(_inbox(), source=source)
     if not started:
         raise HTTPException(status_code=409, detail="a synthesis run is already in progress")
-    return {"started": True, **get_status()}
+    return {"started": True, "source": source, **get_status()}
 
 
 @app.get("/api/brief/status")

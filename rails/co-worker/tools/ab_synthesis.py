@@ -197,6 +197,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("/tmp/ab-synthesis"),
                     help="where raw briefs are written for side-by-side reading")
     ap.add_argument("--broker", default=None, help="default: settings.broker_url")
+    ap.add_argument("--source", default=None,
+                    help="score a single lane (email/calendar/teams/insights) — matches "
+                         "what synthesize_all actually runs; omit for one combined pass")
     args = ap.parse_args()
 
     inbox = args.inbox or Path(settings.inbox_dir)
@@ -213,16 +216,19 @@ def main() -> int:
         1 for i in items
         if state.get(str(i.get("_id", "")), "open") in ("done", "dismissed")
     )
-    payload, idx_to_id = _condense(items, state, today=now.date())
+    payload, idx_to_id, n_eligible = _condense(
+        items, state, today=now.date(), source=args.source,
+        user_name=settings.user_name, user_email=settings.user_email)
     valid_ids = set(idx_to_id.values())
-    prompt = _build_prompt(len(items), n_triaged, payload, now.isoformat(), now.date().isoformat(), period)
+    prompt = _build_prompt(len(items), n_triaged, payload, now.isoformat(),
+                           now.date().isoformat(), period, args.source)
 
-    print(f"inbox     : {inbox}")
-    print(f"items     : {len(items)} total, {n_triaged} triaged, {len(payload)} in payload")
+    print(f"inbox     : {inbox}{f' · lane {args.source}' if args.source else ''}")
+    print(f"items     : {len(items)} total, {n_triaged} triaged, "
+          f"{n_eligible} eligible, {len(payload)} in payload")
     print(f"prompt    : {len(prompt):,} chars (~{len(prompt)//4:,} tok) · num_ctx {NUM_CTX:,}")
-    n_unresolved = len(items) - n_triaged
-    if len(payload) < n_unresolved:
-        print(f"  ⚠ budget/filter trimmed {n_unresolved - len(payload)} unresolved items")
+    if len(payload) < n_eligible:
+        print(f"  ⚠ context budget dropped {n_eligible - len(payload)} eligible items")
     print(f"p1 client : {sum(1 for i in payload if i.get('client') and i.get('priority') == 1)} "
           f"in payload (recall denominator)")
     print()

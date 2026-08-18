@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     broker_url: str = "http://host.docker.internal:11500"
     broker_auth_token: str = ""
 
+    # The user whose inbox is being harvested — used to filter self-authored items so the
+    # model never generates "Reply to [yourself]" attention items.
+    # Set CO_WORKER_USER_NAME (and optionally CO_WORKER_USER_EMAIL) in your .env file.
+    user_name: str = ""
+    user_email: str = ""
+
     # Synthesize-on-staleness: auto-trigger a synthesis pass when the brief is older than
     # the current inbox. Set CO_WORKER_AUTO_SYNTHESIZE=false to disable entirely.
     auto_synthesize: bool = True
