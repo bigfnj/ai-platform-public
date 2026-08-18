@@ -149,8 +149,50 @@ def do_embed_image(spec: dict) -> dict:
     return {"embeddings": vecs, "dim": (len(vecs[0]) if vecs else 0), "model": model_id}
 
 
+def do_kokoro(spec: dict) -> dict:
+    """Kokoro-82M ONNX TTS. Runs under onnxruntime-directml (GPU) when installed,
+    falls back to onnxruntime (CPU) transparently. Both modes coexist with a resident
+    RAG LLM because Kokoro loads its own small ONNX session independently of Ollama.
+
+    Required env: KOKORO_MODEL_PATH, KOKORO_VOICES_PATH.
+    Kokoro lang_code maps: 'a'=en-us (default), 'b'=en-gb, 'e'=es, 'f'=fr, 'j'=ja, etc.
+    The older kokoro-onnx API (<=0.5.0) uses lang as BCP-47 tag in create(), not a letter code;
+    we convert: 'a' -> 'en-us', 'b' -> 'en-gb', etc.
+    """
+    import base64
+    import io
+
+    import numpy as np
+    import soundfile as sf
+    from kokoro_onnx import Kokoro
+
+    _LANG_MAP = {"a": "en-us", "b": "en-gb", "e": "es", "f": "fr", "j": "ja",
+                 "z": "zh", "p": "pt"}
+
+    text = spec.get("text", "")
+    voice = str(spec.get("voice") or "af_heart")
+    speed = float(spec.get("speed") or 1.0)
+    lang_code = str(spec.get("lang_code") or "a")
+    lang = _LANG_MAP.get(lang_code, "en-us")
+
+    model_path = str(spec.get("model_path") or "")
+    voices_path = str(spec.get("voices_path") or "")
+    if not model_path or not voices_path:
+        raise RuntimeError(
+            "Kokoro model_path and voices_path must be provided in the spec "
+            "(set BROKER_KOKORO_MODEL_PATH and BROKER_KOKORO_VOICES_PATH on the broker service)"
+        )
+
+    kokoro = Kokoro(model_path, voices_path)
+    audio, sample_rate = kokoro.create(text, voice=voice, speed=speed, lang=lang)
+
+    buf = io.BytesIO()
+    sf.write(buf, np.asarray(audio, dtype=np.float32), sample_rate, format="WAV")
+    return {"audio_b64": base64.b64encode(buf.getvalue()).decode(), "sample_rate": sample_rate}
+
+
 _OPS = {"image": do_image, "tts": do_tts, "tts_batch": do_tts_batch,
-        "embed_image": do_embed_image}
+        "embed_image": do_embed_image, "kokoro_tts": do_kokoro}
 
 
 def main() -> int:

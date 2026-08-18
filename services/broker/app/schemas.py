@@ -96,3 +96,13 @@ class TtsBatchItem(BaseModel):
 class TtsBatchRequest(BaseModel):
     """Many independent clips synthesized in one XTTS load; one wav returned per item."""
     items: list[TtsBatchItem] = Field(min_length=1)
+
+
+class TtsLightRequest(BaseModel):
+    """Kokoro-82M TTS — synthesizes a single text chunk WITHOUT evicting resident models.
+    Kokoro runs via onnxruntime (DirectML on GPU, CPU fallback) and coexists with the
+    RAG LLM on the same card. Follows the embed_image() precedent: no GPU gate, no eviction."""
+    text: str
+    voice: str | None = None      # Kokoro voice id, e.g. "af_heart" (default)
+    lang_code: str | None = None  # 'a' = American English (default), 'b' = British, 'e' = Spanish
+    speed: float | None = None    # 0.5–2.0; default 1.0

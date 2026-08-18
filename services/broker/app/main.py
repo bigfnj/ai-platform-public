@@ -26,6 +26,7 @@ from app.schemas import (
     LoadRequest,
     RoleUpdate,
     TtsBatchRequest,
+    TtsLightRequest,
     TtsRequest,
     UnloadRequest,
 )
@@ -230,3 +231,13 @@ async def tts_batch(req: TtsBatchRequest) -> dict[str, Any]:
         return await get_broker().tts_batch(items)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"tts_batch failed: {exc}") from exc
+
+
+@app.post("/v1/tts_light")
+async def tts_light(req: TtsLightRequest) -> dict[str, Any]:
+    try:
+        return await get_broker().tts_light(
+            req.text, voice=req.voice, lang_code=req.lang_code, speed=req.speed
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"tts_light failed: {exc}") from exc

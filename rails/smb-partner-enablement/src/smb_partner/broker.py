@@ -6,12 +6,11 @@ the one-heavy-model VRAM policy and @role/wildcard resolution.
 Three paths this rail uses:
   * ``chat`` / ``chat_stream`` — the RAG answer, via ``@smb-partner-rag`` (heavy).
   * ``embed``                  — retrieval, via ``@embed`` (light; stays resident alongside).
-  * ``tts``                    — spoken answer, via the broker's media worker.
+  * ``tts_light``              — Kokoro-82M TTS, via the broker's media worker WITHOUT eviction.
 
-Note the asymmetry: chat and embed are Ollama models the broker keeps co-resident, but TTS
-runs in a short-lived media WORKER process that takes the whole card and evicts every heavy
-model first. That is why ``voice.py`` treats broker TTS as one backend among several rather
-than the assumed default — see its module docstring.
+``tts_light`` uses the ``embed_image()`` precedent: Kokoro (~350 MB ONNX) coexists with the
+RAG LLM on the same card, so there is no GPU gate and no model swap per utterance. The legacy
+``tts()`` path (XTTS v2) is still present for completeness but is not used by this rail.
 """
 from __future__ import annotations
 
@@ -110,9 +109,28 @@ def embed(text: str | list[str], *, model: str) -> list[list[float]]:
 
 
 def tts(segments: list[dict], *, timeout: float = DEFAULT_TIMEOUT) -> dict:
-    """Synthesize speech for an ordered segment list. Returns the broker's media payload
-    ({"audio_b64", "sample_rate", ...}). Raises BrokerError when media is disabled."""
+    """XTTS v2 TTS — evicts all heavy models before running. Legacy path, not used by this rail."""
     return _post("/v1/tts", {"segments": segments}, timeout=timeout)
+
+
+def tts_light(
+    text: str,
+    *,
+    voice: str | None = None,
+    lang_code: str | None = None,
+    speed: float | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
+    """Kokoro-82M TTS — synthesizes without evicting the resident RAG model.
+    Returns {"audio_b64", "sample_rate"}. Raises BrokerError if media is disabled."""
+    payload: dict = {"text": text}
+    if voice:
+        payload["voice"] = voice
+    if lang_code:
+        payload["lang_code"] = lang_code
+    if speed is not None:
+        payload["speed"] = speed
+    return _post("/v1/tts_light", payload, timeout=timeout)
 
 
 def status() -> dict:

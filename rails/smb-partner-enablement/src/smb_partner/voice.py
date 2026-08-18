@@ -1,22 +1,21 @@
 """Speech synthesis for the partner voice agent — a backend seam, not a hard dependency.
 
-WHY THIS IS A SEAM. The broker can synthesize speech (XTTS v2, ``POST /v1/tts``), but that
-path runs in a media WORKER process which takes the full GPU gate and evicts *every* resident
-heavy model before it runs. On a single-GPU box that means each spoken answer costs:
+WHY THIS IS A SEAM. The broker exposes two TTS paths:
 
-    evict the RAG model -> load XTTS -> speak -> exit -> reload the RAG model
+  * ``POST /v1/tts``       XTTS v2 — takes the full GPU gate and evicts every resident heavy
+                           model before the worker runs. One model swap per utterance.
+  * ``POST /v1/tts_light`` Kokoro-82M ONNX — NO gate, NO eviction. Kokoro (~350 MB) coexists
+                           with the RAG LLM on the same card. This is the path this rail uses.
 
-…which is the exact opposite of an "always-on" voice agent. Broker TTS is therefore one
-backend among several rather than the assumed default:
+This rail's backends:
 
   ``browser``  the client speaks via the Web Speech API. Zero GPU, zero latency, works on a
-               phone. The RAG model is never disturbed, so it and the embedder stay
-               co-resident. This is the default and what carries the mobile experience.
-  ``broker``   server-side XTTS via the broker's media worker. Higher-quality, voice-cloned
-               audio; costs a model swap per utterance. Requires BROKER_MEDIA_ENABLED=true
-               and a torch venv on the broker box.
-  ``auto``     probe the broker once; use ``broker`` when its media worker is actually
-               available, else ``browser``.
+               phone. The RAG model is never disturbed. Useful when the media venv isn't set up.
+  ``broker``   Kokoro-82M via ``tts_light``. Both models stay GPU-resident simultaneously —
+               the original prototype's "GPU · ready" status for both. Requires the media venv
+               (kokoro-onnx + onnxruntime-directml) and BROKER_MEDIA_ENABLED=true.
+  ``auto``     probe the broker once; use ``broker`` when its media worker is available, else
+               ``browser``.
   ``off``      text only.
 
 Everything above the seam (``/api/ask``, the mobile client) is written against ``speak()``
@@ -30,6 +29,12 @@ import time
 from smb_partner import broker, config
 
 BACKENDS = ("auto", "browser", "broker", "off")
+
+# Maps the BCP-47 lang tag from config/client to Kokoro's single-letter lang_code.
+_KOKORO_LANG = {
+    "en": "a", "en-us": "a", "en-gb": "b",
+    "es": "e", "fr": "f", "ja": "j", "ko": "z", "zh": "z", "pt": "p",
+}
 
 # Probe result cache: the broker's media flag changes only when the broker restarts, and
 # probing costs an HTTP round-trip on a path that wants to feel instant.
@@ -95,11 +100,11 @@ def speak(text: str, *, backend: str | None = None, lang: str | None = None) -> 
     payload: dict = {"mode": mode, "text": clean, "lang": lang or config.VOICE_LANG}
     if mode in ("off", "browser") or not clean:
         return payload
-    segment: dict = {"lang": payload["lang"], "text": clean}
-    if config.VOICE_SPEAKER:
-        segment["speaker"] = config.VOICE_SPEAKER
+    lang_key = payload["lang"].lower()
+    kokoro_lang = _KOKORO_LANG.get(lang_key, "a")
+    voice_id = config.VOICE_SPEAKER or None  # e.g. "af_heart"; empty string → None → default
     try:
-        result = broker.tts([segment])
+        result = broker.tts_light(clean, voice=voice_id, lang_code=kokoro_lang)
     except broker.BrokerError as exc:
         # A media worker that is configured but not actually runnable must not take the
         # answer down with it — degrade to the browser and say so.
@@ -120,7 +125,7 @@ def describe() -> dict:
         "effective": effective,
         "broker_media": _broker_media_ready(),
         "note": (
-            "Broker TTS evicts the resident RAG model per utterance; browser synthesis "
-            "keeps both models warm."
+            "Broker TTS uses Kokoro-82M via tts_light — no eviction, both models GPU-resident. "
+            "Browser fallback uses Web Speech API."
         ),
     }

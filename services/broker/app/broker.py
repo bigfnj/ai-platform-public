@@ -344,6 +344,42 @@ class Broker:
             timeout=self.settings.media_timeout,
         )
 
+    async def tts_light(
+        self,
+        text: str,
+        *,
+        voice: str | None = None,
+        lang_code: str | None = None,
+        speed: float | None = None,
+    ) -> dict[str, Any]:
+        """Kokoro-82M TTS — runs in the media worker WITHOUT the GPU gate or model eviction.
+        At ~350 MB the voice model coexists with a resident RAG LLM on the same card.
+        Follows the embed_image() precedent: no gate.hold(), no _evict_other_heavy().
+        Requires BROKER_KOKORO_MODEL_PATH and BROKER_KOKORO_VOICES_PATH to be set."""
+        self._require_media()
+        if not self.settings.kokoro_model_path or not self.settings.kokoro_voices_path:
+            raise RuntimeError(
+                "Kokoro model paths not configured "
+                "(set BROKER_KOKORO_MODEL_PATH and BROKER_KOKORO_VOICES_PATH)"
+            )
+        spec: dict[str, Any] = {
+            "op": "kokoro_tts",
+            "text": text,
+            "model_path": self.settings.kokoro_model_path,
+            "voices_path": self.settings.kokoro_voices_path,
+        }
+        if voice:
+            spec["voice"] = voice
+        if lang_code:
+            spec["lang_code"] = lang_code
+        if speed is not None:
+            spec["speed"] = speed
+        return await media.run_media_job(
+            python_exe=self.settings.media_python,
+            spec=spec,
+            timeout=self.settings.media_timeout,
+        )
+
     # --- media (gated; VRAM reclaimed by the worker process exiting) ---------
 
     def _require_media(self) -> None:

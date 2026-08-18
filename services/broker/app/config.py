@@ -103,6 +103,10 @@ class BrokerSettings(BaseSettings):
     media_core_src: str = ""
     # XTTS reference voice clips (english_reference.wav / spanish_reference.wav).
     media_voices_dir: str = ""
+    # Kokoro ONNX model file (kokoro-v1.0.fp16-gpu.onnx for DirectML, etc.).
+    kokoro_model_path: str = ""
+    # Kokoro voices embedding file (voices-v1.0.bin).
+    kokoro_voices_path: str = ""
     # Per-job timeout (seconds); a cold model load + a batch can be slow.
     media_timeout: float = 1200.0
 
