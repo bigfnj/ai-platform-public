@@ -5,7 +5,7 @@ decisions that were *deliberate* don't get mistaken for things that were forgott
 
 ---
 
-## 1. Voice: Kokoro TTS through the broker
+## 1. Voice: Kokoro TTS through the broker — DONE (2026-08-18)
 
 **The model:** <https://github.com/hexgrad/kokoro> — Kokoro-82M, Apache-2.0, ~82M params.
 Live demo / voice sampling: <https://huggingface.co/spaces/hexgrad/Kokoro-TTS> (useful for
@@ -27,14 +27,19 @@ onnxruntime on CPU or GPU.
 
 **The work:**
 
-- [ ] Stand up a torch/onnxruntime venv on the broker box and point `BROKER_MEDIA_PYTHON` at it
-- [ ] Add a `kokoro` op to the media worker (`edu_media_core`), loading via `kokoro-onnx`
-- [ ] Add `Broker.tts_light()` — same worker, but **skips `_evict_other_heavy()`**, gated on a
-      small-media allowlist. Follow the `Broker.embed_image()` precedent, which already skips
-      the gate for exactly this reason ("evicting gemma3 to embed on CPU and then reloading it
-      would be pure thrash")
-- [ ] Keep the worker warm for voice instead of spawning per utterance
-- [ ] Flip `SMB_PARTNER_VOICE_BACKEND=broker` and confirm `/api/capabilities` reports it
+- [x] Stand up a torch/onnxruntime venv — `services/broker/media-venv` (py3.11, kokoro-onnx
+      0.5.0, onnxruntime-directml 1.24.4, DmlExecutionProvider confirmed active)
+- [x] Add `do_kokoro` op to `media_worker.py` + register `"kokoro_tts"` in `_OPS`
+- [x] Add `Broker.tts_light()` — no gate, no eviction, embeds model_path/voices_path in spec.
+      `BrokerSettings` gets `kokoro_model_path` + `kokoro_voices_path` (env: `BROKER_KOKORO_*`).
+- [x] NSSM AppEnvironmentExtra updated — `BROKER_MEDIA_ENABLED=true`, `BROKER_MEDIA_PYTHON`,
+      `BROKER_KOKORO_MODEL_PATH` (fp16-gpu.onnx), `BROKER_KOKORO_VOICES_PATH` (v1.0.bin)
+- [x] `/v1/tts_light` route + `TtsLightRequest` schema in broker main.py
+- [x] `voice.py` `speak()` → `broker.tts_light()` with BCP-47 → Kokoro lang_code map
+- [x] End-to-end verified: container → broker → Kokoro ONNX → WAV 24kHz; `effective: broker`;
+      no heavy model eviction; first-call ~6-8s (subprocess cold load per utterance)
+- [ ] **Keep the worker warm** — spawn a long-running Kokoro worker process, reuse across
+      calls. Removes the 6-8s per-utterance cold-load cost. Not blocking; current path works.
 
 **Decide when implementing:** CPU or GPU. On this box, GPU leaves only ~794 MiB free once the
 RAG model and embedder are resident — enough for Kokoro on paper, nothing to spare. CPU is
