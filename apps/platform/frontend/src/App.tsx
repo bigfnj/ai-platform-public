@@ -318,6 +318,24 @@ export default function App() {
       brandActive={isAdminView}
       brandTitle="Admin"
       iconOverrides={{
+        // Gemini CX gets the Gemini "spark" — a four-pointed star with concave sides in
+        // Google's blue-purple-rose gradient. The gradient id is namespaced because every
+        // federated remote shares this document and a bare id would collide.
+        'gemini-cx': (
+          <svg width={22} height={22} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block' }}>
+            <defs>
+              <linearGradient id="shellGeminiSpark" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stopColor="#4285F4" />
+                <stop offset="0.52" stopColor="#9B72CB" />
+                <stop offset="1" stopColor="#D96570" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M12 0C12 6.627 6.627 12 0 12c6.627 0 12 5.373 12 12 0-6.627 5.373-12 12-12C17.373 12 12 6.627 12 0z"
+              fill="url(#shellGeminiSpark)"
+            />
+          </svg>
+        ),
         // AI Playground gets a literal playground (slide) illustration rather than an emoji.
         'ai-playground': (
           <svg width={22} height={22} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>

@@ -33,7 +33,8 @@
 }
 
 .gemini-cx .gcx-logo {
-  font-size: 30px;
+  display: flex;
+  align-items: center;
   line-height: 1;
 }
 
@@ -56,31 +57,36 @@
   flex: 1 1 auto;
 }
 
-.gemini-cx .gcx-pills {
+/* Model status — same pattern as the smb-partner-enablement rail: dot + slot + model + muted
+ * residency, no pills. Kept identical on purpose so the two knowledge rails read the same.
+ * --muted and --good are shared platform tokens and are READ here, never redefined (THEMING.md);
+ * the fallbacks only exist so standalone dev renders. */
+.gemini-cx .status {
   display: flex;
-  gap: 6px;
+  gap: 16px;
   flex-wrap: wrap;
+  font-size: 12px;
   justify-content: flex-end;
 }
 
-.gemini-cx .gcx-pill {
-  background: var(--s2);
-  border: 1px solid var(--bd);
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11px;
-  color: var(--muted-c);
-  white-space: nowrap;
+.gemini-cx .muted {
+  color: var(--muted, var(--text-secondary, #94a0b8));
 }
 
-.gemini-cx .gcx-pill.good {
-  border-color: var(--good, #3fb950);
-  color: var(--good, #3fb950);
+.gemini-cx .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
 }
 
-.gemini-cx .gcx-pill.bad {
-  border-color: var(--critical, #f85149);
-  color: var(--critical, #f85149);
+.gemini-cx .dot.on {
+  background: var(--good, #22c55e);
+}
+
+.gemini-cx .dot.off {
+  background: var(--muted, var(--text-secondary, #94a0b8));
 }
 
 /* --- banners ------------------------------------------------------------ */
@@ -107,17 +113,48 @@
 
 /* --- layout ------------------------------------------------------------- */
 
+/* Three columns: question deck | answer | sources. The two side columns share the same
+ * minmax() so they are exactly the same width, and named areas are used rather than relying on
+ * auto-placement so the responsive collapses below put each panel somewhere sensible instead of
+ * wherever the grid happens to flow it. */
 .gemini-cx .gcx-body {
   display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas: 'deck answer sources';
   gap: 18px;
   align-items: start;
+}
+
+/* Not enough room for three: sources drops beneath the answer, the deck keeps its column. */
+@media (max-width: 1400px) {
+  .gemini-cx .gcx-body {
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    grid-template-areas:
+      'deck answer'
+      'deck sources';
+  }
 }
 
 @media (max-width: 1000px) {
   .gemini-cx .gcx-body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'deck'
+      'answer'
+      'sources';
   }
+}
+
+.gemini-cx .gcx-deck {
+  grid-area: deck;
+}
+
+.gemini-cx .gcx-answer {
+  grid-area: answer;
+}
+
+.gemini-cx .gcx-sources {
+  grid-area: sources;
 }
 
 /* --- question deck ------------------------------------------------------ */
@@ -359,16 +396,29 @@
   padding: 0 3px;
 }
 
-.gemini-cx .gcx-cites {
-  border-top: 1px solid var(--bd);
-  padding-top: 12px;
+/* Its own panel now, matching the deck on the other side. Scrolls independently so six
+ * citations never push the page taller than the answer needs. */
+.gemini-cx .gcx-sources {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  padding: 14px;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
 }
 
-.gemini-cx .gcx-cites h4 {
-  margin: 0 0 9px;
+.gemini-cx .gcx-sources h4 {
+  margin: 0 0 10px;
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
+  color: var(--muted-c);
+}
+
+.gemini-cx .gcx-sources-empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--muted-c);
 }
 

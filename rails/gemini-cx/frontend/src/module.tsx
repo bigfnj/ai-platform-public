@@ -31,24 +31,50 @@ interface Asked {
   collections: string[]
 }
 
-function ModelPill({ caps }: { caps: Capabilities | null }) {
-  if (!caps) return null
-  const { models, corpus } = caps
-  const down = models.broker !== 'ok'
+// The Gemini "spark" — a four-pointed star with concave sides, in Google's blue→purple→rose
+// gradient. Inline SVG rather than an emoji because there is no Gemini glyph in Unicode. The
+// gradient id is namespaced: every federated remote renders into the same document, so a bare
+// id like "grad" would collide with another rail's defs and silently repaint one of them.
+function GeminiIcon() {
   return (
-    <div className="gcx-pills">
-      <span className={'gcx-pill' + (down ? ' bad' : ' good')} title={
-        down ? 'The broker is unreachable — answers are unavailable' : 'Broker reachable'}>
-        {down ? 'broker down' : 'broker ok'}
+    <svg width={26} height={26} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id="gcxGeminiSpark" x1="0" y1="0" x2="24" y2="24"
+          gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#4285F4" />
+          <stop offset="0.52" stopColor="#9B72CB" />
+          <stop offset="1" stopColor="#D96570" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M12 0C12 6.627 6.627 12 0 12c6.627 0 12 5.373 12 12 0-6.627 5.373-12 12-12C17.373 12 12 6.627 12 0z"
+        fill="url(#gcxGeminiSpark)"
+      />
+    </svg>
+  )
+}
+
+// Status line follows the smb-partner-enablement pattern exactly: a coloured dot per model, the
+// slot name, the resolved model, and its residency in muted text. Same classes (.status, .dot,
+// .muted) scoped under this rail's wrapper, same 8px dot, same 16px gap.
+function AiStatus({ caps }: { caps: Capabilities | null }) {
+  if (!caps) return <span className="muted">checking…</span>
+  const m = caps.models
+  if (m.broker !== 'ok') return <span className="muted">● broker unreachable</span>
+  return (
+    <div className="status">
+      <span title="@gemini-cx-rag — writes the grounded answer">
+        <i className={`dot ${m.rag_resident ? 'on' : 'off'}`} />
+        LLM ({m.rag_model}){' '}
+        <span className="muted">{m.rag_resident ? 'GPU · ready' : 'cold'}</span>
       </span>
-      <span className="gcx-pill" title="The model that writes the grounded answer">
-        {models.rag_model}{models.rag_resident ? ' · warm' : ''}
+      <span title="@embed — retrieval over the GECX corpus">
+        <i className={`dot ${m.embed_resident ? 'on' : 'off'}`} />
+        Retrieval ({m.embed_model}){' '}
+        <span className="muted">{m.embed_resident ? 'GPU · ready' : 'cold'}</span>
       </span>
-      <span className="gcx-pill" title="The retrieval embedder">
-        {models.embed_model}{models.embed_resident ? ' · warm' : ''}
-      </span>
-      <span className="gcx-pill" title="Indexed chunks across all collections">
-        {corpus.chunks} chunks · {corpus.collections} collections
+      <span className="muted">
+        {caps.corpus.chunks} chunks · {caps.corpus.collections} collections
       </span>
     </div>
   )
@@ -99,23 +125,34 @@ function Deck({
   )
 }
 
-function Citations({ cites }: { cites: Citation[] }) {
-  if (!cites.length) return null
+// Sources live in their own column rather than under the answer, and the column is rendered
+// even when empty. That is deliberate: citations arrive on the `retrieval` frame, i.e. BEFORE
+// the first token, so a column that appeared only once it had content would resize the answer
+// pane a moment after the user hit ask — a visible jump on every single question.
+function Sources({ cites, asked }: { cites: Citation[]; asked: boolean }) {
   return (
-    <div className="gcx-cites">
+    <aside className="gcx-sources">
       <h4>Sources</h4>
-      {cites.map((c) => (
-        <div className="gcx-cite" key={c.n}>
-          <span className="gcx-cite-n">{c.n}</span>
-          <div className="gcx-cite-body">
-            <strong>{c.title || c.source}</strong>
-            <span className="gcx-cite-meta">
-              {titleCase(c.collection)} · <code>{c.source}</code> · {c.score.toFixed(3)}
-            </span>
+      {cites.length === 0 ? (
+        <p className="gcx-sources-empty">
+          {asked
+            ? 'Nothing was retrieved for this question, so the answer is not grounded — treat it with suspicion.'
+            : 'The chunks behind an answer appear here, most relevant first.'}
+        </p>
+      ) : (
+        cites.map((c) => (
+          <div className="gcx-cite" key={c.n}>
+            <span className="gcx-cite-n">{c.n}</span>
+            <div className="gcx-cite-body">
+              <strong>{c.title || c.source}</strong>
+              <span className="gcx-cite-meta">
+                {titleCase(c.collection)} · <code>{c.source}</code> · {c.score.toFixed(3)}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))
+      )}
+    </aside>
   )
 }
 
@@ -220,7 +257,7 @@ export default function GeminiCxModule() {
   return (
     <div className="gemini-cx">
       <header className="gcx-head">
-        <span className="gcx-logo" aria-hidden="true">🎧</span>
+        <span className="gcx-logo"><GeminiIcon /></span>
         <div className="gcx-titles">
           <h1>Gemini Enterprise CX</h1>
           <span className="gcx-sub">
@@ -229,7 +266,7 @@ export default function GeminiCxModule() {
           </span>
         </div>
         <span className="gcx-spacer" />
-        <ModelPill caps={caps} />
+        <AiStatus caps={caps} />
       </header>
 
       {loadErr && (
@@ -325,11 +362,11 @@ export default function GeminiCxModule() {
                 {answer ? renderMarkdown(answer) : busy ? <p className="gcx-thinking">Retrieving and reasoning…</p> : null}
                 {busy && answer && <span className="gcx-caret" aria-hidden="true" />}
               </div>
-
-              <Citations cites={cites} />
             </>
           )}
         </main>
+
+        <Sources cites={cites} asked={asked !== null} />
       </div>
     </div>
   )
