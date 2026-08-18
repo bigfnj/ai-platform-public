@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { askStream, generatePackage, getCapabilities, getScenarios } from '../src/api'
+import { askStream, generatePackage, getCapabilities, getScenarios, speakText, transcribe } from '../src/api'
 import type {
   AnalysisEvent,
   Capabilities,
@@ -10,7 +10,8 @@ import type {
   StageState,
   Turn,
 } from '../src/types'
-import { canListen, canSpeak, listen, speak, stopSpeaking } from '../src/voice'
+import type { Recorder } from '../src/voice'
+import { canListen, canRecord, listen, record, speak, stopSpeaking } from '../src/voice'
 
 type Tab = 'about' | 'builder' | 'chat'
 
@@ -71,21 +72,32 @@ function inline(s: string): (string | JSX.Element)[] {
 
 const UNKNOWN = 'Not sure yet'
 
+
 function ReadAloud({ text }: { text: string }) {
   const [on, setOn] = useState(false)
+  const [loading, setLoading] = useState(false)
   useEffect(() => () => stopSpeaking(), [])
-  if (!canSpeak() || !text) return null
+  if (!text) return null
+
+  const toggle = async () => {
+    if (on) { stopSpeaking(); setOn(false); return }
+    if (loading) return
+    setLoading(true)
+    try {
+      const payload = await speakText(text)
+      setOn(true)
+      speak(payload as any, () => setOn(false))
+    } catch {
+      setOn(true)
+      speak({ mode: 'browser', text, lang: 'en-US' }, () => setOn(false))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <button
-      className="ghost"
-      style={{ marginTop: 8 }}
-      onClick={() => {
-        if (on) { stopSpeaking(); setOn(false); return }
-        setOn(true)
-        speak({ mode: 'browser', text, lang: 'en-US' }, () => setOn(false))
-      }}
-    >
-      {on ? '■ Stop' : '🔊 Read aloud'}
+    <button className="ghost" style={{ marginTop: 8 }} onClick={toggle} disabled={loading}>
+      {loading ? '…' : on ? '■ Stop' : '🔊 Read aloud'}
     </button>
   )
 }
@@ -403,15 +415,21 @@ function Builder({ scenarios }: { scenarios: Scenario[] | null }) {
 // Chat
 // ---------------------------------------------------------------------------
 
-function Chat({ caps }: { caps: Capabilities | null }) {
+function Chat({ caps, onSpeakChange }: { caps: Capabilities | null; onSpeakChange: (b: boolean) => void }) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
-  const [speaking, setSpeaking] = useState(false)
   const [hearing, setHearing] = useState(false)
+  const [thinking, setThinking] = useState(false)
+
+  const setSpeak = onSpeakChange
   const [err, setErr] = useState('')
   const nextId = useRef(1)
   const tail = useRef<HTMLDivElement>(null)
+  const recorder = useRef<Recorder | null>(null)
+
+  // Leaving the chat tab mid-recording must release the mic.
+  useEffect(() => () => { recorder.current?.cancel(); recorder.current = null }, [])
 
   useEffect(() => { tail.current?.scrollIntoView({ behavior: 'smooth' }) }, [turns])
 
@@ -433,7 +451,7 @@ function Chat({ caps }: { caps: Capabilities | null }) {
           onDone: ({ answer, voice }) => {
             patch((t) => ({ ...t, answer, streaming: false }))
             setBusy(false)
-            if (voice) { setSpeaking(true); speak(voice, () => setSpeaking(false)) }
+            if (voice) { setSpeak(true); speak(voice, () => setSpeak(false)) }
           },
           onError: (detail) => { patch((t) => ({ ...t, streaming: false, error: detail })); setBusy(false) },
         },
@@ -442,15 +460,43 @@ function Chat({ caps }: { caps: Capabilities | null }) {
     [busy],
   )
 
-  const mic = () => {
-    if (hearing || busy) return
-    stopSpeaking(); setSpeaking(false); setHearing(true)
-    const started = listen({
-      onResult: (transcript, final) => { setDraft(transcript); if (final) submit(transcript) },
-      onEnd: () => setHearing(false),
-      onError: (detail) => { setHearing(false); setErr(detail) },
+  // Server-side Whisper when the broker's media worker is up: it keeps the audio on the
+  // platform instead of Google's servers, and it works in browsers with no Web Speech at all.
+  const serverStt = caps?.voice?.stt === 'broker' && canRecord()
+
+  const mic = async () => {
+    if (hearing || busy || thinking) return
+    stopSpeaking(); setSpeak(false); setErr('')
+    if (!serverStt) {
+      setHearing(true)
+      const started = listen({
+        onResult: (transcript, final) => { setDraft(transcript); if (final) submit(transcript) },
+        onEnd: () => setHearing(false),
+        onError: (detail) => { setHearing(false); setErr(detail) },
+      })
+      if (!started) setHearing(false)
+      return
+    }
+    if (recorder.current) { recorder.current.stop(); recorder.current = null; return }
+    recorder.current = await record({
+      onStart: () => setHearing(true),
+      onError: (detail) => { setHearing(false); recorder.current = null; setErr(detail) },
+      onReady: async (audio_b64, suffix) => {
+        setHearing(false)
+        recorder.current = null
+        setThinking(true)
+        try {
+          const { text } = await transcribe(audio_b64, suffix)
+          if (!text) { setErr('nothing was heard — try again'); return }
+          setDraft(text)
+          submit(text)
+        } catch (e: any) {
+          setErr(String(e?.message || 'transcription failed'))
+        } finally {
+          setThinking(false)
+        }
+      },
     })
-    if (!started) setHearing(false)
   }
 
   const live = caps?.broker_reachable
@@ -495,11 +541,7 @@ function Chat({ caps }: { caps: Capabilities | null }) {
         <div ref={tail} />
       </div>
       {err && <div className="warn pad">{err}</div>}
-      {speaking && (
-        <button className="stopvoice" onClick={() => { stopSpeaking(); setSpeaking(false) }}>
-          ⏹ Stop voice
-        </button>
-      )}
+{/* stop button is now in the App header, controlled by onSpeakChange */}
       <div className="composer">
         <input
           value={draft}
@@ -510,15 +552,18 @@ function Chat({ caps }: { caps: Capabilities | null }) {
         />
         <button
           className={`mic ${hearing ? 'hearing' : ''}`}
-          onClick={canListen() ? mic : () => submit(draft)}
-          disabled={busy}
-          aria-label={canListen() ? 'Tap to speak' : 'Send'}
+          onClick={(serverStt || canListen()) ? mic : () => submit(draft)}
+          disabled={busy || thinking}
+          aria-label={hearing ? 'Stop and send' : (serverStt || canListen()) ? 'Tap to speak' : 'Send'}
         >
-          {canListen() ? '🎤' : '➤'}
+          {hearing ? '⏹' : (serverStt || canListen()) ? '🎤' : '➤'}
         </button>
       </div>
       <p className="hint">
-        {busy ? 'Working…' : hearing ? 'Listening…' : canListen() ? 'Tap to speak' : 'Tap to send'}
+        {busy ? 'Working…'
+          : thinking ? 'Transcribing…'
+          : hearing ? (serverStt ? 'Recording — tap ⏹ when done' : 'Listening…')
+          : (serverStt || canListen()) ? 'Tap to speak' : 'Tap to send'}
       </p>
     </>
   )
@@ -532,6 +577,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('chat')
   const [caps, setCaps] = useState<Capabilities | null>(null)
   const [scenarios, setScenarios] = useState<Scenario[] | null>(null)
+  const [speaking, setSpeaking] = useState(false)
 
   useEffect(() => {
     getCapabilities().then(setCaps).catch(() => setCaps(null))
@@ -546,6 +592,15 @@ export default function App() {
           <span className="logo" aria-hidden />
           Partner Center
         </span>
+        {speaking && (
+          <button
+            className="stop-audio-btn"
+            onClick={() => { stopSpeaking(); setSpeaking(false) }}
+            aria-label="Stop audio"
+          >
+            ⏹ Stop
+          </button>
+        )}
         <span className="avatar">{(caps?.user ?? '?').slice(0, 1).toUpperCase()}</span>
       </header>
 
@@ -558,7 +613,7 @@ export default function App() {
       </nav>
 
       <main className="mbody">
-        {tab === 'chat' && <Chat caps={caps} />}
+        {tab === 'chat' && <Chat caps={caps} onSpeakChange={setSpeaking} />}
         {tab === 'about' && (
           <div className="pad">
             <h2>What is this?</h2>

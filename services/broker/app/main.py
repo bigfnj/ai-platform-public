@@ -26,6 +26,7 @@ from app.schemas import (
     LoadRequest,
     RoleUpdate,
     TtsBatchRequest,
+    TranscribeRequest,
     TtsLightRequest,
     TtsRequest,
     UnloadRequest,
@@ -231,6 +232,16 @@ async def tts_batch(req: TtsBatchRequest) -> dict[str, Any]:
         return await get_broker().tts_batch(items)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"tts_batch failed: {exc}") from exc
+
+
+@app.post("/v1/transcribe")
+async def transcribe(req: TranscribeRequest) -> dict[str, Any]:
+    try:
+        return await get_broker().transcribe(
+            req.audio_b64, suffix=req.suffix, language=req.language
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"transcribe failed: {exc}") from exc
 
 
 @app.post("/v1/tts_light")

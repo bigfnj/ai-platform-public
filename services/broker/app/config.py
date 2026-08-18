@@ -112,6 +112,12 @@ class BrokerSettings(BaseSettings):
     kokoro_model_path: str = ""
     # Kokoro voices embedding file (voices-v1.0.bin).
     kokoro_voices_path: str = ""
+    # faster-whisper STT. CPU/int8 by default: speech input must never evict the resident
+    # RAG model, and a short question transcribes in ~1.7s on CPU anyway. Weights come from
+    # the HuggingFace cache, so no path setting is needed — only the model id.
+    whisper_model: str = "small.en"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
     # Per-job timeout (seconds); a cold model load + a batch can be slow.
     media_timeout: float = 1200.0
 

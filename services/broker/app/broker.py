@@ -381,6 +381,37 @@ class Broker:
             timeout=self.settings.media_timeout,
         )
 
+    async def transcribe(
+        self,
+        audio_b64: str,
+        *,
+        suffix: str | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        """faster-whisper STT — same no-gate path as tts_light().
+
+        Speech input is the one call that must never wait behind a GPU gate: the user is
+        sitting there having just stopped talking. Running CPU/int8 keeps it off the card
+        entirely, so it neither evicts the resident RAG model nor queues behind image work.
+        Returns {"text", "language", "duration"}."""
+        self._require_media()
+        spec: dict[str, Any] = {
+            "op": "transcribe",
+            "audio_b64": audio_b64,
+            "model": self.settings.whisper_model,
+            "device": self.settings.whisper_device,
+            "compute_type": self.settings.whisper_compute_type,
+        }
+        if suffix:
+            spec["suffix"] = suffix
+        if language:
+            spec["language"] = language
+        return await media.run_media_job(
+            python_exe=self.settings.media_python,
+            spec=spec,
+            timeout=self.settings.media_timeout,
+        )
+
     # --- media (gated; VRAM reclaimed by the worker process exiting) ---------
 
     def _require_media(self) -> None:

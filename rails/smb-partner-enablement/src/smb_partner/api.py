@@ -26,6 +26,18 @@ from smb_partner import broker, config, generate, ingest, rag, scenarios, store,
 log = logging.getLogger("smb_partner.api")
 
 
+class SpeakBody(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+
+
+class TranscribeBody(BaseModel):
+    # ~15 MB of base64 is a couple of minutes of opus; well past any single spoken question,
+    # and bounded so a stuck recorder cannot post an unbounded body.
+    audio_b64: str = Field(min_length=1, max_length=15_000_000)
+    suffix: str | None = None
+    language: str | None = None
+
+
 class AskBody(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     collections: list[str] = []
@@ -175,6 +187,24 @@ def create_api() -> FastAPI:
         except broker.BrokerError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         return {"collection": body.name, "chunks": count}
+
+    @app.post("/api/speak")
+    async def speak_api(body: SpeakBody, who: dict = Depends(identity)) -> dict[str, Any]:
+        """Synthesize arbitrary text through Kokoro (or browser fallback) — used by Read aloud."""
+        return await asyncio.to_thread(voice.speak, body.text)
+
+    @app.post("/api/transcribe")
+    async def transcribe_api(body: TranscribeBody,
+                             who: dict = Depends(identity)) -> dict[str, Any]:
+        """Speech-to-text for a recorded utterance. The browser records with the microphone
+        the user actually chose (Web Speech could not), and the audio never leaves this box."""
+        try:
+            return await asyncio.to_thread(
+                voice.transcribe, body.audio_b64,
+                suffix=body.suffix, language=body.language,
+            )
+        except voice.VoiceUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/ask")
     async def ask(body: AskBody, who: dict = Depends(identity)) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { generatePackage, getScenarios } from './api'
-import { canSpeak, speak, stopSpeaking } from './voice'
+import { generatePackage, getScenarios, speakText } from './api'
+import { speak, stopSpeaking } from './voice'
 import type {
   AnalysisEvent,
   RetrievalEvent,
@@ -77,22 +77,30 @@ const UNKNOWN = 'Not sure yet'
 
 function ReadAloud({ text }: { text: string }) {
   const [on, setOn] = useState(false)
+  const [loading, setLoading] = useState(false)
   useEffect(() => () => stopSpeaking(), [])
-  if (!canSpeak() || !text) return null
+  if (!text) return null
+
+  const toggle = async () => {
+    if (on) { stopSpeaking(); setOn(false); return }
+    if (loading) return
+    setLoading(true)
+    try {
+      const payload = await speakText(text)
+      setOn(true)
+      speak(payload as any, () => setOn(false))
+    } catch {
+      // broker unavailable — fall back to browser TTS
+      setOn(true)
+      speak({ mode: 'browser', text, lang: 'en-US' }, () => setOn(false))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <button
-      className="ghost"
-      onClick={() => {
-        if (on) {
-          stopSpeaking()
-          setOn(false)
-          return
-        }
-        setOn(true)
-        speak({ mode: 'browser', text, lang: 'en-US' }, () => setOn(false))
-      }}
-    >
-      {on ? '■ Stop' : '🔊 Read aloud'}
+    <button className="ghost" onClick={toggle} disabled={loading}>
+      {loading ? '…' : on ? '■ Stop' : '🔊 Read aloud'}
     </button>
   )
 }

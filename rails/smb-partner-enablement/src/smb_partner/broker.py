@@ -133,6 +133,23 @@ def tts_light(
     return _post("/v1/tts_light", payload, timeout=timeout)
 
 
+def transcribe(
+    audio_b64: str,
+    *,
+    suffix: str | None = None,
+    language: str | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict:
+    """faster-whisper STT — transcribes one utterance without evicting the resident RAG model.
+    Returns {"text", "language", "duration"}. Raises BrokerError if media is disabled."""
+    payload: dict = {"audio_b64": audio_b64}
+    if suffix:
+        payload["suffix"] = suffix
+    if language:
+        payload["language"] = language
+    return _post("/v1/transcribe", payload, timeout=timeout)
+
+
 def status() -> dict:
     """Broker/GPU status passthrough (loaded models, VRAM, queue depth, media availability)."""
     return _get("/v1/status")

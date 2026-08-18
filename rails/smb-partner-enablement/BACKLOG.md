@@ -38,8 +38,11 @@ onnxruntime on CPU or GPU.
 - [x] `voice.py` `speak()` → `broker.tts_light()` with BCP-47 → Kokoro lang_code map
 - [x] End-to-end verified: container → broker → Kokoro ONNX → WAV 24kHz; `effective: broker`;
       no heavy model eviction; first-call ~6-8s (subprocess cold load per utterance)
-- [ ] **Keep the worker warm** — spawn a long-running Kokoro worker process, reuse across
-      calls. Removes the 6-8s per-utterance cold-load cost. Not blocking; current path works.
+- [ ] **Keep the worker warm** — spawn a long-running media worker process, reuse across calls.
+      Removes the per-utterance cold-load cost. Now worth more than when it was written: **both**
+      voice directions pay it. STT measures 4.8s end-to-end of which only ~1.7s is transcription;
+      the rest is subprocess spawn + model load. Warming would put both paths near 1.5s.
+      Not blocking; current path works.
 
 **Decide when implementing:** CPU or GPU. On this box, GPU leaves only ~794 MiB free once the
 RAG model and embedder are resident — enough for Kokoro on paper, nothing to spare. CPU is
@@ -114,9 +117,20 @@ same StaticFiles mount (dist/m/ nested inside the desktop dist).
       rebuild. Bind-mounting `seed/knowledge-base` would make authoring iterative.
 - [ ] **Upload path is admin-only** and re-embeds a whole collection per upload. Fine at current
       scale; revisit if partners upload their own material.
-- [ ] **No STT server-side.** Speech *input* is browser-only (`SpeechRecognition`), which means
-      no speech input in Firefox. A Whisper op in the media worker would close this, with the
-      same eviction caveat as Kokoro.
+- [x] **Server-side STT — done 2026-08-18.** `do_transcribe` op in `media_worker.py`,
+      `Broker.transcribe()`, `POST /v1/transcribe`, rail `POST /api/transcribe`, and a
+      `MediaRecorder` capture path in `voice.ts`. faster-whisper `small.en` on **CPU/int8**: no
+      GPU gate, no eviction, ~1.7s for a 4s utterance. Closes the Firefox gap and stops sending
+      audio to Google.
+      **The forcing bug was not privacy.** `SpeechRecognition` has no device API — it always uses
+      the OS default input. With a headset chosen in our own picker, Chrome kept listening to the
+      default (silent) device and returned `no-speech`. `getUserMedia({ deviceId })` honours the
+      choice; Web Speech never could.
+      **Fresh-install step:** the media venv needs `faster-whisper`
+      (`uv pip install --python <media-venv>/Scripts/python.exe faster-whisper`). Weights come
+      from the HuggingFace cache on first call (`Systran/faster-whisper-small.en`, ~484 MB), so a
+      cold box needs one online call. Override with `BROKER_WHISPER_MODEL` /
+      `BROKER_WHISPER_DEVICE` / `BROKER_WHISPER_COMPUTE_TYPE`.
 - [ ] **`_same_model()` in `api.py`** works around Ollama's implicit `:latest`. If other rails
       grow residency indicators, this belongs in `platform_core` rather than copied.
 - [ ] **Mobile preview iframe** loads the rail's own origin. Harmless today; if the gateway ever

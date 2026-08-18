@@ -98,6 +98,15 @@ class TtsBatchRequest(BaseModel):
     items: list[TtsBatchItem] = Field(min_length=1)
 
 
+class TranscribeRequest(BaseModel):
+    """faster-whisper STT — transcribes one short utterance WITHOUT evicting resident
+    models. Runs CPU/int8 in the media worker, so speech input never competes for VRAM
+    with the RAG model the answer is about to come from."""
+    audio_b64: str                # raw MediaRecorder bytes, base64
+    suffix: str | None = None     # container hint, e.g. ".webm" (Chrome), ".ogg" (Firefox)
+    language: str | None = None   # ISO code; None lets Whisper detect
+
+
 class TtsLightRequest(BaseModel):
     """Kokoro-82M TTS — synthesizes a single text chunk WITHOUT evicting resident models.
     Kokoro runs via onnxruntime (DirectML on GPU, CPU fallback) and coexists with the

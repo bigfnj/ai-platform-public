@@ -38,6 +38,9 @@ export type Capabilities = {
     configured: string
     effective: 'browser' | 'broker' | 'off'
     broker_media: boolean
+    /** Speech INPUT path. 'broker' = faster-whisper, and the only one that honours the
+     *  selected microphone; 'browser' = Web Speech, which always uses the OS default. */
+    stt: 'browser' | 'broker'
     note: string
   }
   corpus: { chunks: number; dims: number; collections: number }

@@ -191,8 +191,59 @@ def do_kokoro(spec: dict) -> dict:
     return {"audio_b64": base64.b64encode(buf.getvalue()).decode(), "sample_rate": sample_rate}
 
 
+def do_transcribe(spec: dict) -> dict:
+    """faster-whisper STT. Runs on CPU (int8) by default so it never competes for VRAM
+    with the resident RAG model — the same reasoning that put Kokoro on a no-gate path.
+    A 4s utterance transcribes in ~1.7s on this box, which is under the round trip the
+    browser's own recognizer was taking.
+
+    The browser sends whatever MediaRecorder produced (webm/opus in Chrome, ogg in
+    Firefox, mp4 in Safari); PyAV bundles the demuxers, so the bytes are written to a
+    temp file and handed over as-is rather than being transcoded here.
+
+    Model files come from the HuggingFace cache (Systran/faster-whisper-*); the first
+    call on a cold cache downloads, every later one is local.
+    """
+    import tempfile
+
+    from faster_whisper import WhisperModel
+
+    audio_b64 = spec.get("audio_b64") or ""
+    if not audio_b64:
+        raise RuntimeError("transcribe requires audio_b64")
+
+    model_name = str(spec.get("model") or "small.en")
+    device = str(spec.get("device") or "cpu")
+    compute_type = str(spec.get("compute_type") or "int8")
+    language = spec.get("language") or None
+
+    suffix = str(spec.get("suffix") or ".webm")
+    tmp = Path(tempfile.mkdtemp(prefix="broker-stt-"))
+    clip = tmp / f"clip{suffix}"
+    try:
+        clip.write_bytes(base64.b64decode(audio_b64))
+        model = WhisperModel(model_name, device=device, compute_type=compute_type)
+        # beam_size=1 is greedy: for a single short question it is materially faster and
+        # the accuracy difference does not show. vad_filter drops leading/trailing silence,
+        # which is most of what an open mic records.
+        segments, info = model.transcribe(
+            str(clip), beam_size=1, vad_filter=True,
+            **({"language": language} if language else {}),
+        )
+        text = " ".join(s.text.strip() for s in segments).strip()
+        return {"text": text, "language": getattr(info, "language", ""),
+                "duration": round(float(getattr(info, "duration", 0.0)), 2)}
+    finally:
+        for p in (clip, tmp):
+            try:
+                p.unlink() if p.is_file() else p.rmdir()
+            except OSError:
+                pass
+
+
 _OPS = {"image": do_image, "tts": do_tts, "tts_batch": do_tts_batch,
-        "embed_image": do_embed_image, "kokoro_tts": do_kokoro}
+        "embed_image": do_embed_image, "kokoro_tts": do_kokoro,
+        "transcribe": do_transcribe}
 
 
 def main() -> int:

@@ -46,6 +46,16 @@ export const ask = (body: {
 export const getScenarios = () =>
   json<{ scenarios: Scenario[]; stages: Stage[] }>('/api/scenarios')
 
+export const transcribe = (audio_b64: string, suffix: string) =>
+  json<{ text: string; language: string; duration: number }>(
+    '/api/transcribe', { method: 'POST', body: JSON.stringify({ audio_b64, suffix }) }
+  )
+
+export const speakText = (text: string) =>
+  json<{ mode: string; text: string; lang: string; audio_b64?: string; sample_rate?: number }>(
+    '/api/speak', { method: 'POST', body: JSON.stringify({ text }) }
+  )
+
 export type PackageHandlers = {
   onStage?: (e: StageEvent) => void
   /** The deterministic analysis: open questions and the hard constraints that fired. */

@@ -18,8 +18,9 @@ answered only from curated SME material, with citations.
 | ✅ Desktop rail | Three tabs + AI status + live mobile preview |
 | ✅ Platform wiring | Broker roles, gateway registration, compose service |
 | ◐ Mobile surface | Standalone build at `/smb-partner-enablement/m/`; Chat works, the Scenario Builder flow is **not yet wired there** |
-| ⛔ Server-side voice | Kokoro is unavailable on this platform — see [`MODELS.md`](MODELS.md) and [`BACKLOG.md`](BACKLOG.md) |
-| ⛔ Deployed | Not in `PLATFORM_ENABLED_APPS`, so it does **not** appear at `localhost:1111` yet |
+| ✅ Server-side voice out | **Kokoro-82M** via the broker's non-evicting `tts_light` — both models stay resident. Every spoken surface, including *Read aloud*, goes through it |
+| ✅ Server-side voice in | **faster-whisper** (CPU/int8) via the broker's `/v1/transcribe` — honours the selected microphone and keeps audio on the box |
+| ✅ Deployed | Live at `localhost:1111` behind the entitlement gate |
 
 ### How the Scenario Builder stays honest
 
@@ -43,11 +44,25 @@ rather than a special case: `@smb-partner-rag` (heavy, 3B-class) writes the answ
 (light) does retrieval, and the broker's one-heavy-model policy exempts embedders. Measured
 co-resident on this workstation at 2.55 GB + 0.66 GB.
 
-**Voice is the exception.** The broker's TTS path evicts *every* heavy model before running, so
-server-side speech would cost a model swap per utterance — the opposite of an always-on voice
-agent. Until a non-evicting Kokoro path exists, `voice.py` resolves to browser speech synthesis,
-which costs no VRAM and works on a phone. `/api/capabilities` reports which backend is actually
-live, so the UI never claims a capability it does not have. Full analysis in [`MODELS.md`](MODELS.md).
+**Voice used to be the exception, and no longer is.** The broker's original TTS path (`/v1/tts`,
+XTTS) evicts *every* heavy model before running, which would cost a model swap per utterance —
+the opposite of an always-on voice agent. Both directions now run on paths that take no GPU gate
+and evict nothing:
+
+- **Out — Kokoro-82M** via `/v1/tts_light`. At ~350 MB it coexists with the resident RAG model.
+  Every spoken surface routes here, including *Read aloud* (`POST /api/speak`); the browser's
+  synthesizer is only a fallback for when the media worker is down.
+- **In — faster-whisper `small.en`** via `/v1/transcribe`, on **CPU/int8** so speech input never
+  competes for VRAM with the model that is about to answer. ~1.7s for a 4s utterance.
+
+The reason STT moved server-side is not privacy alone. `SpeechRecognition` has **no device API** —
+it always listens to the OS default input, so a user who picked a headset in the rail's own device
+picker got silence and a `no-speech` error. `getUserMedia({ deviceId })` honours the selection, so
+the browser records and the broker transcribes. It also removes the Firefox gap and stops shipping
+audio to Google.
+
+`/api/capabilities` reports both directions (`voice.effective` for output, `voice.stt` for input),
+so the UI never claims a capability it does not have. Full analysis in [`MODELS.md`](MODELS.md).
 
 ## Layout
 
@@ -55,7 +70,7 @@ live, so the UI never claims a capability it does not have. Full analysis in [`M
 src/smb_partner/
   config.py     env-driven settings (SMB_PARTNER_ prefix), prompts, model roles
   broker.py     chat / chat_stream / embed / tts against the platform broker
-  voice.py      the TTS backend seam — browser | broker | auto | off
+  voice.py      the voice seam — TTS backend (browser | broker | auto | off) + transcribe()
   rag.py        markdown -> heading-aware chunks -> embeddings -> cosine ranking
   store.py      SQLite chunk index + in-memory normalized vector matrix
   ingest.py     fingerprinted seed ingest (re-embeds only what changed)
@@ -77,6 +92,8 @@ All served by the gateway under `/smb-partner-enablement/`, behind the entitleme
 | `GET /api/collections` | the SME corpus per collection |
 | `POST /api/ask` | grounded answer; `speak:true` adds a voice payload |
 | `WS /ws/ask` | the same, streamed (the gateway buffers plain HTTP) |
+| `POST /api/speak` | synthesize arbitrary text through Kokoro — backs *Read aloud* |
+| `POST /api/transcribe` | faster-whisper STT for one recorded utterance |
 | `POST /api/ingest?force=` | re-ingest the seed corpus (admin) |
 | `POST /api/upload` | index an ad-hoc document (admin) |
 

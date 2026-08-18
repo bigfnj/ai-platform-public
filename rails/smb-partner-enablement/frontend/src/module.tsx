@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { askStream, getCapabilities } from './api'
+import { askStream, getCapabilities, transcribe } from './api'
 import Builder from './builder'
 import type { Capabilities, Turn } from './types'
-import { canListen, listen, speak, stopSpeaking } from './voice'
+import type { Recorder } from './voice'
+import { canListen, canRecord, getAudioInputDevices, getAudioOutputDevices, listen, record, setAudioInput, setAudioSink, speak, stopSpeaking } from './voice'
 import './theme.css'
 
 type Tab = 'about' | 'builder' | 'voice'
@@ -12,6 +13,91 @@ const TABS: { id: Tab; icon: string; label: string }[] = [
   { id: 'builder', icon: '📋', label: 'Scenario Builder' },
   { id: 'voice', icon: '🎤', label: 'Voice Chat' },
 ]
+
+const LS_SINK = 'smb-audio-sink'
+const LS_INPUT = 'smb-audio-input'
+const lsGet = (k: string) => { try { return localStorage.getItem(k) || '' } catch { return '' } }
+const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch {} }
+
+/** Audio device picker — lives inside the SMB rail's own header (no fixed positioning). */
+function AudioDevicePicker() {
+  const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([])
+  const [inputs, setInputs] = useState<MediaDeviceInfo[]>([])
+  const [sinkId, setSinkId] = useState(() => lsGet(LS_SINK))
+  const [inputId, setInputId] = useState(() => lsGet(LS_INPUT))
+  const [openOut, setOpenOut] = useState(false)
+  const [openIn, setOpenIn] = useState(false)
+
+  useEffect(() => {
+    // Restore saved devices into the voice module on mount.
+    const savedSink = lsGet(LS_SINK)
+    const savedInput = lsGet(LS_INPUT)
+    if (savedSink) setAudioSink(savedSink)
+    if (savedInput) void setAudioInput(savedInput)
+
+    const refresh = () => {
+      getAudioOutputDevices().then(setOutputs)
+      getAudioInputDevices().then(setInputs)
+    }
+    refresh()
+    navigator.mediaDevices?.addEventListener?.('devicechange', refresh)
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refresh)
+  }, [])
+
+  const hasSinkId = typeof (new Audio() as any).setSinkId === 'function'
+  const hasMediaDevices = !!navigator.mediaDevices?.enumerateDevices
+  const labeledOut = outputs.filter((d) => d.label)
+  const labeledIn = inputs.filter((d) => d.label)
+  // No media devices API at all → nothing to show
+  if (!hasMediaDevices) return null
+
+  const requestPermission = () =>
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => s.getTracks().forEach((t) => t.stop())).catch(() => {})
+
+  const pickOut = (id: string) => { setSinkId(id); setAudioSink(id); lsSet(LS_SINK, id); setOpenOut(false) }
+  const pickIn = (id: string) => { setInputId(id); void setAudioInput(id); lsSet(LS_INPUT, id); setOpenIn(false) }
+
+  const noPermission = !labeledIn.length && !labeledOut.length
+
+  return (
+    <div className="audio-pickers">
+      <div className="audio-picker-wrap">
+        <button className="ghost icon-btn" title="Microphone" onClick={() => { setOpenIn((o) => !o); setOpenOut(false) }}>🎙️</button>
+        {openIn && (
+          <div className="audio-menu">
+            <div className="audio-menu-label">Microphone</div>
+            {noPermission
+              ? <button className="audio-item" onClick={() => { requestPermission(); setOpenIn(false) }}>Allow microphone access…</button>
+              : labeledIn.map((d) => (
+                  <button key={d.deviceId} className={`audio-item${d.deviceId === inputId ? ' active' : ''}`} onClick={() => pickIn(d.deviceId)}>
+                    <span className="audio-check">{d.deviceId === inputId ? '✓' : ''}</span>{d.label}
+                  </button>
+                ))
+            }
+          </div>
+        )}
+      </div>
+      {hasSinkId && (
+        <div className="audio-picker-wrap">
+          <button className="ghost icon-btn" title="Speaker" onClick={() => { setOpenOut((o) => !o); setOpenIn(false) }}>🔊</button>
+          {openOut && (
+            <div className="audio-menu">
+              <div className="audio-menu-label">Speaker</div>
+              {noPermission
+                ? <button className="audio-item" onClick={() => { requestPermission(); setOpenOut(false) }}>Allow microphone access…</button>
+                : labeledOut.map((d) => (
+                    <button key={d.deviceId} className={`audio-item${d.deviceId === sinkId ? ' active' : ''}`} onClick={() => pickOut(d.deviceId)}>
+                      <span className="audio-check">{d.deviceId === sinkId ? '✓' : ''}</span>{d.label}
+                    </button>
+                  ))
+              }
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function AiStatus({ caps }: { caps: Capabilities | null }) {
   if (!caps) return <span className="muted">checking…</span>
@@ -27,7 +113,7 @@ function AiStatus({ caps }: { caps: Capabilities | null }) {
       ))}
       <span title={caps.voice.note}>
         <i className={`dot ${caps.voice.effective !== 'off' ? 'on' : 'off'}`} />
-        Voice ({caps.voice.effective})
+        Voice ({caps.voice.effective === 'broker' ? 'Kokoro' : caps.voice.effective})
       </span>
       <span className="muted">
         {caps.corpus.chunks} chunks · {caps.corpus.collections} collections
@@ -87,7 +173,14 @@ function VoiceChat({ caps }: { caps: Capabilities | null }) {
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [hearing, setHearing] = useState(false)
+  const [thinking, setThinking] = useState(false)
+  const [sttErr, setSttErr] = useState('')
   const nextId = useRef(1)
+  const recorder = useRef<Recorder | null>(null)
+
+  // Switching tabs mid-recording must release the mic, or the browser keeps the capture
+  // indicator lit and the device stays held.
+  useEffect(() => () => { recorder.current?.cancel(); recorder.current = null }, [])
 
   const submit = useCallback(
     (text: string, spoken: boolean) => {
@@ -126,17 +219,46 @@ function VoiceChat({ caps }: { caps: Capabilities | null }) {
     [busy],
   )
 
-  const mic = () => {
-    if (hearing) return
+  // Server-side STT when the broker's media worker is up, because only that path can use
+  // the microphone the user picked. Web Speech is the fallback, and it always listens to
+  // the OS default device no matter what the picker says.
+  const serverStt = caps?.voice?.stt === 'broker' && canRecord()
+
+  const stopRecording = () => { recorder.current?.stop(); recorder.current = null }
+
+  const micBrowser = () => {
     setHearing(true)
     listen({
-      onResult: (transcript, final) => {
-        setQuestion(transcript)
-        if (final) submit(transcript, true)
-      },
+      onResult: (t, final) => { setQuestion(t); if (final) submit(t, true) },
       onEnd: () => setHearing(false),
-      onError: () => setHearing(false),
+      onError: (detail) => { setHearing(false); setSttErr(detail) },
     })
+  }
+
+  const mic = async () => {
+    if (hearing || thinking) return
+    setSttErr('')
+    if (!serverStt) { micBrowser(); return }
+    const r = await record({
+      onStart: () => setHearing(true),
+      onError: (detail) => { setHearing(false); recorder.current = null; setSttErr(detail) },
+      onReady: async (audio_b64, suffix) => {
+        setHearing(false)
+        recorder.current = null
+        setThinking(true)
+        try {
+          const { text } = await transcribe(audio_b64, suffix)
+          if (!text) { setSttErr('nothing was heard — try again'); return }
+          setQuestion(text)
+          submit(text, true)
+        } catch (e: any) {
+          setSttErr(String(e?.message || 'transcription failed'))
+        } finally {
+          setThinking(false)
+        }
+      },
+    })
+    recorder.current = r
   }
 
   return (
@@ -152,13 +274,20 @@ function VoiceChat({ caps }: { caps: Capabilities | null }) {
         <button className="go" onClick={() => submit(question, false)} disabled={busy || !question.trim()}>
           Ask
         </button>
-        <button className="go" onClick={() => submit(question, true)} disabled={busy || !question.trim()}>
+        <button className="go" onClick={() => question.trim() ? submit(question, true) : mic()} disabled={busy || hearing || thinking}>
           🔊 Ask + speak
         </button>
-        {canListen() && (
-          <button className="ghost" onClick={mic} disabled={busy || hearing}>
-            {hearing ? '● listening' : '🎤 Speak'}
-          </button>
+        {(serverStt || canListen()) && (
+          hearing && serverStt ? (
+            // Recording has no automatic endpoint detection, so stopping is the user's call.
+            <button className="ghost recording" onClick={stopRecording}>
+              ⏹ Stop &amp; send
+            </button>
+          ) : (
+            <button className="ghost" onClick={mic} disabled={busy || hearing || thinking}>
+              {thinking ? '… transcribing' : hearing ? '● listening' : '🎤 Speak'}
+            </button>
+          )
         )}
         {speaking && (
           <button
@@ -172,6 +301,7 @@ function VoiceChat({ caps }: { caps: Capabilities | null }) {
           </button>
         )}
       </div>
+      {sttErr && <p className="muted" style={{ color: '#f87171', margin: '4px 0' }}>⚠ Mic: {sttErr}</p>}
       {!turns.length && (
         <p className="muted center">
           MCEM stages · Azure migration · Copilot · deal registration · co-sell
@@ -229,8 +359,11 @@ function MobilePreview({ onClose }: { onClose: () => void }) {
   return (
     <div className="mpreview" onClick={onClose}>
       <div className="mphone" onClick={(e) => e.stopPropagation()}>
-        <div className="mnotch" />
-        <iframe src="/smb-partner-enablement/m/" title="Mobile preview" />
+        <div className="mscreen">
+          <div className="mnotch" />
+          <iframe src="/smb-partner-enablement/m/" title="Mobile preview" />
+          <div className="mhome" />
+        </div>
       </div>
       <p className="muted">
         Live mobile preview · tap outside or press <kbd>Esc</kbd> to exit
@@ -252,8 +385,14 @@ export default function SmbPartnerModule() {
   return (
     <div className="smbp">
       <header>
-        <h2 style={{ margin: 0 }}>SMB Partner Enablement</h2>
-        <AiStatus caps={caps} />
+        {/* Chips sit UNDER the bold title, not beside it — the layout every rail now shares
+            (co-worker, terminal-fun, gemini-cx). minWidth:0 lets the chip row wrap instead of
+            forcing the header wider than its container. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+          <h2 style={{ margin: 0 }}>SMB Partner Enablement</h2>
+          <AiStatus caps={caps} />
+        </div>
+        <AudioDevicePicker />
       </header>
       <div className="tabs" role="tablist">
         {TABS.map((t) => (

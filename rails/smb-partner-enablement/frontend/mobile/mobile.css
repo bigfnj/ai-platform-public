@@ -146,6 +146,19 @@ body {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 
+/* Compact stop button in the header bar — appears while audio is playing */
+.stop-audio-btn {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .composer {
   display: flex;
   gap: 10px;

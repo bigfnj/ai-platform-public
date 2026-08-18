@@ -141,8 +141,6 @@
 .smbp .dot.off { background: var(--muted); }
 
 /* --- mobile preview ----------------------------------------------------- */
-/* A floating pill, bottom-right, matching the original prototype. Fixed rather than absolute
-   so it stays reachable regardless of how far the rail content scrolls. */
 .smbp .mobile-fab {
   position: fixed;
   right: 24px;
@@ -163,38 +161,164 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 16px;
 }
-/* 390x844 is an iPhone 14-class logical viewport — the frame is sized to a real device so the
-   preview shows the same breakpoints a partner's phone would. */
+
+/* Phone body — iPhone 15 Pro-style dark titanium frame */
 .smbp .mphone {
   position: relative;
-  width: 390px;
-  height: 844px;
-  max-height: 82vh;
-  background: var(--s1);
-  border: 10px solid #0b0d10;
-  border-radius: 44px;
-  overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  width: 412px;  /* body width inc. bezels */
+  height: 892px;
+  max-height: 84vh;
+  /* Titanium gradient */
+  background: linear-gradient(160deg, #3a3a3c 0%, #2c2c2e 40%, #1c1c1e 70%, #2c2c2e 100%);
+  border-radius: 54px;
+  /* bezel inset around screen */
+  padding: 18px 11px 32px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.14),   /* outer rim highlight */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 32px 80px rgba(0, 0, 0, 0.85),
+    0 6px 18px rgba(0, 0, 0, 0.5);
 }
-.smbp .mphone iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* Left side buttons: silent toggle + vol up + vol down */
+.smbp .mphone::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 132px;
+  width: 4px;
+  height: 30px;
+  background: #3a3a3c;
+  border-radius: 3px 0 0 3px;
+  box-shadow:
+    0 46px 0 0 #3a3a3c,   /* vol up */
+    0 88px 0 0 #3a3a3c;   /* vol down */
+}
+
+/* Right side: power/lock button */
+.smbp .mphone::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 158px;
+  width: 4px;
+  height: 76px;
+  background: #3a3a3c;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Screen glass — rounded, inset from phone body */
+.smbp .mscreen {
+  width: 100%;
+  height: 100%;
+  border-radius: 42px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+}
+
+.smbp .mscreen iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* Dynamic Island pill */
 .smbp .mnotch {
   position: absolute;
-  top: 0;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  width: 132px;
-  height: 26px;
-  background: #0b0d10;
-  border-radius: 0 0 16px 16px;
-  z-index: 1;
+  width: 124px;
+  height: 36px;
+  background: #000;
+  border-radius: 20px;
+  z-index: 10;
 }
+/* Camera dot inside the island */
+.smbp .mnotch::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  background: #0d0d0d;
+  border-radius: 50%;
+  border: 1.5px solid #1c1c1e;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* Home indicator bar */
+.smbp .mhome {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.26);
+  border-radius: 3px;
+  z-index: 10;
+}
+
+/* --- audio device pickers (inside SMB rail header, not fixed) ------------ */
+.smbp header { display: flex; align-items: center; justify-content: space-between; }
+/* Recording is user-terminated, so the button has to read as armed, not merely active. */
+.smbp button.recording {
+  border-color: #dc2626;
+  color: #fca5a5;
+  animation: smbp-rec 1.4s ease-in-out infinite;
+}
+@keyframes smbp-rec {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+}
+
+.smbp .audio-pickers { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.smbp .audio-picker-wrap { position: relative; }
+.smbp .icon-btn { font-size: 18px; padding: 4px 6px; line-height: 1; }
+.smbp .audio-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  min-width: 230px;
+  padding: 6px 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+.smbp .audio-menu-label {
+  padding: 6px 14px 4px;
+  font-size: 10px;
+  opacity: 0.45;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.smbp .audio-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none;
+  padding: 9px 14px; cursor: pointer;
+  font: inherit; font-size: 13px;
+  color: var(--ink);
+}
+.smbp .audio-item:hover { background: var(--s1); }
+.smbp .audio-item.active { background: var(--s1); color: var(--ink); }
+.smbp .audio-check {
+  display: inline-block;
+  width: 18px;
+  font-size: 12px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
 .smbp .mpreview kbd {
   border: 1px solid var(--bd);
   border-radius: 4px;
@@ -205,8 +329,6 @@
 @media (max-width: 520px) {
   .smbp .askrow { flex-direction: column; }
   .smbp .askrow button { width: 100%; }
-  /* On an actual phone the preview is pointless — hide the affordance rather than framing a
-     phone inside a phone. */
   .smbp .mobile-fab { display: none; }
 }
 

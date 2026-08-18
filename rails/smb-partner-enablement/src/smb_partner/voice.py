@@ -116,16 +116,51 @@ def speak(text: str, *, backend: str | None = None, lang: str | None = None) -> 
     return payload
 
 
+def transcribe(audio_b64: str, *, suffix: str | None = None,
+               language: str | None = None) -> dict:
+    """Turn a recorded utterance into text via the broker's faster-whisper op.
+
+    WHY THIS EXISTS. Speech *input* used to be the browser's ``SpeechRecognition``, which has
+    two defects this rail could not live with: it ships the audio to Google, and it offers no
+    way to choose an input device — it always uses the OS default. A user who picked a headset
+    in our own device picker got silence and a ``no-speech`` error. Recording with
+    ``getUserMedia({deviceId})`` and transcribing here honours the picker, keeps the audio on
+    this box, and works in Firefox.
+
+    Returns {"text", "language", "duration"}; raises VoiceUnavailable when the media worker
+    cannot serve it, so the caller can say so rather than failing silently.
+    """
+    try:
+        result = broker.transcribe(audio_b64, suffix=suffix, language=language)
+    except broker.BrokerError as exc:
+        raise VoiceUnavailable(f"speech-to-text unavailable: {exc}") from exc
+    return {
+        "text": (result.get("text") or "").strip(),
+        "language": result.get("language") or "",
+        "duration": result.get("duration") or 0.0,
+    }
+
+
+def can_transcribe() -> bool:
+    """Whether server-side STT is actually available (same media-worker probe as TTS)."""
+    return _broker_media_ready()
+
+
 def describe() -> dict:
     """Voice capability for the UI: which backend is live and why."""
     configured = (config.VOICE_BACKEND or "auto").strip().lower()
     effective = resolve_backend()
+    media = _broker_media_ready()
     return {
         "configured": configured,
         "effective": effective,
-        "broker_media": _broker_media_ready(),
+        "broker_media": media,
+        # The UI uses this to decide between server-side recording and the browser's
+        # recognizer, so it must reflect the media worker, not the TTS backend choice.
+        "stt": "broker" if media else "browser",
         "note": (
             "Broker TTS uses Kokoro-82M via tts_light — no eviction, both models GPU-resident. "
-            "Browser fallback uses Web Speech API."
+            "Speech input uses faster-whisper (CPU) via /v1/transcribe, which honours the "
+            "browser's selected microphone. Browser fallback uses Web Speech API."
         ),
     }
