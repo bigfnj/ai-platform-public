@@ -206,3 +206,126 @@ body {
 .scard .title { font-weight: 600; }
 .scard .fit { color: var(--accent); font-size: 12px; margin: 2px 0 6px; }
 .scard p { margin: 0; font-size: 13px; }
+
+/* --- scenario builder: scrollable pane inside mbody ----------------------- */
+.bscroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.bpad { padding: 16px; }
+
+/* --- diagnostic question flow --------------------------------------------- */
+.qhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.qbar { height: 3px; background: var(--bd); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+.qbar > span { display: block; height: 100%; background: var(--accent); transition: width 180ms ease; }
+
+.why {
+  border-left: 2px solid var(--accent);
+  padding: 6px 0 6px 12px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.opts { display: grid; gap: 8px; }
+.opt {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  padding: 14px;
+  text-align: left;
+}
+.opt.unsure {
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+  width: 100%;
+}
+.ghost {
+  background: none;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+}
+
+/* --- generation checklist ------------------------------------------------- */
+.checklist { list-style: none; margin: 0 0 12px; padding: 0; }
+.ck { align-items: baseline; color: var(--muted); display: flex; font-size: 14px; gap: 10px; padding: 6px 0; }
+.ck .ckmark { width: 1em; flex: none; }
+.ck.active { color: var(--ink); }
+.ck.active .ckmark, .ck.done .ckmark { color: var(--accent); }
+.ck.error { color: #f87171; }
+
+/* --- live reasoning trace — collapsible on mobile ------------------------- */
+.trace-wrap { margin-top: 4px; }
+.trace-toggle { margin-bottom: 8px; }
+.trace {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  font-size: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px;
+}
+.tracehead { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; margin-bottom: 10px; text-transform: uppercase; }
+.tblock { margin-bottom: 12px; }
+.tkey { color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.tline { color: var(--muted); line-height: 1.5; padding: 1px 0; }
+.tline.rule { color: var(--ink); }
+.tline.open { font-style: italic; }
+.tscore { color: var(--accent); display: inline-block; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.tsrc { opacity: 0.55; }
+.tstream {
+  border-left: 2px solid var(--bd);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 6px;
+  opacity: 0.75;
+  padding-left: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- package output ------------------------------------------------------- */
+.nextmove {
+  background: var(--s2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+.ptabs { display: flex; gap: 4px; border-bottom: 1px solid var(--bd); margin-bottom: 12px; overflow-x: auto; }
+.ptab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.ptab.sel { color: var(--ink); border-bottom-color: var(--accent); }
+.ptab.dis { opacity: 0.4; cursor: not-allowed; }
+
+.md h4 { font-size: 14px; margin: 14px 0 6px; }
+.md h5 { color: var(--muted); font-size: 13px; margin: 10px 0 4px; }
+.md p { line-height: 1.55; margin: 0 0 10px; font-size: 14px; }
+.md ul { margin: 0 0 10px; padding-left: 20px; }
+.md li { line-height: 1.55; margin-bottom: 6px; font-size: 14px; }
+
+.ungrounded { border-left: 2px solid var(--accent); padding-left: 10px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+.cites { margin-top: 12px; }
+.cite { font-size: 12px; color: var(--muted); border-left: 2px solid var(--bd); padding-left: 8px; margin-bottom: 6px; }

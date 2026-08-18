@@ -62,8 +62,6 @@ services:
       # Executive-brief synthesis calls the broker on the @co-worker-synthesis role.
       CO_WORKER_BROKER_URL: http://host.docker.internal:11500
       CO_WORKER_BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
-      CO_WORKER_USER_NAME: ${CO_WORKER_USER_NAME:-}
-      CO_WORKER_USER_EMAIL: ${CO_WORKER_USER_EMAIL:-}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
@@ -74,6 +72,27 @@ services:
       - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
     expose:
       - "8860"
+    restart: always
+
+  smb-partner-enablement:        # SMB Partner Enablement — grounded RAG + Scenario Builder
+    profiles: ["smb-partner-enablement"]
+    build:
+      context: ../../rails/smb-partner-enablement
+      dockerfile: deploy/Dockerfile
+    image: smb-partner-backend:latest
+    environment:
+      SMB_PARTNER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      SMB_PARTNER_RAG_MODEL: ${SMB_PARTNER_RAG_MODEL:-@smb-partner-rag}
+      SMB_PARTNER_EMBED_MODEL: ${SMB_PARTNER_EMBED_MODEL:-@embed}
+      SMB_PARTNER_VOICE_BACKEND: ${SMB_PARTNER_VOICE_BACKEND:-auto}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - smb_partner_data:/srv/var
+    expose:
+      - "8870"
     restart: always
 
   gateway:                       # shell host + reverse proxy; frontends baked into the image
@@ -90,6 +109,7 @@ services:
       PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
       PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
       PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
+      PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
@@ -129,6 +149,9 @@ volumes:
   co_worker_inbox:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_co_worker_inbox
+  smb_partner_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_smb_partner_data
   caddy_data:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_caddy_data

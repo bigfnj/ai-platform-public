@@ -74,28 +74,28 @@ and a currency warning. Every collection now wins retrievals.
       currency source. Re-check anything older than one fiscal year.
 - [ ] The four field-earned collections are empty by design and need the team's real material.
 
-## 4. Mobile: wire the Scenario Builder flow
+## 4. Mobile: wire the Scenario Builder flow — DONE (2026-08-18)
 
-Dan's second pillar was "portable from web to mobile", and "the voice is going to carry it" — a
-partner between meetings, on a phone. Today the mobile build only *lists* the scenarios; Chat
-works, the diagnostic does not.
-
-- [ ] Port the question flow, checklist + trace, and package view into `frontend/mobile/App.tsx`
-- [ ] Read-aloud per output section
-
-Most of the work is layout rather than logic: the answers already stack vertically, the trace
-already collapses below the checklist at narrow widths, and `getScenarios()` is already wired
-there. The components are surface-agnostic.
+Full diagnostic → generation → package flow ported to `frontend/mobile/App.tsx`. Same logic
+as the desktop builder (shared api.ts / types.ts / voice.ts); mobile-specific layout: stacked
+instead of runsplit, trace collapsible via toggle, output tabs scroll horizontally, Read Aloud
+on Next Move and each section tab. Both the federation build and the mobile SPA build via
+`npm run build` in one step; the mobile SPA lands at `/smb-partner-enablement/m/` via the
+same StaticFiles mount (dist/m/ nested inside the desktop dist).
 
 ---
 
-## 5. Deployment
+## 5. Deployment — DONE (2026-08-18)
 
-- [ ] Add `smb-partner-enablement` to `PLATFORM_ENABLED_APPS` in the install clone's
-      `deploy/.env` (currently `terminal-fun,recipe-book,co-worker`)
-- [ ] `docker-compose build smb-partner-enablement && up -d`, rebuild the gateway (bundled
-      image — any frontend change needs it)
-- [ ] Grant the entitlement to the relevant users in Admin → Users
+- [x] `smb-partner-enablement` added to `PLATFORM_ENABLED_APPS` in install clone's `deploy/.env`
+- [x] Service wired in `docker-compose.installer.yml` (profile `smb-partner-enablement`); frontend
+      baked into the bundled gateway Dockerfile; `smb_partner_data` external volume declared
+- [x] Backend and gateway rebuilt; both containers up (`platform-smb-partner-enablement-1` running)
+- No entitlement grant needed — `bigfnj` is `is_superadmin` which grants implicit access to all
+  enabled apps. The corpus is fully ingested (1,051 chunks, 9 collections with content) and the
+  backend returned 401 (auth required, not 404) from the gateway proxy — rail is live.
+- **Access:** `http://localhost:1111` → log in as bigfnj → SMB Partner Enablement appears in the
+  rail nav. Mobile surface at `http://localhost:1111/smb-partner-enablement/m/`.
 
 ---
 
