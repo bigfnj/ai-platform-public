@@ -33,6 +33,7 @@ gateway, entitlement-gated, with all model work routed through the broker. The s
 | **terminal-fun** | 🕹️ | Self-hosted terminal games and toys with an in-terminal AI helper. Sandboxed, no host access. |
 | **ai-playground** | 🛝 | A multi-demo rail: a RAG-over-documents demo (local or NVIDIA NIM generation, WebSocket token streaming) plus an Embedding Lab that benchmarks embedders head-to-head (GPU vs CPU-ONNX) with optional CPU cross-encoder reranking. |
 | **smb-partner-enablement** | 🤝 | Microsoft Partner Network SME assistant for the SMB segment: a grounded knowledge base (CSP licensing, designations, MCEM, incentives, Partner Center) behind RAG, plus a Scenario Builder that turns a short diagnostic into a meeting kit. Includes a standalone mobile build. |
+| **gemini-cx** | ✨ | Subject-matter assistant for Google Cloud's Gemini Enterprise for Customer Experience: a 17-collection corpus behind RAG, fronted by a curated question deck rather than a chat box. Marks GA / Preview / coming-soon separately and refuses figures it cannot cite. |
 
 Rails enforce identity in-rail too, not just at the gateway: jobs and data are owner-scoped where a
 rail is multi-user, and requests fail closed without the gateway's trusted identity header.
@@ -46,6 +47,18 @@ enforces one heavy model at a time on a 24 GB GPU (a small embedder may co-resid
 a live job queue (active and waiting, per rail). The control plane is token-authenticated: every
 `/v1/*` route requires a shared `BROKER_AUTH_TOKEN` bearer (kept in the gitignored `deploy/.env`),
 so only platform components can drive the GPU.
+
+**Rails must reference models as `@role`, never as a pinned model name.** Admin → Rails repoints a
+role in `roles.json` (hot-read, no restart), so a rail that pins a concrete name silently ignores
+the panel: the admin repoints the role, the rail keeps using the pin, and nothing reports the
+disagreement. Each rail's header chips show the reference the rail *actually* sends, which is what
+makes that drift visible. The one deliberate exception is documented where it occurs
+(`RECIPE_BOOK_LLM_MODEL`, a fallback with no role of its own).
+
+Speech is served two ways, and the distinction matters: `/v1/tts` (XTTS) takes the full GPU gate
+and evicts every resident heavy model per utterance, while `/v1/tts_light` (Kokoro-82M, ~350 MB in
+a short-lived worker) takes neither the gate nor an eviction. Rails that hold a model resident use
+`tts_light`.
 
 ## Admin
 

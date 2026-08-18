@@ -1,99 +1,94 @@
 # Gemini CX rail — handoff
 
-Read this first when resuming. Built 2026-08-18.
+Read this first when resuming. Built and deployed 2026-08-18.
 
-## What exists and what is proven
+## State: live and verified in production
 
-The rail is complete and wired into the platform. Verified on this box against the live broker:
+Running at `http://localhost:1111` → **Gemini CX**. Not a prototype — it is deployed, ingested and
+answering.
 
 | Check | Result |
 |---|---|
-| `tsc --noEmit` on the frontend | exit 0, clean |
-| `py_compile` on all backend modules | clean |
-| Corpus ingest (`force=True`) via live broker | **307 chunks, 17 collections, 1024 dims, 21.6s**, zero failures |
-| Question deck validation | 7 groups, **37 questions**, zero problems |
-| Gateway config / catalog / admin Rails wiring | resolves (`gemini-cx` appears in the admin Rails view) |
-| Broker role wiring | `roles()` merges to `gemma3:4b`, `ROLE_RAIL` attributes jobs to "Gemini CX" |
-| Compose YAML (both files) | parses; service, profile, volume, gateway env all present |
-| `lib-runtime.ps1` | parses clean; `gemini-cx` added to `Get-ComposeProfiles` |
-| Grounded answers, 3 trap questions | correct on all three (see below) |
+| Corpus | **307 chunks / 17 collections / 1024 dims**, ingested in-container |
+| Question deck | **37 questions / 7 groups**, `validate()` clean |
+| Models | `@gemini-cx-rag` → `gemma3:4b` and `@embed` → `bge-m3`, both resident together |
+| Voice | Kokoro `af_heart` via `tts_light`; 24 kHz RIFF/WAVE, ~7 s to first word |
+| Identity gate | 401 without the gateway header, on `/api/ask` and `/api/speak` |
+| Build | `py_compile`, `tsc --noEmit`, `vite build` all clean |
 
-**NOT yet done: the rail has never run inside a container, and the gateway image has not been
-rebuilt.** Everything above was verified out-of-container against the live broker. The container
-build is the remaining step.
+## The three things that make this rail what it is
 
-## The three trap answers, verified
+**1. It exists to stop GECX being over-sold.** Google's January 2026 launch and its August 2026
+documentation contradict each other. The corpus marks GA / Preview / coming-soon / announced-only
+as four different answers, refuses figures it cannot cite, and disambiguates confusable pairs in
+the heading itself. `config.SYSTEM_PROMPT` enforces all three at answer time.
 
-Asked through the real retrieval + prompt + `gemma3:4b` path:
+**If a future change makes the model willing to fill a gap, that is a regression, not a style
+change.** Verified working: asked how GECX is priced, `gemma3:4b` answered "not verifiable"
+instead of inventing a number.
 
-- *"How many languages does GECX support for voice versus text?"* → correctly separated **40+
-  text** from **10 audio-to-audio**, and further separated the wider speech stack (125
-  recognition / 220+ voices). 9.2s.
-- *"Can I deploy the Shopping agent or Food Ordering agent today?"* → **No**, cited "Commerce
-  agents coming soon", flagged the contradiction with the January announcement, told the reader to
-  confirm with the account team. 2.6s.
-- *"How is GECX priced?"* → per session not per seat, three separate component meters, and
-  **refused to state a base session price** because the corpus marks it unverifiable. 7.1s.
+**2. The question deck is the front door, not decoration.** A blank prompt over an unfamiliar
+corpus produces a bad first experience. `questions.validate()` checks every deck question's
+collections exist on disk, `/api/health` reports it, and the UI disables any that fail — a deck
+entry that answers "not covered" teaches the user the tool is broken on click one. Order is
+*What it is* → *Get it right* → the rest: orientation before correction.
 
-That third one is the important result: the model declined to invent a number when the corpus told
-it the number was unpublished. That behaviour is the whole point of the grounding contract in
-`config.SYSTEM_PROMPT` — if a future change breaks it, that is a regression, not a style change.
-
-Latencies of 2.6–9.2s are why the UI streams over `WS /ws/ask` with a buffered POST fallback.
-
-## To deploy it
-
-Two things must happen, in this order.
-
-**1. The broker must learn the role.** The live broker runs from the **install clone**
-(`%USERPROFILE%\ai-platform`), so it does not yet know `gemini-cx-rag`. This bit the first e2e run:
-`@gemini-cx-rag` resolved to itself and Ollama 404'd on the literal name. After the install clone
-pulls, `roles.json` carries `"gemini-cx-rag": "gemma3:4b"` and is **hot-read — no restart needed**.
-The `DEFAULT_ROLES` entry in `services/broker/app/config.py` is code, so it needs a broker service
-restart, but it is only a fallback: `roles()` is `DEFAULT_ROLES | json`, so the JSON entry alone is
-sufficient.
-
-**2. Enable and build.** Add `gemini-cx` to `PLATFORM_ENABLED_APPS` in the install clone's
-`deploy/.env` (gitignored, so it does not travel with the commit), then rebuild the gateway image
-— the frontend dist is **baked in**, a host `npm run build` deploys nothing — and bring up the new
-service with its profile:
-
-```powershell
-podman build -f deploy/Dockerfile.gateway.bundled -t platform-gateway-bundled:latest .
-docker-compose --env-file deploy\.env -f deploy\installer\docker-compose.installer.yml `
-  --profile recipe-book --profile co-worker --profile smb-partner-enablement --profile gemini-cx `
-  up -d --build
-```
-
-`Initialize-ComposeVolumes` must create `platform_gemini_cx_data` first — the volume is declared
-`external: true`, so a missing one is an error rather than a silent empty volume. Compose usually
-needs the SSH-tunnel workaround since the watchdog owns the podman pipe; `podman build` does not.
-
-Then hard-refresh the browser — the shell caches the federated `remoteEntry.js`.
+**3. Answers stream, because they have to.** 2.6–9.2 s per answer on `gemma3:4b`. A spinner that
+long reads as a hang. `WS /ws/ask` with a buffered `POST /api/ask` fallback for proxies that
+refuse the upgrade.
 
 ## Things that will trip you up
 
-- **`pip install .` does not reload a running uvicorn.** Kill the PID and use
-  `--reload --reload-dir src`.
-- **`GEMINI_CX_STANDALONE=1` is required outside the gateway**, or identity fails closed and every
-  request is a 401.
-- **`_same_model()` is tag-tolerant on purpose.** `@embed` resolves to `bge-m3` while Ollama
-  reports `bge-m3:latest`. Simplifying it to `==` makes the health endpoint report both models cold
-  forever.
-- **`config.ensure_dirs()` is load-bearing.** `store.init()` calls it before touching SQLite, and
+- **`config.ensure_dirs()` is load-bearing.** `store.init()` calls it before touching SQLite and
   the container mounts an empty volume at `/srv/var`. It was missing in the first draft and would
   have crashed the rail at startup.
-- **The empty-collection and orphan-collection purges in `ingest.py` are not redundant.** Without
-  them, emptying or renaming a collection leaves its chunks indexed and cited forever. This cost
-  the sibling SMB rail weeks.
+- **`_same()` in `modelstate.py` must not become `==`.** Ollama reports an untagged pull as
+  `:latest`, so `@embed` resolves to `bge-m3` while the loaded list says `bge-m3:latest`. The
+  broker's own `roles` payload has this bug and reports `installed: false` for a resident model.
+- **The empty- and orphan-collection purges in `ingest.py` are not redundant.** Without them,
+  emptying or renaming a collection leaves its chunks indexed and cited forever. This cost the
+  sibling SMB rail weeks.
+- **Voice must use `/v1/tts_light`, never `/v1/tts`.** The latter takes the GPU gate and evicts
+  every heavy model per utterance, which would destroy this rail's co-residency.
+- **`pip install .` does not reload a running uvicorn.** Kill the PID, use `--reload --reload-dir src`.
+- **`GEMINI_CX_STANDALONE=1`** is required outside the gateway or identity fails closed (401).
+- **The live broker runs from the INSTALL clone.** Editing the Grimoire copy's `roles.json` does
+  nothing to the running system. It is hot-read, so a pull is enough — no broker restart.
+
+## Deploying a change
+
+Frontend or corpus changes need the **gateway image rebuilt** (dists are baked in; a host
+`npm run build` deploys nothing) plus the rail container rebuilt for backend changes:
+
+```powershell
+docker-compose --env-file .env -f installer\docker-compose.installer.yml `
+  --profile recipe-book --profile co-worker --profile smb-partner-enablement --profile gemini-cx `
+  up -d --no-deps --build gemini-cx gateway
+```
+
+Hard-refresh afterwards — the shell caches the federated `remoteEntry.js`.
 
 ## Open items
 
-`BACKLOG.md` has the ordered list. The two that matter most:
+`BACKLOG.md` has the ordered list. The two that matter:
 
-1. **Three facts the corpus deliberately refuses to state** and should be filled by hand: base
-   per-session prices (the pricing page defeated automated extraction), the actual 40+ and
-   10-language enumerations, and whether "Personal Intelligence" (Forrester-sourced) is real.
+1. **Three facts the corpus deliberately refuses to state**, each needing a human with a browser:
+   base per-session CX Agent Studio prices (the pricing page defeats automated extraction — only
+   the **$0.0025/sec voice overage after 300 s** is sourced), the actual 40+ and 10-language
+   enumerations, and whether "Personal Intelligence" is real (Forrester cites it, Google's own
+   pages do not).
 2. **A staleness signal.** Every file carries `As of:` / `Verified:` front matter and nothing
-   surfaces it. GECX launched January 2026 and is moving; the Commerce Agents page flipping from
-   "coming soon" to GA would invalidate several answers at once.
+   surfaces it. GECX is moving; Commerce Agents flipping from "coming soon" to GA would invalidate
+   several answers at once and nothing would say so.
+
+## Cross-rail work that landed alongside this
+
+- **Four-state model chips** (`modelstate.py`) on gemini-cx, co-worker and terminal-fun: red
+  missing / blue cold / orange warming / green loaded, polling every 6 s. Duplicated per rail on
+  purpose — independent deployables, different dependency sets. Keep the state names and the
+  resolution order identical.
+- **Admin → Rails is now authoritative for every rail.** terminal-fun and recipe-book pinned
+  concrete model names and silently ignored the panel; co-worker was not in the panel at all. All
+  now reference `@roles`. **Still pending: SMB's chips are the old on/off dot** — converting them
+  is a small change to `AiStatus` + `.dot` in its `theme.css`, left undone because those files had
+  uncommitted work in them.

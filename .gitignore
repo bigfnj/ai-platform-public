@@ -57,3 +57,15 @@ rails/smb-partner-enablement/research/
 rails/smb-partner-enablement/documents/
 rails/smb-partner-enablement/build/
 rails/smb-partner-enablement/*.egg-info/
+
+# Downloaded model weights. The broker's Kokoro TTS needs kokoro-v1.0.fp16-gpu.onnx (170 MB)
+# and voices-v1.0.bin (27 MB); faster-whisper pulls its own into the HuggingFace cache. None of
+# it belongs in git: GitHub HARD-REJECTS any file over 100 MB, so a `git add -A` here produces a
+# push that cannot succeed and a local history you have to rewrite to fix. Weights are a
+# download step (BROKER_KOKORO_MODEL_PATH / BROKER_KOKORO_VOICES_PATH point at them).
+services/broker/media-assets/
+*.onnx
+*.gguf
+*.safetensors
+*.pt
+*.pth
