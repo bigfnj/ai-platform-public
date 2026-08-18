@@ -106,6 +106,10 @@ services:
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
       GEMINI_CX_RAG_MODEL: ${GEMINI_CX_RAG_MODEL:-@gemini-cx-rag}
       GEMINI_CX_EMBED_MODEL: ${GEMINI_CX_EMBED_MODEL:-@embed}
+      # Read aloud: Kokoro-82M via the broker's tts_light (no GPU gate, no eviction).
+      # 'auto' probes the broker's media worker and falls back to browser speech synthesis.
+      GEMINI_CX_VOICE_BACKEND: ${GEMINI_CX_VOICE_BACKEND:-auto}
+      GEMINI_CX_VOICE_SPEAKER: ${GEMINI_CX_VOICE_SPEAKER:-af_heart}
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"

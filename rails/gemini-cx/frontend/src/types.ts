@@ -54,6 +54,26 @@ export interface ModelStatus {
   embed_resident?: boolean
 }
 
+// Mirrors voice.speak() — only `broker` mode carries audio; `browser` mode expects the client
+// to synthesize `text` itself. `degraded` is set when a configured broker path failed and we
+// silently fell back, so the UI can explain it rather than looking broken.
+export interface VoicePayload {
+  mode: 'browser' | 'broker' | 'off'
+  text: string
+  lang: string
+  audio_b64?: string
+  sample_rate?: number
+  degraded?: string
+}
+
+export interface VoiceStatus {
+  configured: string
+  effective: string
+  broker_media: boolean
+  speaker: string
+  note: string
+}
+
 export interface Capabilities {
   retrieval: boolean
   answering: boolean
@@ -61,6 +81,7 @@ export interface Capabilities {
   upload: boolean
   corpus: CorpusStats
   models: ModelStatus
+  voice: VoiceStatus
 }
 
 export interface CollectionRow {

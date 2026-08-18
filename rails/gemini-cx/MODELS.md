@@ -67,18 +67,33 @@ logs a warning, and the rail still serves `/api/health` with an empty corpus. Th
 — the rail must not fail to start because the GPU layer is down — but it means an empty corpus is
 a broker problem far more often than a content problem. The UI says so explicitly.
 
-**No media/voice dependency.** This rail never calls `/v1/tts`, `/v1/tts_light` or `/v1/image`,
-so the broker's media worker being disabled on this box is irrelevant to it.
+## Voice — Read aloud, and why it costs latency rather than VRAM
 
-That was originally a hard constraint — the old `/v1/tts` path calls `_evict_other_heavy()` with
-no `keep`, so speaking would evict the answer model on every utterance and destroy this rail's
-co-residency. **That constraint has since been lifted:** `Broker.tts_light()` (Kokoro-82M) runs
-in the media worker with no GPU gate and no eviction, following the `embed_image()` precedent, and
-at ~350 MB the voice model coexists with a resident RAG LLM on the same card.
+Every answer carries a **Read aloud** button. Server-side synthesis is **Kokoro-82M** via the
+broker's **`/v1/tts_light`**, with the voice `af_heart` (American female).
 
-So voice is now *possible* here. It remains **out of scope by choice** rather than by constraint:
-this rail is a desk tool for scoping and delivery work, and its answers are dense, citation-heavy
-prose that reads far better than it listens. If voice is ever wanted, budget roughly
-`gemma3:4b` (3.34 GB) + `bge-m3` (0.66 GB) + Kokoro (~0.35 GB) ≈ **4.35 GB**, which is at the
-practical ceiling on this card — so a voice build should drop the generative model to 3B-class,
-exactly as the SMB Partner rail does.
+**The endpoint choice is the whole design.** `/v1/tts` (XTTS) takes the full GPU gate and calls
+`_evict_other_heavy()` with **no `keep`** — using it would evict this rail's answer model on every
+utterance and destroy the co-residency everything else here depends on. `tts_light` skips both the
+gate and the eviction, following the `embed_image()` precedent. Never "simplify" the voice path
+onto `/v1/tts`.
+
+**Kokoro is transient, not co-resident.** `media.run_media_job()` spawns a **subprocess per
+call** which exits when the job finishes, so Kokoro's ~350 MB is a brief spike during synthesis
+rather than a permanent tenant. Steady-state footprint is unchanged at `gemma3:4b` (3.34 GB) +
+`bge-m3` (0.66 GB) ≈ **4.0 GB**, and there is **no need to drop the generative model to 3B-class**
+to afford voice. (An earlier draft of this file claimed otherwise; it was wrong.)
+
+The real cost is **latency**: because the model loads per call, a Read aloud takes **~6.7 s**
+before the first word (measured on this box for a one-sentence answer). That is acceptable for a
+button the user chose to press, and it is why voice is not on the answer path itself.
+
+**It degrades rather than failing.** `voice.py` is a seam with four backends — `auto` (probe the
+broker, 300 s cached), `broker`, `browser`, `off`. If the media worker is unavailable or the call
+raises, the payload comes back as `browser` mode with a `degraded` note and the client speaks it
+via the Web Speech API — no GPU, and the button still works. The browser fallback also prefers a
+female neural voice so the voice does not change gender when the broker is unavailable.
+
+**Requires on the broker:** `BROKER_MEDIA_ENABLED=true`, `BROKER_KOKORO_MODEL_PATH` and
+`BROKER_KOKORO_VOICES_PATH`. Verified live on this box: `media.enabled = true`, synthesis returns
+a valid 24 kHz RIFF/WAVE payload.

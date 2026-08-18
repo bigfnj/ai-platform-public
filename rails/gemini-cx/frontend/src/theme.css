@@ -362,6 +362,13 @@
   font-style: italic;
 }
 
+/* Action row under an answer — currently just Read aloud. */
+.gemini-cx .gcx-acts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 /* Streaming caret, so a slow model still looks alive. */
 .gemini-cx .gcx-caret {
   display: inline-block;

@@ -1,7 +1,7 @@
 // Same-origin API helpers. In production the shell serves this remote under /gemini-cx/ and
 // the gateway proxies /gemini-cx/api/* and /gemini-cx/ws/*. In standalone dev, vite proxies
 // the same paths to the backend on :8880 (see vite.config.ts).
-import type { AskFrame, AskResponse, Capabilities, DeckResponse } from './types'
+import type { AskFrame, AskResponse, Capabilities, DeckResponse, VoicePayload } from './types'
 
 const BASE = '/gemini-cx'
 
@@ -34,6 +34,9 @@ export async function postJSON<T>(path: string, body?: unknown): Promise<T> {
 
 export const fetchDeck = () => getJSON<DeckResponse>('/api/questions')
 export const fetchCapabilities = () => getJSON<Capabilities>('/api/capabilities')
+
+/** Synthesize an answer for Read aloud. Kokoro via the broker, or a browser-mode payload. */
+export const speakText = (text: string) => postJSON<VoicePayload>('/api/speak', { text })
 
 export interface AskRequest {
   question?: string

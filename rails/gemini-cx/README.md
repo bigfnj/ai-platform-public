@@ -63,6 +63,7 @@ GET  /api/questions     the curated question deck
 GET  /api/collections   the corpus, per collection
 POST /api/ingest        re-ingest the seed knowledge base (admin) — ?force=true
 POST /api/upload        index an ad-hoc document
+POST /api/speak         synthesize text for Read aloud (Kokoro, browser fallback)
 POST /api/ask           grounded answer, buffered
 WS   /ws/ask            the same, streamed token-by-token
 ```
@@ -75,11 +76,16 @@ roughly twenty seconds, and a spinner for twenty seconds reads as a hang. The bu
 kept because it is trivially scriptable and because a corporate proxy may refuse a WebSocket
 upgrade — the frontend falls back to it automatically.
 
-## Models
+## Models and voice
 
 Two broker models held concurrently: `@gemini-cx-rag` (heavy, writes the answer) and `@embed`
 (light, retrieval). See [MODELS.md](MODELS.md) for the VRAM arithmetic and the swap-avoidance
 tradeoff against the SMB Partner rail.
+
+Every answer carries a **Read aloud** button: Kokoro-82M (`af_heart`, female) through the
+broker's `/v1/tts_light` — deliberately *not* `/v1/tts`, which evicts every resident heavy model
+per utterance. `voice.py` is a seam with `auto` / `broker` / `browser` / `off` backends and
+degrades to the browser's Web Speech API rather than failing.
 
 ## Running it standalone
 

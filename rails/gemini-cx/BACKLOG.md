@@ -72,10 +72,9 @@ the pricing pages.
 
 ## 6. Not doing, and why
 
-- **No voice — by choice, not by constraint.** `Broker.tts_light()` (Kokoro-82M, ~350 MB, no GPU
-  gate and no eviction) has landed, so the old blocker is gone. Voice stays out because this is a
-  desk tool and its answers are dense, citation-heavy prose that reads better than it listens. If
-  it is ever wanted, the VRAM budget forces the generative model down to 3B-class — see MODELS.md.
+- **No voice INPUT.** Read aloud (output) shipped — Kokoro-82M via `tts_light`, see MODELS.md.
+  There is no speech-to-text model in the broker, so a spoken *question* would be the browser's
+  `SpeechRecognition` or nothing. Not worth it for a desk tool where the questions are one click.
 - **No mobile build.** The SMB Partner rail needs one because a partner uses it between meetings.
   This rail is a desk tool for scoping and delivery work; the shell's fixed 76px rail is fine.
 - **No upload UI.** `POST /api/upload` exists and works, but the corpus is curated on purpose —

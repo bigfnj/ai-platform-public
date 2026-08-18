@@ -19,6 +19,8 @@ ENV GEMINI_CX_DATA_DIR=/srv/var \
     GEMINI_CX_BROKER_URL=http://host.docker.internal:11500 \
     GEMINI_CX_RAG_MODEL=@gemini-cx-rag \
     GEMINI_CX_EMBED_MODEL=@embed \
+    GEMINI_CX_VOICE_BACKEND=auto \
+    GEMINI_CX_VOICE_SPEAKER=af_heart \
     PYTHONUNBUFFERED=1
 VOLUME ["/srv/var"]
 EXPOSE 8880

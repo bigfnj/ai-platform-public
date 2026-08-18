@@ -107,9 +107,37 @@ def embed(text: str | list[str], *, model: str) -> list[list[float]]:
     raise BrokerError("embed response had no vectors")
 
 
+def tts_light(text: str, *, voice: str | None = None, lang_code: str | None = None,
+              speed: float | None = None, timeout: float = DEFAULT_TIMEOUT) -> dict:
+    """Kokoro-82M TTS via the broker's ``/v1/tts_light``.
+
+    Deliberately NOT ``/v1/tts``: that path takes the full GPU gate and calls
+    ``_evict_other_heavy()`` with no ``keep``, so every utterance would evict this rail's
+    answer model and destroy the co-residency the whole design rests on. ``tts_light`` skips
+    both the gate and the eviction (the ``embed_image()`` precedent) and at ~350 MB Kokoro
+    coexists with the resident LLM and embedder.
+    """
+    payload: dict = {"text": text}
+    if voice:
+        payload["voice"] = voice
+    if lang_code:
+        payload["lang_code"] = lang_code
+    if speed is not None:
+        payload["speed"] = speed
+    return _post("/v1/tts_light", payload, timeout=timeout)
+
+
 def status() -> dict:
-    """Broker/GPU status passthrough (loaded models, VRAM, queue depth)."""
+    """Broker/GPU status passthrough (loaded models, VRAM, queue depth, media availability)."""
     return _get("/v1/status")
+
+
+def media_enabled() -> bool:
+    """Whether the broker's media worker is available, i.e. whether Kokoro can be served."""
+    try:
+        return bool((status().get("media") or {}).get("enabled"))
+    except BrokerError:
+        return False
 
 
 def roles() -> list[dict]:

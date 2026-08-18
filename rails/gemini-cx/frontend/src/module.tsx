@@ -11,8 +11,9 @@
 // No own top bar or theme — the shell provides those; this renders inside a `.gemini-cx`
 // wrapper and adopts the shell's palette via shared tokens (see web/THEMING.md).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { askBuffered, askStreaming, fetchCapabilities, fetchDeck } from './api'
+import { askBuffered, askStreaming, fetchCapabilities, fetchDeck, speakText } from './api'
 import { renderMarkdown } from './markdown'
+import { speak, stopSpeaking } from './voice'
 import { titleCase } from './types'
 import type {
   AskRequest,
@@ -129,6 +130,56 @@ function Deck({
 // even when empty. That is deliberate: citations arrive on the `retrieval` frame, i.e. BEFORE
 // the first token, so a column that appeared only once it had content would resize the answer
 // pane a moment after the user hit ask — a visible jump on every single question.
+// Read aloud — same component shape and same toggle semantics as the smb-partner-enablement
+// rail. Server-side synthesis is Kokoro-82M through the broker's tts_light (no GPU gate, no
+// eviction, so the answer model stays resident); if that call fails for any reason the catch
+// speaks a browser-mode payload instead, so the button never silently does nothing.
+//
+// `disabled` while streaming rather than hidden: it appears with the first token and stays put,
+// which avoids the answer pane reflowing mid-stream. Reading a half-finished answer aloud is
+// not useful, so it only becomes clickable once the stream is done.
+function ReadAloud({ text, streaming, mode }: { text: string; streaming: boolean; mode?: string }) {
+  const [on, setOn] = useState(false)
+  const [loading, setLoading] = useState(false)
+  // Unmounts when a new question clears the answer, which is exactly when playback should stop.
+  useEffect(() => () => stopSpeaking(), [])
+  if (!text) return null
+
+  const toggle = async () => {
+    if (on) {
+      stopSpeaking()
+      setOn(false)
+      return
+    }
+    if (loading) return
+    setLoading(true)
+    try {
+      const payload = await speakText(text)
+      setOn(true)
+      speak(payload, () => setOn(false))
+    } catch {
+      setOn(true)
+      speak({ mode: 'browser', text, lang: 'en-US' }, () => setOn(false))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const title = streaming
+    ? 'Available once the answer finishes'
+    : mode === 'broker'
+      ? 'Kokoro-82M via the broker (af_heart)'
+      : 'Your browser’s speech synthesis — the broker media worker is unavailable'
+
+  return (
+    <div className="gcx-acts">
+      <button className="gcx-btn" onClick={toggle} disabled={loading || streaming} title={title}>
+        {loading ? '…' : on ? '■ Stop' : '🔊 Read aloud'}
+      </button>
+    </div>
+  )
+}
+
 function Sources({ cites, asked }: { cites: Citation[]; asked: boolean }) {
   return (
     <aside className="gcx-sources">
@@ -363,6 +414,8 @@ export default function GeminiCxModule() {
                 {answer ? renderMarkdown(answer) : busy ? <p className="gcx-thinking">Retrieving and reasoning…</p> : null}
                 {busy && answer && <span className="gcx-caret" aria-hidden="true" />}
               </div>
+
+              <ReadAloud text={answer} streaming={busy} mode={caps?.voice?.effective} />
             </>
           )}
         </main>

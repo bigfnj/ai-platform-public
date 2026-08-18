@@ -9,6 +9,7 @@ Routes (the gateway proxies these under /gemini-cx/):
   GET  /api/collections   the corpus, per collection
   POST /api/ingest        re-ingest the seed knowledge base (admin)
   POST /api/upload        index an ad-hoc document
+  POST /api/speak         synthesize text via Kokoro (Read aloud); browser fallback
   POST /api/ask           grounded answer, buffered
   WS   /ws/ask            the same, streamed token-by-token
 
@@ -27,7 +28,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from gemini_cx import broker, config, ingest, questions, rag, store
+from gemini_cx import broker, config, ingest, questions, rag, store, voice
 
 log = logging.getLogger("gemini_cx.api")
 
@@ -45,6 +46,10 @@ class UploadBody(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1)
     source: str = "upload.md"
+
+
+class SpeakBody(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
 
 
 def identity(x_platform_user: str | None = Header(default=None),
@@ -176,6 +181,7 @@ def create_api() -> FastAPI:
             "upload": True,
             "corpus": stats,
             "models": models,
+            "voice": voice.describe(),
         }
 
     @app.get("/api/questions")
@@ -202,6 +208,17 @@ def create_api() -> FastAPI:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         log.info("upload %s by %s: %d chunks", body.name, who["user"], count)
         return {"collection": body.name, "chunks": count, "corpus": store.stats()}
+
+    @app.post("/api/speak")
+    async def speak_api(body: SpeakBody, who: dict = Depends(identity)) -> dict[str, Any]:
+        """Synthesize arbitrary text through Kokoro (or browser fallback) — the Read aloud button.
+
+        Separate from /api/ask on purpose: answers stream over the WebSocket, so the full text
+        only exists on the client once the stream has finished. Synthesising server-side during
+        the stream would either speak a fragment or force the answer to be buffered.
+        """
+        del who  # identity is enforced by the dependency; the payload is not user-scoped
+        return await asyncio.to_thread(voice.speak, body.text)
 
     @app.post("/api/ask")
     async def ask(body: AskBody, who: dict = Depends(identity)) -> dict[str, Any]:

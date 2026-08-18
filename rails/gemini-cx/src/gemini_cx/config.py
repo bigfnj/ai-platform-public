@@ -41,6 +41,20 @@ EMBED_MODEL = os.environ.get("GEMINI_CX_EMBED_MODEL", "@embed")
 TOP_K = int(os.environ.get("GEMINI_CX_TOP_K", "6"))
 MAX_TOKENS = int(os.environ.get("GEMINI_CX_MAX_TOKENS", "800"))
 
+# --- voice: "Read aloud" on every answer ----------------------------------------
+# Kokoro-82M through the broker's /v1/tts_light — NOT /v1/tts, which evicts every heavy model
+# per utterance and would destroy this rail's LLM+embedder co-residency. Kokoro is ~350 MB and
+# coexists with both. See voice.py for the backend seam and MODELS.md for the VRAM budget.
+#   auto     probe the broker's media worker; fall back to the browser when it is unavailable
+#   broker   force Kokoro
+#   browser  force the client's Web Speech API (zero GPU)
+#   off      no voice
+VOICE_BACKEND = os.environ.get("GEMINI_CX_VOICE_BACKEND", "auto").strip().lower()
+VOICE_LANG = os.environ.get("GEMINI_CX_VOICE_LANG", "en")
+# Female American English. Set explicitly rather than relying on Kokoro's default so the voice
+# does not change under us if that default ever moves. 'af_' = American female.
+VOICE_SPEAKER = os.environ.get("GEMINI_CX_VOICE_SPEAKER", "af_heart").strip()
+
 # GECX has four status levels that its own marketing collapses into "available", so the
 # grounding contract names them explicitly. The corpus marks status per capability; the model
 # is told to carry that through rather than smoothing it away.
