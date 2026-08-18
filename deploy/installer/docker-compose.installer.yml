@@ -95,6 +95,26 @@ services:
       - "8870"
     restart: always
 
+  gemini-cx:                     # Gemini Enterprise CX — grounded RAG over a GECX corpus
+    profiles: ["gemini-cx"]
+    build:
+      context: ../../rails/gemini-cx
+      dockerfile: deploy/Dockerfile
+    image: gemini-cx-backend:latest
+    environment:
+      GEMINI_CX_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      GEMINI_CX_RAG_MODEL: ${GEMINI_CX_RAG_MODEL:-@gemini-cx-rag}
+      GEMINI_CX_EMBED_MODEL: ${GEMINI_CX_EMBED_MODEL:-@embed}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - gemini_cx_data:/srv/var
+    expose:
+      - "8880"
+    restart: always
+
   gateway:                       # shell host + reverse proxy; frontends baked into the image
     build:
       context: ../..
@@ -110,6 +130,7 @@ services:
       PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
       PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
       PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
+      PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
@@ -152,6 +173,9 @@ volumes:
   smb_partner_data:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_smb_partner_data
+  gemini_cx_data:
+    external: true
+    name: ${COMPOSE_PROJECT_NAME:-platform}_gemini_cx_data
   caddy_data:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_caddy_data

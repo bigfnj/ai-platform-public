@@ -12,5 +12,6 @@
   "recipe": "gemma3:4b",
   "recipe-vision": "gemma3:4b",
   "terminal-fun": "gemma3:4b",
-  "ai-playground": "gemma3:4b"
+  "ai-playground": "gemma3:4b",
+  "gemini-cx-rag": "gemma3:4b"
 }

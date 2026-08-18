@@ -32,6 +32,7 @@ ROLE_RAIL = {
     "terminal-fun": "Terminal Fun",
     "ai-playground": "AI Playground",
     "smb-partner-rag": "SMB Partner Enablement", "smb-partner-voice": "SMB Partner Enablement",
+    "gemini-cx-rag": "Gemini CX",
 }
 
 

@@ -76,6 +76,15 @@ RAIL_MODEL_SLOTS: dict[str, list[dict[str, str]]] = {
                         "this rail holds it resident ALONGSIDE the embedder (and a voice model), which "
                         "a 4B+ model will not fit beside on an 8 GB card."},
     ],
+    "gemini-cx": [
+        {"slot": "reasoning", "label": "GECX answer model", "role": "gemini-cx-rag", "kind": "chat",
+         "env": "GEMINI_CX_RAG_MODEL", "default": "gemma4*:12b",
+         "description": "Writes the grounded answer over the Gemini Enterprise CX corpus. Held "
+                        "resident alongside the embedder, but with no voice model competing, so it "
+                        "can run larger than the SMB Partner rail's. On an 8 GB card use gemma3:4b; "
+                        "pointing it at llama3.2:3b (what smb-partner-rag uses) additionally avoids "
+                        "a model swap when moving between the two knowledge rails."},
+    ],
 }
 
 # Roles this panel is allowed to repoint (guards the PUT: no editing generic @chat etc. here).

@@ -29,6 +29,9 @@ APP_CATALOG: list[dict[str, str]] = [
     # SMB Partner Enablement — grounded RAG over Microsoft SMB partner SME content, with a
     # voice surface and a standalone mobile build served at /smb-partner-enablement/m/.
     {"id": "smb-partner-enablement", "label": "SMB Partner", "icon": "🤝", "status": "ready"},
+    # Gemini Enterprise CX — grounded RAG over a Google Cloud GECX subject-matter corpus,
+    # fronted by a curated question deck rather than a bare chat box.
+    {"id": "gemini-cx", "label": "Gemini CX", "icon": "🎧", "status": "ready"},
 ]
 
 APP_IDS: set[str] = {a["id"] for a in APP_CATALOG}

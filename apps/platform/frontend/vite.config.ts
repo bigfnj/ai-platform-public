@@ -23,6 +23,7 @@ export default defineConfig({
         ai_playground: '/ai-playground/assets/remoteEntry.js',
         co_worker: '/co-worker/assets/remoteEntry.js',
         smb_partner: '/smb-partner-enablement/assets/remoteEntry.js',
+        gemini_cx: '/gemini-cx/assets/remoteEntry.js',
       },
       shared: ['react', 'react-dom'],
     }),
@@ -48,6 +49,8 @@ export default defineConfig({
       '/co-worker': 'http://127.0.0.1:8700',
       // ws:true so the voice agent's /smb-partner-enablement/ws/ask stream proxies through in dev.
       '/smb-partner-enablement': { target: 'http://127.0.0.1:8700', ws: true },
+      // ws:true so Gemini CX's /gemini-cx/ws/ask token stream proxies through in dev.
+      '/gemini-cx': { target: 'http://127.0.0.1:8700', ws: true },
     },
   },
 })

@@ -14,6 +14,7 @@ const WorkstationModule = lazy(() => import('workstation/module'))
 const TerminalFunModule = lazy(() => import('terminal_fun/module'))
 const AiPlaygroundModule = lazy(() => import('ai_playground/module'))
 const CoWorkerModule = lazy(() => import('co_worker/module'))
+const GeminiCxModule = lazy(() => import('gemini_cx/module'))
 const SmbPartnerModule = lazy(() => import('smb_partner/module'))
 
 const STATUS_MS = 5000
@@ -282,6 +283,18 @@ export default function App() {
         }
       >
         <SmbPartnerModule />
+      </Suspense>
+    )
+  } else if (activeEntry?.id === 'gemini-cx') {
+    content = (
+      <Suspense
+        fallback={
+          <div className="module">
+            <div className="card"><div className="empty">Loading Gemini CX…</div></div>
+          </div>
+        }
+      >
+        <GeminiCxModule />
       </Suspense>
     )
   } else if (activeEntry) {

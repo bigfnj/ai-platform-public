@@ -38,6 +38,11 @@ DEFAULT_ROLES: dict[str, str] = {
     # and the embedder resident together and adds a voice model on top, so a 3B-class model is
     # what fits alongside on an 8 GB card. See rails/smb-partner-enablement/MODELS.md.
     "smb-partner-rag": "llama3.2*:3b",
+    # Gemini Enterprise CX. Also a co-resident pair (generative + @embed), but with no voice
+    # model competing for the card, so this one can afford a larger generative model than
+    # smb-partner-rag does. On an 8 GB box override it down to gemma3:4b in roles.json — see
+    # rails/gemini-cx/MODELS.md for the arithmetic.
+    "gemini-cx-rag": "gemma4*:12b",
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator
     # Media (voice) role — a TTS backend in the media worker, NOT an Ollama model.

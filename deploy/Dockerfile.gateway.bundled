@@ -17,8 +17,9 @@ COPY rails/terminal-fun/frontend ./rails/terminal-fun/frontend
 COPY rails/recipe-book/frontend ./rails/recipe-book/frontend
 COPY rails/co-worker/frontend ./rails/co-worker/frontend
 COPY rails/smb-partner-enablement/frontend ./rails/smb-partner-enablement/frontend
+COPY rails/gemini-cx/frontend ./rails/gemini-cx/frontend
 RUN set -eux; \
-    for d in apps/platform/frontend rails/terminal-fun/frontend rails/recipe-book/frontend rails/co-worker/frontend rails/smb-partner-enablement/frontend; do \
+    for d in apps/platform/frontend rails/terminal-fun/frontend rails/recipe-book/frontend rails/co-worker/frontend rails/smb-partner-enablement/frontend rails/gemini-cx/frontend; do \
       (cd "$d" && npm install --no-audit --no-fund --loglevel=error && npm run build); \
     done
 
@@ -42,6 +43,7 @@ COPY --from=web /build/rails/co-worker/frontend/dist    /app/dist/co-worker
 # smb-partner dist/m/ (mobile SPA) is nested inside dist/ and is served by the same StaticFiles
 # mount at /smb-partner-enablement/m/ — no extra route needed.
 COPY --from=web /build/rails/smb-partner-enablement/frontend/dist /app/dist/smb-partner-enablement
+COPY --from=web /build/rails/gemini-cx/frontend/dist /app/dist/gemini-cx
 
 # Container-network backend URLs + baked dist paths. PLATFORM_ENABLED_APPS + PLATFORM_ADMIN_*
 # are supplied by the installer's .env at run time (the chooser decides the enabled set).
@@ -51,11 +53,13 @@ ENV PYTHONPATH=/app/apps/platform/backend:/app/packages/platform_core \
     PLATFORM_APP_RECIPE_BOOK_URL=http://recipe-book:8830 \
     PLATFORM_APP_CO_WORKER_URL=http://co-worker:8860 \
     PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL=http://smb-partner-enablement:8870 \
+    PLATFORM_APP_GEMINI_CX_URL=http://gemini-cx:8880 \
     PLATFORM_FRONTEND_DIST=/app/dist/shell \
     PLATFORM_TERMINAL_FUN_DIST=/app/dist/terminal-fun \
     PLATFORM_RECIPE_BOOK_DIST=/app/dist/recipe-book \
     PLATFORM_CO_WORKER_DIST=/app/dist/co-worker \
     PLATFORM_SMB_PARTNER_ENABLEMENT_DIST=/app/dist/smb-partner-enablement \
+    PLATFORM_GEMINI_CX_DIST=/app/dist/gemini-cx \
     PLATFORM_ENABLED_APPS=terminal-fun,recipe-book \
     PYTHONUNBUFFERED=1
 

@@ -262,6 +262,29 @@ services:
       - "8870"
     restart: always
 
+  gemini-cx:                     # Gemini Enterprise CX — grounded RAG over a GECX subject-matter
+    # corpus, fronted by a curated question deck. Holds @gemini-cx-rag (heavy) resident alongside
+    # @embed (light) through the broker's VRAM policy, so a question costs no model swap. No voice
+    # model, so this rail can afford a larger generative model than smb-partner-enablement does —
+    # see rails/gemini-cx/MODELS.md. Torch-free.
+    build:
+      context: ../rails/gemini-cx      # uses gemini-cx/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: gemini-cx-backend:latest
+    environment:
+      GEMINI_CX_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      GEMINI_CX_RAG_MODEL: ${GEMINI_CX_RAG_MODEL:-@gemini-cx-rag}
+      GEMINI_CX_EMBED_MODEL: ${GEMINI_CX_EMBED_MODEL:-@embed}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - gemini_cx_data:/srv/var   # chunk index + uploaded docs (seed corpus baked into the image)
+    expose:
+      - "8880"
+    restart: always
+
   gateway:                       # shell host + reverse proxy
     build:
       context: ..
@@ -276,6 +299,7 @@ services:
       - ai-playground
       - co-worker
       - smb-partner-enablement
+      - gemini-cx
     environment:
       PLATFORM_BROKER_URL: http://host.docker.internal:11500
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
@@ -289,6 +313,7 @@ services:
       PLATFORM_APP_AI_PLAYGROUND_URL: http://ai-playground:8850
       PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
       PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
+      PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
       PLATFORM_FRONTEND_DIST: /app/shell-dist
       PLATFORM_EDU_SUITE_DIST: /app/edu-suite-dist
       PLATFORM_IEP_DIST: /app/iep-dist
@@ -298,6 +323,7 @@ services:
       PLATFORM_AI_PLAYGROUND_DIST: /app/ai-playground-dist
       PLATFORM_CO_WORKER_DIST: /app/co-worker-dist
       PLATFORM_SMB_PARTNER_ENABLEMENT_DIST: /app/smb-partner-dist
+      PLATFORM_GEMINI_CX_DIST: /app/gemini-cx-dist
       # auth / multi-tenant
       PLATFORM_DB_URL: sqlite:////data/platform.db
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
@@ -317,6 +343,7 @@ services:
       - ../rails/co-worker/frontend/dist:/app/co-worker-dist:ro
       # Contains dist/m/ too — the standalone mobile build, served at /smb-partner-enablement/m/.
       - ../rails/smb-partner-enablement/frontend/dist:/app/smb-partner-dist:ro
+      - ../rails/gemini-cx/frontend/dist:/app/gemini-cx-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
@@ -355,3 +382,4 @@ volumes:
   co_worker_inbox:    # fallback drop-zone when CO_WORKER_INBOX_MOUNT is unset (empty dashboard)
   co_worker_prompts:  # fallback when CO_WORKER_PROMPTS_MOUNT is unset (hides prompts panel)
   smb_partner_data:   # SMB Partner chunk index + uploaded SME docs (seed KB baked into the image)
+  gemini_cx_data:     # Gemini CX chunk index + uploaded docs (seed GECX corpus baked into the image)
