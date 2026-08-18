@@ -46,12 +46,26 @@ export interface CorpusStats {
   collections: number
 }
 
-export interface ModelStatus {
-  broker: string
-  rag_model: string
-  embed_model: string
-  rag_resident?: boolean
-  embed_resident?: boolean
+// Four states, one visual language across every rail's header chips:
+//   missing  RED     the model a role resolves to is not installed
+//   cold     BLUE    installed but not resident in VRAM
+//   warming  ORANGE  a broker job is queued/active for a model that is not resident yet
+//   loaded   GREEN   resident right now
+export type ModelState = 'missing' | 'cold' | 'warming' | 'loaded'
+
+export interface ModelSlot {
+  slot: string
+  label: string
+  role: string
+  model: string
+  state: ModelState
+}
+
+export const STATE_TEXT: Record<ModelState, string> = {
+  missing: 'not found',
+  cold: 'cold',
+  warming: 'warming up',
+  loaded: 'GPU · ready',
 }
 
 // Mirrors voice.speak() — only `broker` mode carries audio; `browser` mode expects the client
@@ -80,7 +94,8 @@ export interface Capabilities {
   streaming: boolean
   upload: boolean
   corpus: CorpusStats
-  models: ModelStatus
+  broker: string
+  models: ModelSlot[]
   voice: VoiceStatus
 }
 

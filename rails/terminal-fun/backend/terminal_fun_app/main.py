@@ -36,7 +36,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from terminal_fun_app import broker, saves
+from terminal_fun_app import broker, modelstate, saves
 from terminal_fun_app.catalog import CATEGORIES, ITEMS, item_by_id, public_catalog
 from terminal_fun_app.config import settings
 from terminal_fun_app.pty_session import PtySession
@@ -62,6 +62,23 @@ def _audit(event: str, **fields: Any) -> None:
 @app.get("/api/healthz")
 def healthz() -> dict[str, Any]:
     return {"ok": True, "app": settings.app_name, "items": len(ITEMS), "ai": broker.up()}
+
+
+# The model slots this rail shows as header chips. One: the in-terminal assistant. Referenced as
+# the configured string rather than the @role, because that string is what this rail actually
+# sends to the broker — modelstate resolves @roles, globs and concrete names alike.
+MODEL_SLOTS: list[tuple[str, str, str]] = [
+    ("llm", "Assistant", settings.llm_model),
+]
+
+
+@app.get("/api/models")
+def models_status() -> dict[str, Any]:
+    """Four-state model status for the header chips (missing/cold/warming/loaded), plus the
+    catalog size shown alongside. Never raises — the header must render with the GPU down."""
+    out = modelstate.resolve(MODEL_SLOTS)
+    out["items"] = len(ITEMS)
+    return out
 
 
 @app.get("/api/catalog")

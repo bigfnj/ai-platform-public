@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { askBuffered, askStreaming, fetchCapabilities, fetchDeck, speakText } from './api'
 import { renderMarkdown } from './markdown'
 import { speak, stopSpeaking } from './voice'
-import { titleCase } from './types'
+import { STATE_TEXT, titleCase } from './types'
 import type {
   AskRequest,
 } from './api'
@@ -55,25 +55,24 @@ function GeminiIcon() {
   )
 }
 
-// Status line follows the smb-partner-enablement pattern exactly: a coloured dot per model, the
-// slot name, the resolved model, and its residency in muted text. Same classes (.status, .dot,
-// .muted) scoped under this rail's wrapper, same 8px dot, same 16px gap.
+// Status line follows the smb-partner-enablement pattern: a coloured dot per model, the slot
+// name, the resolved model, and its state in muted text. Same classes (.status, .dot, .muted)
+// scoped under this rail's wrapper, same 8px dot, same 16px gap.
+//
+// The dot is four-state, not on/off — red missing, blue cold, orange warming, green loaded. The
+// distinction that matters operationally is red vs blue: "not installed" needs an `ollama pull`,
+// "cold" just needs someone to ask a question. Collapsing both to "off" hides that.
 function AiStatus({ caps }: { caps: Capabilities | null }) {
   if (!caps) return <span className="muted">checking…</span>
-  const m = caps.models
-  if (m.broker !== 'ok') return <span className="muted">● broker unreachable</span>
+  if (caps.broker !== 'ok') return <span className="muted">● broker unreachable</span>
   return (
     <div className="status">
-      <span title="@gemini-cx-rag — writes the grounded answer">
-        <i className={`dot ${m.rag_resident ? 'on' : 'off'}`} />
-        LLM ({m.rag_model}){' '}
-        <span className="muted">{m.rag_resident ? 'GPU · ready' : 'cold'}</span>
-      </span>
-      <span title="@embed — retrieval over the GECX corpus">
-        <i className={`dot ${m.embed_resident ? 'on' : 'off'}`} />
-        Retrieval ({m.embed_model}){' '}
-        <span className="muted">{m.embed_resident ? 'GPU · ready' : 'cold'}</span>
-      </span>
+      {caps.models.map((m) => (
+        <span key={m.slot} title={`${m.role} → ${m.model} · ${STATE_TEXT[m.state]}`}>
+          <i className={`dot ${m.state}`} />
+          {m.label} ({m.model}) <span className="muted">{STATE_TEXT[m.state]}</span>
+        </span>
+      ))}
       <span className="muted">
         {caps.corpus.chunks} chunks · {caps.corpus.collections} collections
       </span>
@@ -239,6 +238,24 @@ export default function GeminiCxModule() {
     }
   }, [])
 
+  // Re-poll capabilities so the model chips stay honest. Residency changes on its own — the
+  // broker evicts on a keep_alive expiry and asking a question warms the model back up — so the
+  // one-shot fetch above would leave a dot that is quietly wrong. 6s matches the shell's own
+  // status cadence, and the warming window is ~7s on this box, so a transition is visible
+  // rather than missed. The deck is not re-fetched: it only changes on a deploy.
+  useEffect(() => {
+    let live = true
+    const id = window.setInterval(() => {
+      fetchCapabilities()
+        .then((c) => live && setCaps(c))
+        .catch(() => { /* keep the last known state rather than blanking the header */ })
+    }, 6000)
+    return () => {
+      live = false
+      window.clearInterval(id)
+    }
+  }, [])
+
   // Cancel any in-flight stream if the module unmounts mid-answer.
   useEffect(() => () => cancelRef.current?.(), [])
 
@@ -315,9 +332,8 @@ export default function GeminiCxModule() {
             Grounded answers on Google Cloud&apos;s Gemini Enterprise for Customer Experience —
             every claim cited, status never smoothed over
           </span>
+          <AiStatus caps={caps} />
         </div>
-        <span className="gcx-spacer" />
-        <AiStatus caps={caps} />
       </header>
 
       {loadErr && (

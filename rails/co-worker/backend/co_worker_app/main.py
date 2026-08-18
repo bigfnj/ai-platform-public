@@ -54,6 +54,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 
+from co_worker_app import modelstate
 from co_worker_app.atomicio import write_json
 from co_worker_app.config import settings
 
@@ -221,6 +222,32 @@ def healthz() -> dict[str, Any]:
         "skipped_files": skipped,
         "archived_items": len(list(archive.glob("*.json"))) if archive.exists() else 0,
     }
+
+
+def _model_slots() -> list[tuple[str, str, str]]:
+    """The model slots this rail shows as header chips. Only one: synthesis is a single chat
+    pass with no embedder — the brief is built from whole items, not retrieved chunks.
+
+    synthesize is imported lazily here to match the rest of this module, which defers it in
+    every call site rather than importing it at load time."""
+    from co_worker_app.synthesize import BROKER_ROLE
+    return [("llm", "Synthesis", f"@{BROKER_ROLE}")]
+
+
+@app.get("/api/models")
+def models_status() -> dict[str, Any]:
+    """Four-state model status for the header chips (missing/cold/warming/loaded), plus the
+    item count shown alongside them. Never raises — the header must render with the GPU down."""
+    valid = 0
+    for f in _item_files():
+        try:
+            json.loads(f.read_text(encoding="utf-8"))
+            valid += 1
+        except Exception:  # noqa: BLE001 - malformed files are reported by healthz, not here
+            pass
+    out = modelstate.resolve(_model_slots())
+    out["items"] = valid
+    return out
 
 
 @app.get("/api/inbox")

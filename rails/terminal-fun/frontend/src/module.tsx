@@ -11,6 +11,37 @@ interface Category { id: string; label: string }
 interface Item { id: string; label: string; icon: string; category: string; watch: boolean; info: string; tunable: boolean; saveable: boolean }
 interface ChatMsg { role: 'user' | 'assistant'; content: string }
 
+// Model status chips (mirrors GET /api/models). Four states, one visual language across every
+// rail: missing RED = not installed, cold BLUE = installed but not resident, warming ORANGE = a
+// broker job is loading it, loaded GREEN = resident. The red/blue split is the operationally
+// useful one — red needs an `ollama pull`, blue just needs someone to ask a question.
+type ModelState = 'missing' | 'cold' | 'warming' | 'loaded'
+interface ModelSlot { slot: string; label: string; role: string; model: string; state: ModelState }
+interface ModelsStatus { broker: string; models: ModelSlot[]; items: number }
+
+const STATE_TEXT: Record<ModelState, string> = {
+  missing: 'not found',
+  cold: 'cold',
+  warming: 'warming up',
+  loaded: 'GPU · ready',
+}
+
+function ModelChips({ status }: { status: ModelsStatus | null }) {
+  if (!status) return <span className="status m">checking…</span>
+  if (status.broker !== 'ok') return <span className="status m">● broker unreachable</span>
+  return (
+    <div className="status">
+      {status.models.map((m) => (
+        <span key={m.slot} title={`${m.role} → ${m.model} · ${STATE_TEXT[m.state]}`}>
+          <i className={`dot ${m.state}`} />
+          {m.label} ({m.model}) <span className="m">{STATE_TEXT[m.state]}</span>
+        </span>
+      ))}
+      <span className="m">{status.items} games &amp; toys</span>
+    </div>
+  )
+}
+
 const enc = new TextEncoder()
 const IN = 0x00 // input / output data frame tag
 const RESIZE = 0x01 // resize control frame tag
@@ -23,6 +54,30 @@ const CSS = `
   --ac:var(--accent,#2a78d6); color:var(--i); display:flex; flex-direction:column;
   height:calc(100vh - 132px); min-height:520px; }
 .ft .body { flex:1; min-height:0; display:flex; flex-direction:column; }
+
+/* --- header: title, statement, then model chips ------------------------------
+ * Same shape as the smb-partner-enablement, co-worker and gemini-cx rails so every rail reads
+ * as one product. The header takes its natural height and .body flexes into what is left, so
+ * the .ft height calc above needs no adjustment. */
+.ft .head { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin:2px 2px 14px; }
+.ft .head .logo { font-size:26px; line-height:1; }
+.ft .head .titles { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.ft .head h1 { margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em; }
+.ft .head .stmt { color:var(--mut); font-size:12.5px; max-width:80ch; }
+
+/* Model chips. NOTE: this rail already uses .chip for the game tiles (play/watch/AI/resume),
+ * so the status chips deliberately use .status/.dot and never .chip. */
+.ft .status { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; margin-top:2px; }
+.ft .status .m { color:var(--mut); }
+/* These four colours are FIXED rather than palette-derived, on purpose: status colours stay
+ * semantic and stable across every palette (web/THEMING.md rule 4), because a reader has to be
+ * able to tell "not installed" from "cold" on any theme. */
+.ft .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px; }
+.ft .dot.missing { background:#f85149; }
+.ft .dot.cold    { background:#58a6ff; }
+.ft .dot.warming { background:#f0883e; animation:ft-pulse 1.1s ease-in-out infinite; }
+.ft .dot.loaded  { background:#3fb950; }
+@keyframes ft-pulse { 50% { opacity:.35; } }
 
 .ft .menu { flex:1; overflow:auto; padding:2px 2px 10px; }
 .ft .lead { color:var(--mut); font-size:13.5px; margin:2px 0 18px; }
@@ -141,6 +196,7 @@ export default function TerminalFunModule() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [tuneHint, setTuneHint] = useState('')
+  const [models, setModels] = useState<ModelsStatus | null>(null)
   const params = useRef<Record<string, unknown>>({})
   const logRef = useRef<HTMLDivElement | null>(null)
 
@@ -162,6 +218,23 @@ export default function TerminalFunModule() {
       .then((r) => r.json())
       .then((d) => { setCats(d.categories ?? []); setItems(d.items ?? []) })
       .catch(() => { setCats([]); setItems([]) })
+  }, [])
+
+  // Poll the model chips. Residency changes on its own — the broker evicts on a keep_alive
+  // expiry and asking the assistant warms the model back up — so a one-shot fetch would show a
+  // state that silently goes stale. 6s matches the shell's own status cadence, and the warming
+  // window is ~7s on this box, so a transition is actually visible rather than missed.
+  useEffect(() => {
+    let live = true
+    const tick = () => {
+      fetch('/terminal-fun/api/models')
+        .then((r) => r.json())
+        .then((d) => { if (live) setModels(d) })
+        .catch(() => { if (live) setModels(null) })
+    }
+    tick()
+    const id = window.setInterval(tick, 6000)
+    return () => { live = false; window.clearInterval(id) }
   }, [])
 
   // Which saveable games this user has an in-progress save for (drives the "resume" chip).
@@ -357,6 +430,17 @@ export default function TerminalFunModule() {
 
   return (
     <div className="ft">
+      <header className="head">
+        <span className="logo" aria-hidden="true">🕹️</span>
+        <div className="titles">
+          <h1>Terminal Fun</h1>
+          <span className="stmt">
+            Self-hosted terminal games and toys, with an AI helper that can explain them and
+            retune them live — sandboxed in its own container, nothing leaves this box
+          </span>
+          <ModelChips status={models} />
+        </div>
+      </header>
       <div className="body">
         {active ? terminalView : menu}
       </div>

@@ -41,11 +41,32 @@
 .co-worker h1, .co-worker h2, .co-worker h3 { margin: 0; font-weight: 680; letter-spacing: -0.01em; }
 
 /* --- header ---------------------------------------------------------------- */
-.cw-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 4px 16px; }
+/* align-items: flex-start so the logo sits level with the title rather than centred against
+ * the whole title + statement + chips stack. */
+.cw-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; margin: 6px 4px 16px; }
 .cw-logo { font-size: 26px; line-height: 1; }
+.cw-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .cw-titles h1 { font-size: 19px; }
 .cw-sub { color: var(--mut); font-size: 12.5px; }
 .cw-spacer { flex: 1; }
+
+/* --- model status chips ------------------------------------------------------
+ * Same shape as every other rail (smb-partner-enablement, gemini-cx, terminal-fun): a
+ * four-state dot, the slot label, the resolved model, then the state in muted text. */
+.cw-status { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin-top: 2px; }
+.cw-status .m { color: var(--mut); }
+
+/* These four colours are FIXED rather than palette-derived, on purpose: status colours stay
+ * semantic and stable across every palette (web/THEMING.md rule 4), because a reader has to be
+ * able to tell "not installed" from "cold" on any theme. */
+.cw-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: 1px; }
+.cw-dot.missing { background: #f85149; }  /* red    — not installed; needs an ollama pull */
+.cw-dot.cold    { background: #58a6ff; }  /* blue   — installed, not resident */
+.cw-dot.warming { background: #f0883e; animation: cw-pulse 1.1s ease-in-out infinite; }  /* orange */
+.cw-dot.loaded  { background: #3fb950; }  /* green  — resident in VRAM */
+
+/* Warming is the only transient state, so it is the only one that moves. */
+@keyframes cw-pulse { 50% { opacity: 0.35; } }
 
 .cw-btn {
   font: inherit; font-size: 12.5px;

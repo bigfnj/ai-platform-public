@@ -6,6 +6,28 @@
 
 export const SCHEMA_VERSION = 2
 
+// --- model status chips (mirrors GET /api/models) ---------------------------
+// Four states, one visual language across every rail:
+//   missing  RED     the model a role resolves to is not installed
+//   cold     BLUE    installed but not resident in VRAM
+//   warming  ORANGE  a broker job is queued/active for a model that is not resident yet
+//   loaded   GREEN   resident right now
+export type ModelState = 'missing' | 'cold' | 'warming' | 'loaded'
+
+export interface ModelSlot {
+  slot: string
+  label: string
+  role: string
+  model: string
+  state: ModelState
+}
+
+export interface ModelsStatus {
+  broker: string
+  models: ModelSlot[]
+  items: number
+}
+
 export type Source = 'calendar' | 'email' | 'teams' | 'insights'
 
 export type Status = 'open' | 'done' | 'dismissed'

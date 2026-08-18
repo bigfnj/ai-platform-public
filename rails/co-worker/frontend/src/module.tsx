@@ -27,6 +27,8 @@ import {
   type InboxResponse,
   type Item,
   type Metric,
+  type ModelsStatus,
+  type ModelState,
   type RelType,
   type SkippedFile,
   type Source,
@@ -288,6 +290,35 @@ function Card({
   )
 }
 
+// --- model status chips ------------------------------------------------------
+
+// Four-state dot, identical in meaning across every rail: red = the model is not installed,
+// blue = installed but not resident, orange = a job is warming it, green = resident. The red/blue
+// distinction is the operationally useful one — red needs an `ollama pull`, blue just needs
+// someone to ask a question.
+const STATE_TEXT: Record<ModelState, string> = {
+  missing: 'not found',
+  cold: 'cold',
+  warming: 'warming up',
+  loaded: 'GPU · ready',
+}
+
+function ModelChips({ status }: { status: ModelsStatus | null }) {
+  if (!status) return <span className="cw-status m">checking…</span>
+  if (status.broker !== 'ok') return <span className="cw-status m">● broker unreachable</span>
+  return (
+    <div className="cw-status">
+      {status.models.map((m) => (
+        <span key={m.slot} title={`${m.role} → ${m.model} · ${STATE_TEXT[m.state]}`}>
+          <i className={`cw-dot ${m.state}`} />
+          {m.label} ({m.model}) <span className="m">{STATE_TEXT[m.state]}</span>
+        </span>
+      ))}
+      <span className="m">{status.items} items harvested</span>
+    </div>
+  )
+}
+
 // --- module -----------------------------------------------------------------
 
 export default function CoWorkerModule() {
@@ -298,6 +329,7 @@ export default function CoWorkerModule() {
   const [err, setErr] = useState('')
   const [patchErr, setPatchErr] = useState('')
   const [docPath, setDocPath] = useState<string | null>(null)
+  const [models, setModels] = useState<ModelsStatus | null>(null)
 
   const [view, setView] = useState<'brief' | 'inbox' | 'archive'>('brief')
   // Triage state lives here, not in the items array, so the brief and the card grid
@@ -370,6 +402,25 @@ export default function CoWorkerModule() {
     })
   }, [triaged])
 
+  // Poll the model chips. Residency changes on its own — the broker evicts on a keep_alive
+  // expiry and a synthesis run warms the model back up — so a one-shot fetch would show a
+  // state that silently goes stale. 6s matches the shell's own status cadence, and the
+  // warming window is ~7s on this box, so a transition is actually visible rather than missed.
+  useEffect(() => {
+    let live = true
+    const tick = () => {
+      getJSON<ModelsStatus>('/api/models')
+        .then((d) => live && setModels(d))
+        .catch(() => live && setModels(null))
+    }
+    tick()
+    const id = window.setInterval(tick, 6000)
+    return () => {
+      live = false
+      window.clearInterval(id)
+    }
+  }, [])
+
   const drift = useMemo(
     () => items.filter((i) => typeof i.schema === 'number' && i.schema !== SCHEMA_VERSION).length,
     [items],
@@ -433,6 +484,7 @@ export default function CoWorkerModule() {
           <span className="cw-sub">
             Email, calendar &amp; Teams intelligence — harvested, ranked, client-first
           </span>
+          <ModelChips status={models} />
         </div>
         <span className="cw-spacer" />
         <div className="cw-view-toggle">

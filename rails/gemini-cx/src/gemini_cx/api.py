@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from gemini_cx import broker, config, ingest, questions, rag, store, voice
+from gemini_cx import broker, config, ingest, modelstate, questions, rag, store, voice
 
 log = logging.getLogger("gemini_cx.api")
 
@@ -104,35 +104,17 @@ def _cites(hits: list[dict]) -> list[dict]:
             for i, h in enumerate(hits, start=1)]
 
 
-def _same_model(a: str, b: str) -> bool:
-    """Compare model names tolerating Ollama's implicit ``:latest``.
-
-    A role can resolve to a bare ``bge-m3`` while Ollama reports the loaded model as
-    ``bge-m3:latest``. A plain equality check therefore reports a resident model as cold
-    forever — an always-wrong status light that nobody trusts twice.
-    """
-    return a.split(":")[0] == b.split(":")[0] if "latest" in (a + b) else a == b
+# The model slots this rail shows as header chips, in display order. Tag-tolerant matching and
+# the four-state resolution live in modelstate.py.
+MODEL_SLOTS: list[tuple[str, str, str]] = [
+    ("llm", "LLM", config.RAG_MODEL),
+    ("retrieval", "Retrieval", config.EMBED_MODEL),
+]
 
 
-def _resident() -> dict[str, Any]:
-    """Which of this rail's two models are actually loaded, per the broker."""
-    rag_model = broker.resolved_model(config.RAG_MODEL)
-    embed_model = broker.resolved_model(config.EMBED_MODEL)
-    loaded: list[str] = []
-    try:
-        for m in (broker.status().get("loaded") or []):
-            name = m.get("name") or m.get("model") or ""
-            if name:
-                loaded.append(name)
-    except broker.BrokerError:
-        return {"broker": "unreachable", "rag_model": rag_model, "embed_model": embed_model}
-    return {
-        "broker": "ok",
-        "rag_model": rag_model,
-        "embed_model": embed_model,
-        "rag_resident": any(_same_model(rag_model, n) for n in loaded),
-        "embed_resident": any(_same_model(embed_model, n) for n in loaded),
-    }
+def _models() -> dict[str, Any]:
+    """Four-state status for this rail's model slots (missing/cold/warming/loaded)."""
+    return modelstate.resolve(MODEL_SLOTS)
 
 
 def create_api() -> FastAPI:
@@ -163,7 +145,7 @@ def create_api() -> FastAPI:
         return {
             "status": "ok",
             "corpus": store.stats(),
-            "models": _resident(),
+            "models": _models(),
             "deck": {"questions": len(questions.all_questions()),
                      "groups": len(questions.groups()),
                      "problems": deck_problems},
@@ -173,14 +155,15 @@ def create_api() -> FastAPI:
     def capabilities() -> dict[str, Any]:
         """What the UI may offer. Retrieval needs a corpus; answering needs the broker."""
         stats = store.stats()
-        models = _resident()
+        models = _models()
         return {
             "retrieval": stats["chunks"] > 0,
             "answering": models.get("broker") == "ok",
             "streaming": True,
             "upload": True,
             "corpus": stats,
-            "models": models,
+            "broker": models["broker"],
+            "models": models["models"],
             "voice": voice.describe(),
         }
 

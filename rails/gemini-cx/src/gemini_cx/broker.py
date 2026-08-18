@@ -140,6 +140,15 @@ def media_enabled() -> bool:
         return False
 
 
+def installed_models() -> list[dict]:
+    """Every model installed in Ollama, as the broker reports it. Used to tell a model that is
+    merely cold apart from one that is not installed at all."""
+    resp = _get("/v1/models")
+    if isinstance(resp, dict) and isinstance(resp.get("models"), list):
+        return resp["models"]
+    return resp if isinstance(resp, list) else []
+
+
 def roles() -> list[dict]:
     """The broker's role table (each role plus the concrete model it resolves to)."""
     resp = _get("/v1/roles")
