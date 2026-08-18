@@ -4,9 +4,9 @@
 // worth defending. A bare chat box over a corpus nobody has read produces a bad first
 // experience: the user does not yet know what GECX is, so they cannot know what to ask, and
 // their opening question is usually one the corpus cannot ground. The deck makes the corpus's
-// own strengths clickable — and the first group is deliberately the set of questions where
-// Google's marketing and Google's documentation disagree, because that is where a grounded
-// assistant beats reading the product page.
+// own strengths clickable — orientation first ("What it is"), then immediately the questions
+// where Google's marketing and Google's documentation disagree ("Get it right"), because that
+// second group is where a grounded assistant beats reading the product page.
 //
 // No own top bar or theme — the shell provides those; this renders inside a `.gemini-cx`
 // wrapper and adopts the shell's palette via shared tokens (see web/THEMING.md).
@@ -337,8 +337,9 @@ export default function GeminiCxModule() {
             <div className="gcx-empty">
               <p>Pick a question on the left, or type your own.</p>
               <p className="gcx-empty-hint">
-                Start with <strong>Get it right</strong> — those are the questions where GECX&apos;s
-                launch announcement and its product documentation give different answers.
+                <strong>What it is</strong> orients you; <strong>Get it right</strong> covers the
+                questions where GECX&apos;s launch announcement and its product documentation give
+                different answers.
               </p>
             </div>
           )}

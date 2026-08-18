@@ -9,9 +9,10 @@ Three deliberate design rules, because this deck is content, not chrome:
 1. **Every question here must be answerable from the corpus.** A deck entry that returns "the
    context does not cover this" is worse than no deck at all — it teaches the user the tool is
    broken on their very first click. ``validate()`` is the guard, and the API exposes it.
-2. **Lead with the questions where GECX's own marketing is misleading.** The disambiguation
-   traps (40+ vs 10 languages, announced vs documented, agentic vs assistive) are where this
-   corpus earns its keep, so they are the first group rather than buried under basics.
+2. **Orient first, then disabuse.** "What it is" leads, because a reader who cannot yet place
+   GECX has no frame to hang a correction on. "Get it right" sits immediately second — the
+   disambiguation traps (40+ vs 10 languages, announced vs documented, agentic vs assistive)
+   are where this corpus earns its keep, so they stay high rather than being buried mid-deck.
 3. **Scope each question to the collections that answer it.** Retrieval over the whole corpus
    for "how is it priced" will pull in adjacent chunks about residency; a scoped ask is sharper.
    Scoping is a hint, not a cage — a free-typed question is never scoped.
@@ -24,33 +25,10 @@ from pathlib import Path
 # Each question: id, text, and the collections it should retrieve against.
 QUESTION_GROUPS: list[dict] = [
     {
-        "id": "traps",
-        "label": "Get it right",
-        "icon": "⚠️",
-        "blurb": "Where GECX's own marketing and its documentation disagree. Start here.",
-        "questions": [
-            {"id": "commerce-status",
-             "text": "Can I deploy the Shopping agent or Food Ordering agent today?",
-             "collections": ["commerce-agents", "gecx-overview"]},
-            {"id": "languages",
-             "text": "How many languages does GECX support for voice versus text?",
-             "collections": ["models-and-languages"]},
-            {"id": "agentic",
-             "text": "Is GECX actually agentic, or is it a chatbot with better marketing?",
-             "collections": ["objection-handling", "competitive-landscape", "commerce-agents"]},
-            {"id": "vs-parent",
-             "text": "What is the difference between Gemini Enterprise and Gemini Enterprise for CX?",
-             "collections": ["gecx-overview", "pricing-and-licensing"]},
-            {"id": "residency-trap",
-             "text": "Which GECX regions and endpoints break data residency?",
-             "collections": ["security-and-governance", "deployment-and-channels"]},
-        ],
-    },
-    {
         "id": "basics",
         "label": "What it is",
         "icon": "\U0001f9ed",
-        "blurb": "The product, its four components, and how they fit together.",
+        "blurb": "The product, its four components, and how they fit together. Start here.",
         "questions": [
             {"id": "what-is-gecx",
              "text": "What is Gemini Enterprise for Customer Experience?",
@@ -67,6 +45,29 @@ QUESTION_GROUPS: list[dict] = [
             {"id": "glossary",
              "text": "What do GECX, CES, ADK, A2A and CCaaS mean in this product?",
              "collections": ["gecx-overview"]},
+        ],
+    },
+    {
+        "id": "traps",
+        "label": "Get it right",
+        "icon": "⚠️",
+        "blurb": "Where GECX's own marketing and its documentation disagree.",
+        "questions": [
+            {"id": "commerce-status",
+             "text": "Can I deploy the Shopping agent or Food Ordering agent today?",
+             "collections": ["commerce-agents", "gecx-overview"]},
+            {"id": "languages",
+             "text": "How many languages does GECX support for voice versus text?",
+             "collections": ["models-and-languages"]},
+            {"id": "agentic",
+             "text": "Is GECX actually agentic, or is it a chatbot with better marketing?",
+             "collections": ["objection-handling", "competitive-landscape", "commerce-agents"]},
+            {"id": "vs-parent",
+             "text": "What is the difference between Gemini Enterprise and Gemini Enterprise for CX?",
+             "collections": ["gecx-overview", "pricing-and-licensing"]},
+            {"id": "residency-trap",
+             "text": "Which GECX regions and endpoints break data residency?",
+             "collections": ["security-and-governance", "deployment-and-channels"]},
         ],
     },
     {

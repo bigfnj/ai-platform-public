@@ -13,10 +13,11 @@ Because a blank prompt over an unfamiliar corpus produces a bad first experience
 not yet know what GECX *is*, so they cannot know what to ask, and their opening question is
 usually one the corpus cannot ground — which teaches them the tool is broken on the first click.
 
-The deck inverts that: it makes the corpus's own strengths clickable. Its first group is
-deliberately **"Get it right"** — the questions where Google's launch announcement and Google's
-product documentation give different answers. That is where a grounded assistant beats reading
-the product page, so it leads.
+The deck inverts that: it makes the corpus's own strengths clickable. **"What it is"** leads, so a
+reader can place the product before being corrected about it, and **"Get it right"** sits
+immediately second — the questions where Google's launch announcement and Google's product
+documentation give different answers. That second group is where a grounded assistant beats
+reading the product page, which is why it stays near the top rather than mid-deck.
 
 Three rules govern the deck (`src/gemini_cx/questions.py`):
 
@@ -24,7 +25,7 @@ Three rules govern the deck (`src/gemini_cx/questions.py`):
    question's declared collections exist on disk, `GET /api/health` reports the result, and the
    UI disables any question that fails. A deck entry that answers "the context does not cover
    this" is worse than no deck.
-2. **Lead with the disambiguation traps**, not the basics.
+2. **Orient first, then disabuse** — basics, then the disambiguation traps, then everything else.
 3. **Scope each question to the collections that answer it.** A deck click carries its scope; a
    free-typed question is deliberately unscoped, because guessing a scope for the user retrieves
    worse than not guessing.
