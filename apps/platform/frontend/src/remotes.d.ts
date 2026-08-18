@@ -35,3 +35,13 @@ declare module 'co_worker/module' {
   const CoWorkerModule: ComponentType
   export default CoWorkerModule
 }
+declare module 'smb_partner/module' {
+  import type { ComponentType } from 'react'
+  const SmbPartnerModule: ComponentType
+  export default SmbPartnerModule
+}
+declare module 'gemini_cx/module' {
+  import type { ComponentType } from 'react'
+  const GeminiCxModule: ComponentType
+  export default GeminiCxModule
+}
