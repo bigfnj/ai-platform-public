@@ -228,10 +228,9 @@ def _model_slots() -> list[tuple[str, str, str]]:
     """The model slots this rail shows as header chips. Only one: synthesis is a single chat
     pass with no embedder — the brief is built from whole items, not retrieved chunks.
 
-    synthesize is imported lazily here to match the rest of this module, which defers it in
-    every call site rather than importing it at load time."""
-    from co_worker_app.synthesize import BROKER_ROLE
-    return [("llm", "Synthesis", f"@{BROKER_ROLE}")]
+    Reads the same setting synthesis actually sends to the broker, so the chip cannot drift
+    from reality the way a hardcoded role would."""
+    return [("llm", "Synthesis", settings.synthesis_model)]
 
 
 @app.get("/api/models")

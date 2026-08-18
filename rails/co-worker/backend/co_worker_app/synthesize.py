@@ -292,15 +292,20 @@ Unresolved inbox items ({len(payload)} items):
 
 # --- broker call -------------------------------------------------------------
 
-def _call_broker(prompt: str, broker_url: str, auth_token: str) -> str:
+def _call_broker(prompt: str, broker_url: str, auth_token: str, model: str) -> str:
     """POST /v1/chat. The broker is Ollama-native, NOT OpenAI-compatible:
     sampling params live under `options` (num_predict, not max_tokens), the role
     needs an `@` prefix to resolve via roles.json, and the reply is Ollama's
     {"message": {"content": ...}} shape. `format: json` constrains decoding to
-    valid JSON, which matters a lot on a small local model."""
+    valid JSON, which matters a lot on a small local model.
+
+    ``model`` is passed in rather than read from settings here, matching how broker_url and
+    auth_token already arrive — this module keeps config at its edges."""
     url = f"{broker_url.rstrip('/')}/v1/chat"
     payload = json.dumps({
-        "model": f"@{BROKER_ROLE}",
+        # The caller's configured reference, not a hardcoded f"@{BROKER_ROLE}" — so Admin ->
+        # Rails can repoint this rail like any other. BROKER_ROLE is still the default's role.
+        "model": model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
@@ -526,7 +531,8 @@ def _run_pass(
         # Nothing unresolved in this lane. A broker call would burn ~15s to be told so.
         brief = _normalize({"attention": []}, idx_to_id)
     else:
-        raw = _call_broker(prompt, settings.broker_url, settings.broker_auth_token)
+        raw = _call_broker(prompt, settings.broker_url, settings.broker_auth_token,
+                           settings.synthesis_model)
         _log.info("synthesis%s: broker returned %d chars",
                   f" [{source}]" if source else "", len(raw))
         brief = _normalize(_extract_json(raw), idx_to_id)

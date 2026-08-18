@@ -76,6 +76,14 @@ RAIL_MODEL_SLOTS: dict[str, list[dict[str, str]]] = {
                         "this rail holds it resident ALONGSIDE the embedder (and a voice model), which "
                         "a 4B+ model will not fit beside on an 8 GB card."},
     ],
+    "co-worker": [
+        {"slot": "synthesis", "label": "Brief synthesis", "role": "co-worker-synthesis",
+         "kind": "chat", "env": "CO_WORKER_SYNTHESIS_MODEL", "default": "gemma3:4b",
+         "description": "Condenses the harvested inbox into the executive brief — one pass per "
+                        "source lane. Runs on whole items rather than retrieved chunks, so it has "
+                        "no embedder slot. A small model is fine here: each lane is 2.5K-8K "
+                        "tokens by design, precisely so a 4B model reads all of it."},
+    ],
     "gemini-cx": [
         {"slot": "reasoning", "label": "GECX answer model", "role": "gemini-cx-rag", "kind": "chat",
          "env": "GEMINI_CX_RAG_MODEL", "default": "gemma4*:12b",

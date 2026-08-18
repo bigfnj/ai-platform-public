@@ -88,11 +88,11 @@ services:
       # The real culinary AI + the recipe-photo reader. Point at per-rail roles in deploy/.env
       # (@recipe / @recipe-vision) so Admin > Rails can repoint them live; defaults preserve
       # today's model (gemma3:27b) if unset.
-      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-gemma4*:26b}
-      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-gemma4*:26b}
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-@recipe}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-@recipe-vision}
       # Per-recipe icon IMAGE model (media worker, not Ollama). Point at the @recipe-icon media
       # role in deploy/.env so Admin > Rails can switch sdxl-turbo <-> flux-schnell live.
-      RECIPE_BOOK_ICON_MODEL: ${RECIPE_BOOK_ICON_MODEL:-flux-schnell}
+      RECIPE_BOOK_ICON_MODEL: ${RECIPE_BOOK_ICON_MODEL:-@recipe-icon}
       # Multi-tenant: the platform user who inherits the pre-existing single-tenant data
       # (meal plan / pantry / bar) when per-user scoping goes live.
       RECIPE_BOOK_PRIMARY_USER: ${RECIPE_BOOK_PRIMARY_USER:-admin}
@@ -162,7 +162,9 @@ services:
     environment:
       TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
-      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma4*:12b}
+      # Point at the @role, not a glob or a concrete name: that is what makes Admin -> Rails
+      # authoritative for this rail. A pin here silently overrides the panel.
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-@terminal-fun}
       TERMINAL_FUN_DATA_DIR: /data   # per-user game saves (NetHack + Crawl) persist here
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
@@ -220,6 +222,10 @@ services:
     environment:
       CO_WORKER_INBOX_DIR: /data/inbox
       CO_WORKER_PROMPTS_DIR: /data/prompts
+      CO_WORKER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      # @role so Admin -> Rails can repoint the synthesis model like any other rail's.
+      CO_WORKER_SYNTHESIS_MODEL: ${CO_WORKER_SYNTHESIS_MODEL:-@co-worker-synthesis}
       TZ: ${TZ:-America/Los_Angeles}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"

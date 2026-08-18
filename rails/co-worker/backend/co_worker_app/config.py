@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     broker_url: str = "http://host.docker.internal:11500"
     broker_auth_token: str = ""
 
+    # The synthesis model, as a broker reference. Defaults to this rail's own @role so that
+    # Admin -> Rails is authoritative: repointing the role there changes what this rail uses,
+    # with no restart (roles.json is hot-read). A concrete name or a glob also works — the
+    # broker resolves all three — but pinning one here takes the rail OUT of Admin's control,
+    # which is how terminal-fun and recipe-book ended up silently ignoring the panel.
+    synthesis_model: str = "@co-worker-synthesis"
+
     # The user whose inbox is being harvested — used to filter self-authored items so the
     # model never generates "Reply to [yourself]" attention items.
     # Set CO_WORKER_USER_NAME (and optionally CO_WORKER_USER_EMAIL) in your .env file.

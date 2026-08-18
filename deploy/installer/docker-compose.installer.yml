@@ -16,7 +16,10 @@ services:
     image: terminal-fun-backend:latest
     environment:
       TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
-      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-gemma3:4b}
+      # Point at the @role, not a concrete name: that is what makes Admin -> Rails
+      # authoritative for this rail. A pinned name here silently overrides the panel — the
+      # admin repoints the role, the rail keeps using the pin, and nothing says so.
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-@terminal-fun}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     tmpfs:
@@ -38,10 +41,16 @@ services:
     environment:
       RECIPE_BOOK_DATA_DIR: /srv/var
       RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      # The three Admin -> Rails managed slots point at their @roles so the panel is
+      # authoritative. RECIPE_BOOK_LLM_MODEL stays a concrete pin on purpose: it is only a
+      # defensive fallback for a chat() call with no model, every caller passes one, and it has
+      # no role of its own (the generic @chat is shared with other rails and is not editable
+      # from the Rails panel).
       RECIPE_BOOK_LLM_MODEL: ${RECIPE_BOOK_LLM_MODEL:-gemma3:4b}
-      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-gemma3:4b}
-      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-gemma3:4b}
-      RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-bge-m3}
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-@recipe}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-@recipe-vision}
+      RECIPE_BOOK_ICON_MODEL: ${RECIPE_BOOK_ICON_MODEL:-@recipe-icon}
+      RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-@embed}
       RECIPE_BOOK_PRIMARY_USER: ${PLATFORM_ADMIN_USER:-admin}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
@@ -62,6 +71,8 @@ services:
       # Executive-brief synthesis calls the broker on the @co-worker-synthesis role.
       CO_WORKER_BROKER_URL: http://host.docker.internal:11500
       CO_WORKER_BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      # @role so Admin -> Rails can repoint the synthesis model like any other rail's.
+      CO_WORKER_SYNTHESIS_MODEL: ${CO_WORKER_SYNTHESIS_MODEL:-@co-worker-synthesis}
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
