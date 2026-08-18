@@ -60,8 +60,15 @@ the pricing pages.
 - **Track which deck questions get clicked** and reorder by real use rather than by guess.
 - **Let a deck question carry a follow-up set** so an answer can suggest the next two questions.
   The corpus is heavily cross-referenced already; the deck currently is not.
-- **Surface `items`/collection coverage** so a user can see which parts of the corpus are thin —
-  `solution-plays` and `cx-insights` are single-file collections today.
+- **Thicken the single-file collections — this is measurable today, not theoretical.** Five
+  collections have exactly one file: `commerce-agents`, `cx-insights`, `solution-plays`,
+  `customer-stories`, `training-and-certification`. Because a deck question is scoped to its
+  collections, a scoped ask against a thin collection returns near-duplicate chunks from the same
+  file. Observed live: the `commerce-status` question retrieved 6 chunks, **5 of them from
+  `commerce-agents/01-the-announced-versus-documented-gap.md`**. The answer was correct, but the
+  citation list implies six independent sources when it is effectively one. Either split those
+  files along their headings or widen the affected questions' scope. Also surface per-collection
+  coverage in the UI so thinness is visible rather than inferred.
 
 ## 6. Not doing, and why
 
