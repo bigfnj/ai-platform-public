@@ -33,7 +33,14 @@
 .ai-playground h1, .ai-playground h3 { margin: 0; font-weight: 680; letter-spacing: -0.01em; }
 
 /* --- header / demo picker ------------------------------------------------ */
-.ap-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 4px 18px; }
+/* Header rule: a 2px divider under every rail's header, with 18px of breathing room above it.
+   Shared convention across all rails so the shell reads as one product rather than a set of
+   apps that happen to be adjacent (see web/THEMING.md). Uses the rail's local ink alias, which
+   derives from --text-primary, so it inverts correctly with light/dark and needs no per-theme
+   override. The 18px matters: with a status-chip row under the title the content otherwise
+   crowds the line. */
+.ap-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 6px 4px 18px; padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
 .ap-logo { font-size: 26px; line-height: 1; }
 .ap-titles h1 { font-size: 19px; }
 .ap-sub { color: var(--mut); font-size: 12.5px; }

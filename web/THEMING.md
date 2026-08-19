@@ -8,7 +8,7 @@ DOM and every federated module renders into the same document, a module gets the
 palette **for free** — as long as it reads the shared tokens instead of hardcoding
 colors.
 
-A new rail is palette-aware automatically if it follows the six rules below. Reference
+A new rail is palette-aware automatically if it follows the seven rules below. Reference
 implementations: `edu-suite`, `workstation` (already token-derived), `ai-playground`
 (charts kept semantic), `recipe-book` (full adoption + its own typography).
 
@@ -64,7 +64,21 @@ Read these; do not reinvent them.
    class, `.wrapper input` won't match the element itself and it falls back to the
    browser's gray. Style `input.my-class` directly. (This was a real bug.)
 
-6. **Leave these alone** — they read on every palette: white text on gradient fills
+6. **Give the header a rule.** Every rail closes its header with a 2px divider and 18px of
+   breathing room above it, so the shell reads as one product rather than a set of apps that
+   happen to be adjacent:
+
+   ```css
+   .my-rail .head { padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
+   ```
+
+   Use your local `--ink` alias (derived from `--text-primary`), not a literal: the rule then
+   inverts correctly with light/dark and needs no per-theme override. The 18px is not
+   decoration — a rail with a status-chip row under its title crowds the line without it.
+   Rails with no titled header are exempt: `workstation` is a full-height terminal whose top
+   strip is a control toolbar, and a bold rule under it would just be noise.
+
+7. **Leave these alone** — they read on every palette: white text on gradient fills
    (`color: #fff`), and black modal backdrops / shadows (`rgba(0,0,0,…)`).
 
 ## How to check a module

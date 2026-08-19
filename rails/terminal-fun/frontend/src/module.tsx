@@ -59,7 +59,14 @@ const CSS = `
  * Same shape as the smb-partner-enablement, co-worker and gemini-cx rails so every rail reads
  * as one product. The header takes its natural height and .body flexes into what is left, so
  * the .ft height calc above needs no adjustment. */
-.ft .head { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin:2px 2px 14px; }
+/* Header rule: a 2px divider under every rail's header, with 18px of breathing room above it.
+   Shared convention across all rails so the shell reads as one product rather than a set of
+   apps that happen to be adjacent (see web/THEMING.md). Uses the rail's local ink alias, which
+   derives from --text-primary, so it inverts correctly with light/dark and needs no per-theme
+   override. The 18px matters: with a status-chip row under the title the content otherwise
+   crowds the line. */
+.ft .head { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin:2px 2px 14px;
+  padding-bottom:18px; border-bottom:2px solid var(--i); }
 .ft .head .logo { font-size:26px; line-height:1; }
 .ft .head .titles { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .ft .head h1 { margin:0; font-size:19px; font-weight:650; letter-spacing:-.01em; }

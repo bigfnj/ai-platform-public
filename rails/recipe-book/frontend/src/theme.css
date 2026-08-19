@@ -27,7 +27,13 @@
 .recipe-book * { box-sizing: border-box; }
 
 /* ---- top bar / sub-nav ---- */
-.rb-top { display: flex; align-items: center; gap: 18px; padding: 16px 26px 12px;
+/* Header rule: a 2px divider under every rail's header, with 18px of breathing room above it.
+   Shared convention across all rails so the shell reads as one product rather than a set of
+   apps that happen to be adjacent (see web/THEMING.md). Uses the rail's local ink alias, which
+   derives from --text-primary, so it inverts correctly with light/dark and needs no per-theme
+   override. The 18px matters: with a status-chip row under the title the content otherwise
+   crowds the line. */
+.rb-top { display: flex; align-items: center; gap: 18px; padding: 16px 26px 18px;
   border-bottom: 2px solid var(--ink); flex-wrap: wrap; }
 .rb-brand { font-family: var(--serif); font-size: 26px; font-weight: 700; letter-spacing: .3px; }
 .rb-brand small { font-family: var(--sans); font-size: 11px; letter-spacing: 3px;

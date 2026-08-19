@@ -28,11 +28,19 @@
 /* Title, statement, then chips — stacked and left-aligned, matching the SMB Partner rail so
  * the two read as one product. align-items:flex-start keeps the icon level with the title
  * rather than centred against the whole three-line block. */
+/* Header rule: a 2px divider under every rail's header, with 18px of breathing room above it.
+   Shared convention across all rails so the shell reads as one product rather than a set of
+   apps that happen to be adjacent (see web/THEMING.md). Uses the rail's local ink alias, which
+   derives from --text-primary, so it inverts correctly with light/dark and needs no per-theme
+   override. The 18px matters: with a status-chip row under the title the content otherwise
+   crowds the line. */
 .gemini-cx .gcx-head {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--ink);
 }
 
 .gemini-cx .gcx-titles {
