@@ -24,6 +24,13 @@
   --warning: #fab219;
   --critical: #d03b3b;
   --star: #e8a317;
+  /* Neutral-informational status. Completes the semantic set so the four-state model chip
+     (missing=critical / cold=info / warming=warning / loaded=good) has a stable token for
+     every state. Without it every rail hardcoded the same literal blue, which is how four
+     copies of #58a6ff ended up outside the palette system. Like the other semantics this is
+     defined ONCE and deliberately not redefined per palette: status must mean the same thing
+     and read the same way on all 63 of them. */
+  --info: #3d8ee0;
   --shadow: 0 1px 2px rgba(11, 11, 11, 0.05), 0 4px 16px rgba(11, 11, 11, 0.04);
   --radius: 12px;
 }

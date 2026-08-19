@@ -155,6 +155,16 @@ def status() -> dict:
     return _get("/v1/status")
 
 
+def installed_models() -> list[dict]:
+    """Every model installed in Ollama, as the broker reports it. Needed to tell a model that
+    is merely cold apart from one that is not installed at all — the distinction the chips'
+    blue-vs-red states exist to show."""
+    resp = _get("/v1/models")
+    if isinstance(resp, dict) and isinstance(resp.get("models"), list):
+        return resp["models"]
+    return resp if isinstance(resp, list) else []
+
+
 def roles() -> list[dict]:
     """The broker's role table (each role + the concrete model it resolves to)."""
     resp = _get("/v1/roles")

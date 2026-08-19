@@ -22,17 +22,23 @@ export type Answer = {
   voice?: VoicePayload
 }
 
+/** The four-state chip contract, identical in meaning on every rail (see the rail's
+ *  modelstate.py): missing = not installed at all (needs an `ollama pull`), cold = installed
+ *  but not resident, warming = a broker job is waiting on it, loaded = resident in VRAM. */
+export type ModelState = 'missing' | 'cold' | 'warming' | 'loaded'
+
 export type ModelSlot = {
   slot: 'reasoning' | 'retrieval'
+  label: string
   role: string
   model: string
-  resident: boolean
-  class: 'heavy' | 'embed'
+  state: ModelState
 }
 
 export type Capabilities = {
-  broker_reachable: boolean
-  gpu: { total_mib: number; used_mib: number; free_mib: number; gpu_name: string } | null
+  /** 'ok' | 'unreachable'. Was a boolean `broker_reachable`; renamed to the shared envelope
+   *  key so this rail's payload matches every other rail's. */
+  broker: string
   models: ModelSlot[]
   voice: {
     configured: string

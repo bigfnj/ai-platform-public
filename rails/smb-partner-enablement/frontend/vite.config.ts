@@ -23,7 +23,9 @@ export default defineConfig({
   ],
   build: { target: 'esnext', cssCodeSplit: false },
   server: {
-    port: 5260,
+    // 5270 per rails/smb-partner-enablement/rail.json. Was 5260, which co-worker also
+    // claims (conformance RC002/RC009).
+    port: 5270,
     // standalone dev: proxy HTTP + WebSocket to the FastAPI backend, stripping the
     // /smb-partner-enablement prefix the gateway would otherwise consume.
     proxy: {

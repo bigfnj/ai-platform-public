@@ -37,7 +37,7 @@ export SMB_PARTNER_STANDALONE=1 PYTHONPATH="$PWD/src"
 python -m uvicorn --factory smb_partner.api:create_api --port 8870 --reload --reload-dir src
 
 # frontend
-cd frontend && npm run dev     # http://localhost:5260/smb-partner-enablement/
+cd frontend && npm run dev     # http://localhost:5270/smb-partner-enablement/
 ```
 
 **The gotcha that cost this session twice:** `pip install .` does **not** update a running

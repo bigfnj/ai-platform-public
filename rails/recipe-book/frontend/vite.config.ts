@@ -18,7 +18,11 @@ export default defineConfig({
   ],
   build: { target: "esnext", cssCodeSplit: false },
   server: {
-    port: 5240,
+    // 5220 per rails/recipe-book/rail.json. Was 5240, which terminal-fun also claims — with
+    // both on 5240 the second `npm run dev` to start loses, and its /api proxy silently
+    // belongs to the other rail. Ports are unique per rail (conformance RC002/RC009);
+    // 5250 is ai-playground's, which is why this is 5220 rather than the next number up.
+    port: 5220,
     // standalone dev: proxy the module's /recipe-book/api/* calls to the FastAPI backend.
     proxy: {
       "/recipe-book/api": {

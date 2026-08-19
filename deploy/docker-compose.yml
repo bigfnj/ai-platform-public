@@ -212,9 +212,14 @@ services:
     restart: always
 
   co-worker:                     # Co-Worker — email/calendar/Teams intelligence inbox.
-    # Pure data-display rail: no model slots. An external harvest process (a Claude
-    # co-work scheduled task running on the Windows host) drops JSON items into the
-    # inbox; this backend reads and forwards them. See rails/co-worker/SCHEMA.md.
+    # An external harvest process (a Claude co-work scheduled task running on the Windows
+    # host) drops JSON items into the inbox; this backend reads them and synthesises the
+    # executive brief through the broker. See rails/co-worker/SCHEMA.md for the item
+    # contract and rails/co-worker/rail.json for the rail's declared shape.
+    #
+    # ONE chat slot (@co-worker-synthesis) and no embedder: the brief is built from whole
+    # items, not retrieved chunks. It was described here as a "pure data-display rail with
+    # no model slots", which stopped being true when per-source synthesis landed.
     build:
       context: ../rails/co-worker   # uses co-worker/deploy/Dockerfile
       dockerfile: deploy/Dockerfile

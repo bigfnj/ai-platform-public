@@ -91,21 +91,23 @@
   vertical-align: 1px;
 }
 
+/* Four-state chip colours come from the SEMANTIC tokens, not literals: status must read
+   the same on all 63 palettes (THEMING.md rule 4). Fallbacks keep standalone dev honest. */
 .gemini-cx .dot.missing {
-  background: #f85149; /* red — model not installed; needs an ollama pull */
+  background: var(--critical, #f85149); /* red — model not installed; needs an ollama pull */
 }
 
 .gemini-cx .dot.cold {
-  background: #58a6ff; /* blue — installed, not resident; a question will load it */
+  background: var(--info, #58a6ff); /* blue — installed, not resident; a question will load it */
 }
 
 .gemini-cx .dot.warming {
-  background: #f0883e; /* orange — a job is queued/active and it is not resident yet */
+  background: var(--warning, #f0883e); /* orange — a job is queued/active and it is not resident yet */
   animation: gcx-pulse 1.1s ease-in-out infinite;
 }
 
 .gemini-cx .dot.loaded {
-  background: #3fb950; /* green — resident in VRAM right now */
+  background: var(--good, #3fb950); /* green — resident in VRAM right now */
 }
 
 /* Warming is the only transient state, so it is the only one that moves. */

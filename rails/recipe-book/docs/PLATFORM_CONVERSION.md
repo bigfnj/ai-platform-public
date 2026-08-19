@@ -28,7 +28,7 @@ are new, aligned to the current rail conventions (finance is the reference).
 
 ## Addressing / ports
 - Backend **8830** (next in the 88x0 rail sequence: edu 8800 · job-aid 8810 ·
-  finance 8820 · **recipe-book 8830**). Vite dev **5240**. Gateway path `/recipe-book/`.
+  finance 8820 · **recipe-book 8830**). Vite dev **5220**. Gateway path `/recipe-book/`.
 - Container service `recipe-book:8830`; named volume `recipe_book_data:/srv/var`.
 
 ## Reuse map (from `b80e871^:apps/recipe-book/`)

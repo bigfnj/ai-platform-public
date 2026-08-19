@@ -67,8 +67,12 @@ def healthz() -> dict[str, Any]:
 # The model slots this rail shows as header chips. One: the in-terminal assistant. Referenced as
 # the configured string rather than the @role, because that string is what this rail actually
 # sends to the broker — modelstate resolves @roles, globs and concrete names alike.
+#
+# The slot id is "assistant", matching the gateway's RAIL_MODEL_SLOTS entry and rail.json. It was
+# "llm", so Admin -> Rails offered a slot named "assistant" while the chip reported "llm" and
+# nothing connected the two (conformance RC006/RC007).
 MODEL_SLOTS: list[tuple[str, str, str]] = [
-    ("llm", "Assistant", settings.llm_model),
+    ("assistant", "Assistant", settings.llm_model),
 ]
 
 

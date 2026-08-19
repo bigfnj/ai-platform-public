@@ -1,0 +1,45 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "smb-partner-enablement",
+  "label": "SMB Partner",
+  "icon": "🤝",
+  "package": "smb_partner",
+  "federation_name": "smb_partner",
+  "css_wrapper": "smbp",
+  "layout": "src",
+  "env_prefix": "SMB_PARTNER_",
+  "ports": {
+    "backend": 8870,
+    "dev": 5270
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "reasoning",
+      "label": "LLM",
+      "env": "SMB_PARTNER_RAG_MODEL",
+      "role": "smb-partner-rag",
+      "kind": "chat",
+      "admin_panel": true
+    },
+    {
+      "slot": "retrieval",
+      "label": "Retrieval",
+      "env": "SMB_PARTNER_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false,
+      "note": "Shares the generic @embed role. Out of the Admin -> Rails panel's scope, like every embedder."
+    }
+  ],
+  "surfaces": [
+    {
+      "path": "/m/",
+      "description": "Standalone mobile build (vite.mobile.config.ts -> dist/m/), served by the same gateway StaticFiles mount. Not a federated remote — it boots itself."
+    }
+  ],
+  "notes": [
+    "The only rail that keeps TWO models resident at once (answer + embedder) AND runs server-side voice in both directions: Kokoro via /v1/tts_light for output, faster-whisper via /v1/transcribe for input. Both are non-evicting, which is the whole reason the co-residency holds.",
+    "Serves /api/capabilities rather than /api/models because the UI renders corpus and voice state alongside the chips."
+  ]
+}

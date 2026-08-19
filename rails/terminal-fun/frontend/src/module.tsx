@@ -72,11 +72,12 @@ const CSS = `
 /* These four colours are FIXED rather than palette-derived, on purpose: status colours stay
  * semantic and stable across every palette (web/THEMING.md rule 4), because a reader has to be
  * able to tell "not installed" from "cold" on any theme. */
-.ft .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px; }
-.ft .dot.missing { background:#f85149; }
-.ft .dot.cold    { background:#58a6ff; }
-.ft .dot.warming { background:#f0883e; animation:ft-pulse 1.1s ease-in-out infinite; }
-.ft .dot.loaded  { background:#3fb950; }
+.ft .dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px;
+  vertical-align:1px; background:var(--muted,#6b7280); }
+.ft .dot.missing { background:var(--critical,#f85149); }
+.ft .dot.cold    { background:var(--info,#58a6ff); }
+.ft .dot.warming { background:var(--warning,#f0883e); animation:ft-pulse 1.1s ease-in-out infinite; }
+.ft .dot.loaded  { background:var(--good,#3fb950); }
 @keyframes ft-pulse { 50% { opacity:.35; } }
 
 .ft .menu { flex:1; overflow:auto; padding:2px 2px 10px; }
@@ -114,8 +115,7 @@ const CSS = `
 .ft .title { font-weight:700; font-size:15px; display:inline-flex; gap:8px; align-items:center; }
 .ft .sp { flex:1; }
 .ft .status { font-size:12.5px; color:var(--mut); }
-.ft .dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--muted,#6b7280); margin-right:6px; }
-.ft .dot.on { background:var(--good,#3fb950); }
+.ft .dot.on { background:var(--good,#3fb950); } /* PTY connected — not a model state */
 .ft .ghost { font:inherit; font-weight:600; font-size:13px; padding:6px 12px; border-radius:8px;
   border:1px solid var(--bd); background:transparent; color:var(--i); cursor:pointer; }
 .ft .ghost:hover { border-color:var(--ac); }

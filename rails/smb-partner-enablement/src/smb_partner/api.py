@@ -21,7 +21,17 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from smb_partner import broker, config, generate, ingest, rag, scenarios, store, voice
+from smb_partner import (
+    broker,
+    config,
+    generate,
+    ingest,
+    modelstate,
+    rag,
+    scenarios,
+    store,
+    voice,
+)
 
 log = logging.getLogger("smb_partner.api")
 
@@ -100,14 +110,14 @@ def _cites(hits: list[dict]) -> list[dict]:
             for i, h in enumerate(hits, start=1)]
 
 
-def _same_model(a: str, b: str) -> bool:
-    """Compare model names tolerating Ollama's implicit ``:latest``.
-
-    A role can resolve to a bare ``bge-m3`` while Ollama reports the loaded model as
-    ``bge-m3:latest``. A plain equality check therefore reports a resident model as cold
-    forever, which is exactly the kind of always-wrong status light nobody trusts twice.
-    """
-    return a.split(":")[0] == b.split(":")[0] if "latest" in (a + b) else a == b
+# The model slots this rail shows as header chips, in display order. Slot ids match the
+# gateway's RAIL_MODEL_SLOTS and rail.json; "retrieval" has no panel counterpart because
+# embedders are out of that panel's scope. Tag-tolerant matching and the four-state resolution
+# live in modelstate.py, shared in shape (not by import) with every other rail.
+MODEL_SLOTS: list[tuple[str, str, str]] = [
+    ("reasoning", "LLM", config.RAG_MODEL),
+    ("retrieval", "Retrieval", config.EMBED_MODEL),
+]
 
 
 def create_api() -> FastAPI:
@@ -142,27 +152,17 @@ def create_api() -> FastAPI:
         """What this rail can actually do right now — the UI renders from this rather than
         assuming, so a missing embedder or a disabled media worker is visible, not a crash."""
         def gather() -> dict[str, Any]:
-            try:
-                st = broker.status()
-                resident = [m.get("name") or "" for m in (st.get("loaded") or [])]
-                reachable = True
-            except broker.BrokerError:
-                st, resident, reachable = {}, [], False
-            rag_model = broker.resolved_model(config.RAG_MODEL)
-            embed_model = broker.resolved_model(config.EMBED_MODEL)
-
-            def live(name: str) -> bool:
-                return any(_same_model(name, r) for r in resident)
-
+            # Four-state chips (missing/cold/warming/loaded) under the shared envelope:
+            # {"broker": "ok"|"unreachable", "models": [{slot,label,role,model,state}]}.
+            #
+            # This used to emit "broker_reachable" plus a boolean "resident" per model, so the
+            # dot could only say on or off. That collapsed "not installed" and "installed but
+            # cold" into one colour — the single distinction an operator acts on differently
+            # (an `ollama pull` versus just asking a question). The keys are renamed rather
+            # than added alongside: two spellings of the same status is how the drift started.
+            out = modelstate.resolve(MODEL_SLOTS)
             return {
-                "broker_reachable": reachable,
-                "gpu": st.get("gpu"),
-                "models": [
-                    {"slot": "reasoning", "role": config.RAG_MODEL, "model": rag_model,
-                     "resident": live(rag_model), "class": "heavy"},
-                    {"slot": "retrieval", "role": config.EMBED_MODEL, "model": embed_model,
-                     "resident": live(embed_model), "class": "embed"},
-                ],
+                **out,
                 "voice": voice.describe(),
                 "corpus": store.stats(),
                 "user": who["user"],

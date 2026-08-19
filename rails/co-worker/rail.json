@@ -1,0 +1,31 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "co-worker",
+  "label": "Co-Worker",
+  "icon": "💼",
+  "package": "co_worker_app",
+  "federation_name": "co_worker",
+  "css_wrapper": "co-worker",
+  "layout": "backend",
+  "env_prefix": "CO_WORKER_",
+  "ports": {
+    "backend": 8860,
+    "dev": 5260
+  },
+  "status_route": "/api/models",
+  "model_slots": [
+    {
+      "slot": "synthesis",
+      "label": "Synthesis",
+      "env": "CO_WORKER_SYNTHESIS_MODEL",
+      "role": "co-worker-synthesis",
+      "kind": "chat",
+      "admin_panel": true
+    }
+  ],
+  "notes": [
+    "No embedder slot on purpose: the brief is synthesised from whole items, not retrieved chunks, so there is nothing to embed.",
+    "The only rail with no database and no corpus. Its input is a directory of JSON files written by an external harvest process on the Windows host and bind-mounted in; the contract for those files is SCHEMA.md, which is a separate contract from this manifest.",
+    "CO_WORKER_PROMPTS_DIR and the read-only /data/prompts mount are wired ahead of the API that will serve them (commit 6a27eab). Deliberate groundwork, not dead config."
+  ]
+}

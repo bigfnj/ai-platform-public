@@ -21,14 +21,16 @@ For the design rationale and broker API, see [`docs/architecture.md`](docs/archi
 ## The rails
 
 A rail is a FastAPI `/api` backend plus a React module-federation remote, containerized behind the
-gateway, entitlement-gated, with all model work routed through the broker. The shipped rails:
+gateway, entitlement-gated, with all model work routed through the broker. Each rail declares itself in `rails/<id>/rail.json` and every contract it has to honour is
+machine-checked by `python tools/rail_conformance.py` — see
+[`docs/RAIL_CONTRACT.md`](docs/RAIL_CONTRACT.md). The shipped rails:
 
 | Rail | Icon | What it does |
 |---|---|---|
 | **edu-suite** | 🎓 | Bilingual (EN / es-MX) classroom content: translation, CVC worksheets, TeachTown units. |
 | **IEP** | 📝 | A second instance of the edu-suite dashboard, isolated to drafting IEP Present Levels narratives (its own library/DB so student data stays separate). |
 | **recipe-book** | 🍳 | Multi-tenant cooking assistant: meal plans, recipe help, pantry and bar reasoning, plus generated recipe-card icons. |
-| **co-worker** | 🗂️ | Exec-brief dashboard: harvests email, calendar, and Teams activity and synthesizes it into prioritized attention items (client interactions, open threads, missed responses, agenda-less meetings). Attention only — not another inbox. |
+| **co-worker** | 💼 | Exec-brief dashboard: harvests email, calendar, and Teams activity and synthesizes it into prioritized attention items (client interactions, open threads, missed responses, agenda-less meetings). Attention only — not another inbox. |
 | **workstation** | 💻 | A browser terminal into the host over SSH. Highest-privilege rail, entitlement-gated to a single owner. |
 | **terminal-fun** | 🕹️ | Self-hosted terminal games and toys with an in-terminal AI helper. Sandboxed, no host access. |
 | **ai-playground** | 🛝 | A multi-demo rail: a RAG-over-documents demo (local or NVIDIA NIM generation, WebSocket token streaming) plus an Embedding Lab that benchmarks embedders head-to-head (GPU vs CPU-ONNX) with optional CPU cross-encoder reranking. |

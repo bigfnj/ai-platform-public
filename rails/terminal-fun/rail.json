@@ -1,0 +1,31 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "terminal-fun",
+  "label": "Terminal Fun",
+  "icon": "🕹️",
+  "package": "terminal_fun_app",
+  "federation_name": "terminal_fun",
+  "css_wrapper": "ft",
+  "layout": "backend",
+  "env_prefix": "TERMINAL_FUN_",
+  "ports": {
+    "backend": 8730,
+    "dev": 5240
+  },
+  "status_route": "/api/models",
+  "model_slots": [
+    {
+      "slot": "assistant",
+      "label": "Assistant",
+      "env": "TERMINAL_FUN_LLM_MODEL",
+      "role": "terminal-fun",
+      "kind": "chat",
+      "admin_panel": true
+    }
+  ],
+  "notes": [
+    "The only rail whose model reference may legitimately be a size-scoped GLOB (e.g. gemma4*:12b) rather than an @role or a concrete name, which is why its modelstate copy resolves globs locally with fnmatch.",
+    "Ships its CSS as a template literal inside module.tsx rather than a theme.css file, so the theming rules are checked against that string.",
+    "Sandboxed: PTY sessions run inside this rail's own container with no host access. The high-privilege host terminal is the separate workstation rail."
+  ]
+}

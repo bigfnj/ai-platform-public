@@ -30,17 +30,21 @@ _AUTH = {"Authorization": f"Bearer {_TOK}"} if _TOK else {}  # broker control-pl
 DEFAULT_MODEL = os.environ.get("RECIPE_BOOK_LLM_MODEL", "llama3.1:8b")
 # Embedding model for semantic search (the broker resolves it to an installed model).
 EMBED_MODEL = os.environ.get("RECIPE_BOOK_EMBED_MODEL", "bge-m3")
-# The recipe/cocktail assistant uses a stronger general model than the default:
-# gemma3:27b has strong culinary knowledge + prose and is NOT a reasoning model
-# (no <think> latency). Env-overridable; the broker resolves the size-scoped glob.
-ASSISTANT_MODEL = os.environ.get("RECIPE_BOOK_ASSISTANT_MODEL", "gemma3*:27b")
-# Multimodal model for recipe-import vision (reads photos / scanned pages). gemma3:27b
-# is multimodal AND the assistant, so reusing it avoids a second heavy VRAM load.
-VISION_MODEL = os.environ.get("RECIPE_BOOK_VISION_MODEL", "gemma3*:27b")
-# Image backend for per-recipe clipart icons. "flux-schnell" (nf4 FLUX.1-schnell) has
-# far stronger prompt adherence than the old "sdxl-turbo" for a single clean object;
-# the broker's media worker resolves the name to the loaded pipeline.
-ICON_MODEL = os.environ.get("RECIPE_BOOK_ICON_MODEL", "flux-schnell")
+# The three configurable slots below default to this rail's broker ROLES, so Admin -> Rails is
+# authoritative: repointing a role there changes what this rail uses with no restart (roles.json
+# is hot-read). All three used to default to concrete pins ("gemma3*:27b", "gemma3*:27b",
+# "flux-schnell"). Compose overrode them with the @roles, so the container obeyed the panel while
+# standalone dev quietly did not — and the pins had already drifted from the panel's stated
+# defaults (gemma4*:26b). Conformance RC013 checks the in-code default, not just compose.
+#
+# The assistant wants strong culinary knowledge and prose and NOT a reasoning model (no <think>
+# latency); the vision slot wants a multimodal model, and pointing @recipe-vision at the same
+# model as @recipe avoids a second heavy VRAM load. Those are decisions for the role to carry.
+ASSISTANT_MODEL = os.environ.get("RECIPE_BOOK_ASSISTANT_MODEL", "@recipe")
+VISION_MODEL = os.environ.get("RECIPE_BOOK_VISION_MODEL", "@recipe-vision")
+# Icon images resolve through the broker's MEDIA worker rather than Ollama: @recipe-icon points
+# at an image backend (flux-schnell / sdxl-turbo), not a model tag.
+ICON_MODEL = os.environ.get("RECIPE_BOOK_ICON_MODEL", "@recipe-icon")
 
 # Reasoning models (qwen3, deepseek-r1) wrap their chain-of-thought in <think>…</think>.
 # We render the assistant content directly, so strip those traces before returning.

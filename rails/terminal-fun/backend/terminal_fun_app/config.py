@@ -37,10 +37,16 @@ class Settings(BaseSettings):
     # --- AI assistant (via the platform broker) --------------------------------
     # The broker is native on the host; from the container reach it via host.docker.internal.
     broker_url: str = "http://127.0.0.1:11500"
-    # The platform's default instruction-follower (a size-scoped wildcard the broker
-    # resolves) — strong at the structured JSON tuning + how-to answers. Override with
-    # TERMINAL_FUN_LLM_MODEL (e.g. gemma3:12b for faster/lighter, llama3.2:3b for tiny).
-    llm_model: str = "gemma3:12b"
+    # This rail's broker ROLE, so Admin -> Rails stays authoritative: repointing
+    # @terminal-fun there changes what this rail uses with no restart (roles.json is
+    # hot-read). Override with TERMINAL_FUN_LLM_MODEL, which also accepts a concrete name
+    # or a size-scoped glob (gemma4*:12b) — modelstate resolves all three.
+    #
+    # This default was the concrete pin "gemma3:12b". Compose overrides it with @terminal-fun,
+    # so the container obeyed the panel, but standalone dev silently ignored it — the same
+    # pinned-default bug that was reported closed after only the compose side was fixed.
+    # Conformance RC013 checks the in-code default for exactly that reason.
+    llm_model: str = "@terminal-fun"
     broker_timeout: float = 120.0
 
 

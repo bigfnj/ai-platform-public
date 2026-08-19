@@ -499,7 +499,11 @@ function Chat({ caps, onSpeakChange }: { caps: Capabilities | null; onSpeakChang
     })
   }
 
-  const live = caps?.broker_reachable
+  // 'ok' | 'unreachable' under the shared chip envelope (was a boolean broker_reachable).
+  // The mobile surface deliberately keeps a single binary "Live" badge rather than the
+  // desktop's four-state chips: on a phone the actionable question is only whether the
+  // assistant will answer, and an `ollama pull` is not something you do from here.
+  const live = caps?.broker === 'ok'
   const engine = caps?.models.find((m) => m.slot === 'reasoning')
 
   return (

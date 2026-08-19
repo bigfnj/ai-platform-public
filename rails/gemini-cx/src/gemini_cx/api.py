@@ -106,8 +106,12 @@ def _cites(hits: list[dict]) -> list[dict]:
 
 # The model slots this rail shows as header chips, in display order. Tag-tolerant matching and
 # the four-state resolution live in modelstate.py.
+#
+# Slot ids match the gateway's RAIL_MODEL_SLOTS and rail.json: the answer slot is "reasoning"
+# (it was "llm", which the admin panel never called it). "retrieval" has no panel counterpart
+# on purpose — embedders are out of that panel's scope. See conformance RC006/RC007.
 MODEL_SLOTS: list[tuple[str, str, str]] = [
-    ("llm", "LLM", config.RAG_MODEL),
+    ("reasoning", "LLM", config.RAG_MODEL),
     ("retrieval", "Retrieval", config.EMBED_MODEL),
 ]
 

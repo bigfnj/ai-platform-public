@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { askStream, getCapabilities, transcribe } from './api'
 import Builder from './builder'
-import type { Capabilities, Turn } from './types'
+import type { Capabilities, ModelState, Turn } from './types'
 import type { Recorder } from './voice'
 import { canListen, canRecord, getAudioInputDevices, getAudioOutputDevices, listen, record, setAudioInput, setAudioSink, speak, stopSpeaking } from './voice'
 import './theme.css'
@@ -99,16 +99,27 @@ function AudioDevicePicker() {
   )
 }
 
+// Four-state dot, identical in meaning across every rail: red = the model is not installed,
+// blue = installed but not resident, orange = a job is warming it, green = resident. The
+// red/blue distinction is the operationally useful one — red needs an `ollama pull`, blue just
+// needs someone to ask a question. This rail rendered a two-state on/off dot until the chip
+// contract was unified; "off" was hiding which of those two situations you were in.
+const STATE_TEXT: Record<ModelState, string> = {
+  missing: 'not found',
+  cold: 'cold',
+  warming: 'warming up',
+  loaded: 'GPU · ready',
+}
+
 function AiStatus({ caps }: { caps: Capabilities | null }) {
   if (!caps) return <span className="muted">checking…</span>
-  if (!caps.broker_reachable) return <span className="muted">● broker unreachable</span>
+  if (caps.broker !== 'ok') return <span className="muted">● broker unreachable</span>
   return (
     <div className="status">
       {caps.models.map((m) => (
-        <span key={m.slot} title={m.role}>
-          <i className={`dot ${m.resident ? 'on' : 'off'}`} />
-          {m.slot === 'reasoning' ? 'LLM' : 'Retrieval'} ({m.model}){' '}
-          <span className="muted">{m.resident ? 'GPU · ready' : 'cold'}</span>
+        <span key={m.slot} title={`${m.role} → ${m.model} · ${STATE_TEXT[m.state]}`}>
+          <i className={`dot ${m.state}`} />
+          {m.label} ({m.model}) <span className="muted">{STATE_TEXT[m.state]}</span>
         </span>
       ))}
       <span title={caps.voice.note}>

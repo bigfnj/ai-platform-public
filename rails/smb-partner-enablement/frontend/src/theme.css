@@ -7,11 +7,17 @@
  */
 .smbp {
   --ink: var(--text-primary, #e8eaed);
-  --muted: var(--text-secondary, #9aa4b2);
+  /* Local ALIASES, not redefinitions of the shared tokens (THEMING.md rules 1 and 2).
+     --muted and --accent are platform names: redefining them under this wrapper broke
+     inheritance for anything nested, and `--accent: var(--accent, ...)` was worse than a
+     style nit — a custom property referencing itself is a dependency cycle, which the CSS
+     Variables spec makes invalid at computed-value time, so --accent was unreliable
+     throughout this rail rather than merely unpalettable. */
+  --mut: var(--text-secondary, #9aa4b2);
   --s1: var(--surface-1, #12161c);
   --s2: var(--surface-2, #1a1f27);
   --bd: var(--border, rgba(255, 255, 255, 0.09));
-  --accent: var(--accent, #3b82f6);
+  --ac: var(--accent, #3b82f6);
 
   color: var(--ink);
   display: flex;
@@ -19,7 +25,7 @@
   gap: 16px;
 }
 
-.smbp .muted { color: var(--muted); }
+.smbp .muted { color: var(--mut); }
 .smbp .center { text-align: center; }
 
 /* --- tabs --------------------------------------------------------------- */
@@ -33,7 +39,7 @@
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--muted);
+  color: var(--mut);
   padding: 10px 14px;
   cursor: pointer;
   font-size: 14px;
@@ -41,7 +47,7 @@
 }
 .smbp .tab[aria-selected='true'] {
   color: var(--ink);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--ac);
 }
 
 /* --- cards -------------------------------------------------------------- */
@@ -67,7 +73,7 @@
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--ac);
 }
 .smbp .card p { margin: 0; font-size: 14px; line-height: 1.55; }
 
@@ -80,10 +86,10 @@
   transition: border-color 120ms ease;
 }
 .smbp .scenario:hover,
-.smbp .scenario:focus-visible { border-color: var(--accent); }
+.smbp .scenario:focus-visible { border-color: var(--ac); }
 .smbp .scenario .icon { font-size: 26px; }
 .smbp .scenario .title { font-weight: 600; margin: 8px 0 2px; }
-.smbp .scenario .fit { color: var(--accent); font-size: 13px; margin-bottom: 8px; }
+.smbp .scenario .fit { color: var(--ac); font-size: 13px; margin-bottom: 8px; }
 
 /* --- ask / answer ------------------------------------------------------- */
 .smbp .askrow { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -98,7 +104,7 @@
   font: inherit;
 }
 .smbp button.go {
-  background: var(--accent);
+  background: var(--ac);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -121,24 +127,33 @@
 .smbp .cites { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .smbp .cite {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--mut);
   border-left: 2px solid var(--bd);
   padding-left: 8px;
 }
 
 /* An ungrounded answer is a correctness signal, not a style choice — it must be visible. */
 .smbp .ungrounded {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--ac);
   padding-left: 10px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--mut);
 }
 
 /* --- status ------------------------------------------------------------- */
 .smbp .status { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; }
 .smbp .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-.smbp .dot.on { background: #22c55e; }
-.smbp .dot.off { background: var(--muted); }
+/* Model chips: four states from the SEMANTIC tokens, stable on all 63 palettes
+   (THEMING.md rule 4). .on/.off below are the VOICE indicator, which really is binary. */
+.smbp .dot.missing { background: var(--critical, #f85149); }
+.smbp .dot.cold    { background: var(--info, #58a6ff); }
+.smbp .dot.warming { background: var(--warning, #f0883e); animation: smbp-pulse 1.1s ease-in-out infinite; }
+.smbp .dot.loaded  { background: var(--good, #3fb950); }
+.smbp .dot.on { background: var(--good, #22c55e); }
+.smbp .dot.off { background: var(--mut); }
+
+/* Warming is the only transient state, so it is the only one that moves. */
+@keyframes smbp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 
 /* --- mobile preview ----------------------------------------------------- */
 .smbp .mobile-fab {
@@ -155,7 +170,7 @@
   font: inherit;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
-.smbp .mobile-fab:hover { border-color: var(--accent); }
+.smbp .mobile-fab:hover { border-color: var(--ac); }
 
 .smbp .mpreview {
   position: fixed;
@@ -278,7 +293,7 @@
 .smbp .smbp-logo { font-size: 26px; line-height: 1; }
 .smbp .smbp-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .smbp .smbp-titles h1 { font-size: 19px; margin: 0; }
-.smbp .smbp-sub { color: var(--muted); font-size: 12.5px; max-width: 62ch; }
+.smbp .smbp-sub { color: var(--mut); font-size: 12.5px; max-width: 62ch; }
 /* Pushes the audio pickers to the right edge without pinning them, so they wrap under the
    title on a narrow rail instead of colliding with it. */
 .smbp .smbp-spacer { flex: 1; }
@@ -330,7 +345,7 @@
   display: inline-block;
   width: 18px;
   font-size: 12px;
-  color: var(--accent);
+  color: var(--ac);
   flex-shrink: 0;
 }
 
@@ -365,15 +380,15 @@
 .smbp .qbar > span {
   display: block;
   height: 100%;
-  background: var(--accent);
+  background: var(--ac);
   transition: width 180ms ease;
 }
 /* "Why this matters" is the coaching, so it reads as an aside rather than body copy. */
 .smbp .why {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--ac);
   padding: 6px 0 6px 12px;
   margin: 0 0 16px;
-  color: var(--muted);
+  color: var(--mut);
   font-size: 13px;
 }
 .smbp .opts {
@@ -394,7 +409,7 @@
 }
 .smbp .opt:hover,
 .smbp .opt:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--ac);
   background: var(--s1);
 }
 
@@ -402,7 +417,7 @@
 .smbp .checklist { list-style: none; margin: 12px 0; padding: 0; }
 .smbp .ck {
   align-items: baseline;
-  color: var(--muted);
+  color: var(--mut);
   display: flex;
   font-size: 14px;
   gap: 10px;
@@ -410,8 +425,8 @@
 }
 .smbp .ck .ckmark { width: 1em; flex: none; }
 .smbp .ck.active { color: var(--ink); }
-.smbp .ck.active .ckmark { color: var(--accent); }
-.smbp .ck.done .ckmark { color: var(--accent); }
+.smbp .ck.active .ckmark { color: var(--ac); }
+.smbp .ck.done .ckmark { color: var(--ac); }
 .smbp .ck.error { color: #f87171; }
 
 /* --- scenario builder: the package -------------------------------------- */
@@ -419,7 +434,7 @@
    ends with an action, not a link list. So it is visually the loudest thing on the page. */
 .smbp .nextmove {
   background: var(--s2);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--ac);
   border-radius: 10px;
   margin-bottom: 16px;
   padding: 14px 16px;
@@ -428,7 +443,7 @@
 .smbp .nextmove .md p:last-child { margin-bottom: 8px; }
 .smbp .tab:disabled { opacity: 0.4; cursor: not-allowed; }
 .smbp .md h4 { font-size: 14px; margin: 16px 0 6px; }
-.smbp .md h5 { color: var(--muted); font-size: 13px; margin: 12px 0 4px; }
+.smbp .md h5 { color: var(--mut); font-size: 13px; margin: 12px 0 4px; }
 .smbp .md p { line-height: 1.55; margin: 0 0 10px; }
 .smbp .md ul { margin: 0 0 10px; padding-left: 20px; }
 .smbp .md li { line-height: 1.55; margin-bottom: 6px; }
@@ -436,7 +451,7 @@
 .smbp .opt.unsure {
   background: none;
   border-style: dashed;
-  color: var(--muted);
+  color: var(--mut);
   font-size: 13px;
   margin-top: 8px;
   padding: 10px 14px;
@@ -464,7 +479,7 @@
   padding: 12px;
 }
 .smbp .tracehead {
-  color: var(--muted);
+  color: var(--mut);
   font-size: 11px;
   letter-spacing: 0.08em;
   margin-bottom: 10px;
@@ -472,19 +487,19 @@
 }
 .smbp .tblock { margin-bottom: 12px; }
 .smbp .tkey {
-  color: var(--accent);
+  color: var(--ac);
   font-weight: 600;
   margin-bottom: 4px;
 }
 .smbp .tline {
-  color: var(--muted);
+  color: var(--mut);
   line-height: 1.5;
   padding: 1px 0;
 }
 .smbp .tline.rule { color: var(--ink); }
 .smbp .tline.open { font-style: italic; }
 .smbp .tscore {
-  color: var(--accent);
+  color: var(--ac);
   display: inline-block;
   font-variant-numeric: tabular-nums;
   margin-right: 8px;

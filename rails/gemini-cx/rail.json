@@ -1,0 +1,41 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "gemini-cx",
+  "label": "Gemini CX",
+  "icon": "✨",
+  "package": "gemini_cx",
+  "federation_name": "gemini_cx",
+  "css_wrapper": "gemini-cx",
+  "layout": "src",
+  "env_prefix": "GEMINI_CX_",
+  "ports": {
+    "backend": 8880,
+    "dev": 5280
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "reasoning",
+      "label": "LLM",
+      "env": "GEMINI_CX_RAG_MODEL",
+      "role": "gemini-cx-rag",
+      "kind": "chat",
+      "admin_panel": true
+    },
+    {
+      "slot": "retrieval",
+      "label": "Retrieval",
+      "env": "GEMINI_CX_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false,
+      "note": "Shares the generic @embed role with every other retrieval rail. Embedders are out of the Admin -> Rails panel's scope by design, so there is no RAIL_MODEL_SLOTS counterpart."
+    }
+  ],
+  "surfaces": [],
+  "notes": [
+    "Serves a richer /api/capabilities rather than /api/models because the UI also renders corpus size, collection count and voice backend. The models[] portion of that payload still obeys the model-status envelope.",
+    "The shell draws a real Gemini spark SVG for this rail via iconOverrides; the emoji here is only the catalog fallback.",
+    "Holds the answer model resident and uses /v1/tts_light (Kokoro) so speech never evicts it."
+  ]
+}

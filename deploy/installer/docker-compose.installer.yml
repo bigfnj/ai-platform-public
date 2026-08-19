@@ -16,6 +16,7 @@ services:
     image: terminal-fun-backend:latest
     environment:
       TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
       # Point at the @role, not a concrete name: that is what makes Admin -> Rails
       # authoritative for this rail. A pinned name here silently overrides the panel — the
       # admin repoints the role, the rail keeps using the pin, and nothing says so.
@@ -41,6 +42,7 @@ services:
     environment:
       RECIPE_BOOK_DATA_DIR: /srv/var
       RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
       # The three Admin -> Rails managed slots point at their @roles so the panel is
       # authoritative. RECIPE_BOOK_LLM_MODEL stays a concrete pin on purpose: it is only a
       # defensive fallback for a chat() call with no model, every caller passes one, and it has
@@ -70,7 +72,7 @@ services:
       CO_WORKER_INBOX_DIR: /data/inbox
       # Executive-brief synthesis calls the broker on the @co-worker-synthesis role.
       CO_WORKER_BROKER_URL: http://host.docker.internal:11500
-      CO_WORKER_BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
       # @role so Admin -> Rails can repoint the synthesis model like any other rail's.
       CO_WORKER_SYNTHESIS_MODEL: ${CO_WORKER_SYNTHESIS_MODEL:-@co-worker-synthesis}
     extra_hosts:

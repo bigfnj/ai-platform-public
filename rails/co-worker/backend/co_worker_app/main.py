@@ -229,8 +229,13 @@ def _model_slots() -> list[tuple[str, str, str]]:
     pass with no embedder — the brief is built from whole items, not retrieved chunks.
 
     Reads the same setting synthesis actually sends to the broker, so the chip cannot drift
-    from reality the way a hardcoded role would."""
-    return [("llm", "Synthesis", settings.synthesis_model)]
+    from reality the way a hardcoded role would.
+
+    The slot id is "synthesis" to match the gateway's RAIL_MODEL_SLOTS entry for this rail
+    (and rail.json). It was "llm", which meant the admin repointed a slot called "synthesis"
+    in Admin -> Rails and then read a chip called something else — no way to connect the
+    control to the readout. Enforced by tools/rail_conformance.py RC006/RC007."""
+    return [("synthesis", "Synthesis", settings.synthesis_model)]
 
 
 @app.get("/api/models")
