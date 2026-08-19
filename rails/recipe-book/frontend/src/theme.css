@@ -184,6 +184,24 @@ input.rb-search::placeholder, .rb-search input::placeholder { color: var(--muted
 
 /* ---- add-recipe button (top bar) ---- */
 .rb-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+/* --- model status chips ---------------------------------------------------- */
+/* Colours come from the SEMANTIC tokens, never literals: status must read the same on all 63
+   palettes (web/THEMING.md rule 4). The four states are a cross-rail visual language — the
+   same dot means the same thing here as on co-worker, gemini-cx, smb-partner and terminal-fun. */
+.rb-brandwrap { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rb-status { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px;
+  font-family: var(--sans); letter-spacing: .2px; }
+.rb-status .m { color: var(--muted); }
+.rb-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  margin-right: 5px; vertical-align: 1px; background: var(--muted); }
+.rb-dot.missing { background: var(--critical, #d64550); }
+.rb-dot.cold    { background: var(--info, #3d8ee0); }
+.rb-dot.warming { background: var(--warning, #d98324); animation: rb-pulse 1.1s ease-in-out infinite; }
+.rb-dot.loaded  { background: var(--good, #3fae6b); }
+
+/* Warming is the only transient state, so it is the only one that moves. */
+@keyframes rb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 .rb-actions { display: flex; align-items: center; gap: 10px; }
 .rb-add { font-family: var(--sans); font-size: 13px; font-weight: 600; white-space: nowrap;
   color: #fff; background: var(--grad-accent, var(--accent)); border: none; border-radius: 8px;

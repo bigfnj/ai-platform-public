@@ -15,6 +15,53 @@ import { SettingsModal } from "./components/SettingsModal";
 import type { PlanSettings } from "./types";
 import "./theme.css";
 
+// Model status chips (mirrors GET /recipe-book/api/models). Four states, one visual language
+// across every rail: red = not installed / unavailable, blue = available but not resident,
+// orange = a job is warming it, green = resident in VRAM right now.
+//
+// This rail has the platform's only IMAGE slot, and it reads differently on purpose. The
+// broker's media worker is a short-lived subprocess that exits to reclaim VRAM after every
+// render, so the icon backend is green only DURING a render and blue the rest of the time.
+// Blue on the icon chip means "working as designed", not "not warmed up yet" — hence the
+// per-kind hint in the tooltip, because an unexplained permanently-blue dot is
+// indistinguishable from something broken.
+type ModelState = "missing" | "cold" | "warming" | "loaded";
+interface ModelSlot {
+  slot: string; label: string; role: string; model: string;
+  kind: "chat" | "vision" | "image"; state: ModelState;
+}
+interface ModelsStatus { broker: string; models: ModelSlot[] }
+
+const STATE_TEXT: Record<ModelState, string> = {
+  missing: "not found",
+  cold: "cold",
+  warming: "warming up",
+  loaded: "GPU · ready",
+};
+
+function slotHint(m: ModelSlot): string {
+  const base = `${m.role} → ${m.model} · ${STATE_TEXT[m.state]}`;
+  if (m.kind !== "image") return base;
+  if (m.state === "missing") return `${base} — the broker's media worker is disabled`;
+  if (m.state === "cold") return `${base} — normal: the media worker exits after each render to free VRAM`;
+  return base;
+}
+
+function ModelChips({ status }: { status: ModelsStatus | null }) {
+  if (!status) return <span className="rb-status m">checking…</span>;
+  if (status.broker !== "ok") return <span className="rb-status m">● broker unreachable</span>;
+  return (
+    <div className="rb-status">
+      {status.models.map((m) => (
+        <span key={m.slot} title={slotHint(m)}>
+          <i className={`rb-dot ${m.state}`} />
+          {m.label} <span className="m">{STATE_TEXT[m.state]}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 type Tab = "kitchen" | "bar" | "plan" | "shopping" | "pantry" | "barcart";
 const TABS: { id: Tab; label: string }[] = [
   { id: "kitchen", label: "Kitchen" }, { id: "bar", label: "Bar" },
@@ -45,8 +92,24 @@ export default function RecipeBookModule() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [users, setUsers] = useState<string[]>([]);   // admin: roster for the "view as" picker
   const [viewAs, setViewAs] = useState("");            // "" = the admin's own data
+  const [models, setModels] = useState<ModelsStatus | null>(null);
 
   const refresh = useCallback(() => setBump((b) => b + 1), []);
+
+  // Poll the model chips. Residency changes on its own — the broker evicts on a keep_alive
+  // expiry or when another rail takes the card — so a one-shot read goes stale within a minute.
+  // 6s matches every other rail's chips. Failures blank the chips rather than surfacing an
+  // error: the GPU layer being down must not break the page.
+  useEffect(() => {
+    let live = true;
+    const tick = () =>
+      api.models()
+        .then((d) => { if (live) setModels(d as ModelsStatus); })
+        .catch(() => { if (live) setModels(null); });
+    tick();
+    const h = window.setInterval(tick, 6000);
+    return () => { live = false; window.clearInterval(h); };
+  }, []);
 
   // load settings once — reveals the admin gear only if the gateway marks the user admin
   useEffect(() => { api.getSettings().then(setSettings).catch(() => {}); }, []);
@@ -82,7 +145,10 @@ export default function RecipeBookModule() {
   return (
     <div className="recipe-book" data-mode={mode}>
       <div className="rb-top">
-        <div className="rb-brand">Recipe Book<small>Kitchen &amp; Bar</small></div>
+        <div className="rb-brandwrap">
+          <div className="rb-brand">Recipe Book<small>Kitchen &amp; Bar</small></div>
+          <ModelChips status={models} />
+        </div>
         <nav className="rb-nav">
           {TABS.map((t) => (
             <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.label}</button>

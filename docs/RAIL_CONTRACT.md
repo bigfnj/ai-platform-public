@@ -101,6 +101,25 @@ Red vs blue is the whole point: those are the two situations that need different
 two-state `resident ? on : off` dot collapses them, which is why smb-partner's chips looked like
 everyone else's while meaning something narrower.
 
+**Image slots resolve against the media worker, not the model list.** An image backend
+(`flux-schnell`, `sdxl-turbo`) is a HuggingFace pipeline on the broker's media worker, not an
+Ollama tag, so it never appears in `/v1/models`. Resolving one the normal way reports `missing`
+forever — a red dot on a feature that works. recipe-book's slots therefore carry a `kind` and
+image slots map like this:
+
+| State | Image-slot meaning |
+|---|---|
+| `missing` | media is disabled on the broker (`BROKER_MEDIA_ENABLED=false`) — nothing can render until an operator changes that |
+| `cold` | media enabled, nothing rendering |
+| `warming` | a job naming this backend is queued on the gate but not yet running |
+| `loaded` | a render for this backend is running *right now* |
+
+**For an image slot, `cold` is the healthy steady state.** The media worker is a short-lived
+subprocess that *exits to reclaim VRAM* after every render, so an image backend is green only
+during a render and blue the rest of the time. A chat slot sitting cold means "nobody has asked
+yet"; an image slot sitting cold means "working as designed". Say so in the tooltip — an
+unexplained permanently-blue dot is indistinguishable from something broken.
+
 **Resolution order is part of the contract.** `loaded` is checked *before* `warming`: a resident
 model that also has a job in flight is loaded-and-busy, not warming. And `:latest` tolerance is
 not optional — Ollama reports an untagged pull as `:latest`, so a role resolving to `bge-m3` must
@@ -129,9 +148,10 @@ boolean `resident`. A rail may add sibling keys (`corpus`, `voice`, `items`); it
 these two or change their shapes. When the broker is unreachable the endpoint still returns 200
 with `broker: "unreachable"`, because a header must render with the GPU layer down.
 
-`recipe-book`'s `GET /api/models` is **not** a chip endpoint — it is a passthrough of the broker's
-installed-model inventory that predates this contract and collides with the chip route by name.
-Its `status_route` is `null`.
+`recipe-book`'s `GET /api/models` used to be a passthrough of the broker's installed-model
+inventory — the same route name as the chip endpoint, meaning something entirely different. It
+had no callers anywhere in the repo, so it now serves the chip contract like every other rail's
+and the inventory moved to `/api/broker/models`. One fewer name meaning two things.
 
 ### Ports — RC002, RC009
 
@@ -204,11 +224,16 @@ blue ended up outside the palette system.
 
 ## Known gaps
 
-- **`recipe-book` renders no model chips** despite having the most model slots of any rail (chat +
-  vision + image), so none of their states are visible anywhere. `status_route: null` records the
-  fact; it is a gap, not a design choice.
-- **ai-playground, workstation and bouquet have no manifest** and are therefore outside the
-  contract. The checker reports them as such on every run rather than passing over them silently.
+- **`ai-playground` renders no model chips.** Unlike recipe-book's former gap this one is at
+  least defensible: the RAG demo can route generation to NVIDIA's cloud NIM instead of the local
+  broker, so a chip reporting local residency would be actively misleading while the NIM toggle
+  is on. Wiring chips there means teaching them to say "not this rail's problem right now",
+  which is a design question rather than an oversight.
+- **`ai-playground`'s generation slot keeps a pinned in-code default** (`nemotron-3-nano:4b`
+  rather than `@ai-playground`) under `pinned_default_ok`. Deliberate: the standalone demo is
+  meant to be end-to-end NVIDIA before anyone touches the NIM toggle, and the container
+  overrides it to the role anyway. Waived rather than "fixed", because changing a demo's
+  intended behaviour to satisfy a checker is the wrong direction.
 - **`terminal-fun` overloads `.status`** for both its model-chip row and its terminal status text,
   with conflicting rules; the later one leaks into the chip row. Cosmetic, and left alone because
   verifying the fix needs eyes on the running rail.

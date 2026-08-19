@@ -68,6 +68,12 @@ export interface RecipeQuery {
 export const iconUrl = (id: string) => `${BASE}/api/icon/${id}`;
 
 export const api = {
+  // Four-state model status for the header chips. Goes through req() like everything else, so
+  // it inherits the admin "view as" ?owner= param — harmless here (the route declares no such
+  // parameter and FastAPI drops it), and not worth a bespoke fetch path to avoid. GPU residency
+  // is a property of the machine, not of whoever is looking at it.
+  models: () => req<unknown>("/api/models"),
+
   stats: () => req<Stats>("/api/stats"),
   categories: () => req<{ categories: Category[] }>("/api/categories"),
   spirits: () => req<{ spirits: Spirit[] }>("/api/spirits"),

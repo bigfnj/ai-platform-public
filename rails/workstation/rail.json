@@ -1,0 +1,23 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "workstation",
+  "label": "Workstation",
+  "icon": "💻",
+  "package": "workstation_app",
+  "federation_name": "workstation",
+  "css_wrapper": "wt",
+  "layout": "backend",
+  "env_prefix": "WORKSTATION_",
+  "ports": {
+    "backend": 8720,
+    "dev": 5230
+  },
+  "status_route": null,
+  "model_slots": [],
+  "notes": [
+    "No model slots and no chips, correctly: this rail is an SSH terminal into the host and does no model work at all. It is the one rail that genuinely has nothing to say about the GPU, which is why status_route is null and RC005 (broker token) does not apply to it.",
+    "The highest-privilege rail on the platform — a real shell on the host. Entitlement-gated even for admins; only the seed owner is all-access. See the rail's README.md and HARDENING.md.",
+    "The only rail besides the gateway that subclasses platform_core.PlatformSettings rather than declaring its own BaseSettings, so its broker_url comes from PLATFORM_BROKER_URL. Harmless here precisely because it never calls the broker.",
+    "Not in this deployment's PLATFORM_ENABLED_APPS. Deliberately inert until an owner opts in."
+  ]
+}

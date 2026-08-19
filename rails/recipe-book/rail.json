@@ -2,7 +2,7 @@
   "$schema": "../../docs/rail-manifest.schema.json",
   "id": "recipe-book",
   "label": "Recipe Book",
-  "icon": "🍳",
+  "icon": "\ud83c\udf73",
   "package": "recipe_book",
   "federation_name": "recipe_book",
   "css_wrapper": "recipe-book",
@@ -12,7 +12,7 @@
     "backend": 8830,
     "dev": 5220
   },
-  "status_route": null,
+  "status_route": "/api/models",
   "model_slots": [
     {
       "slot": "assistant",
@@ -40,8 +40,9 @@
     }
   ],
   "notes": [
-    "status_route is null: this rail renders no model chips. It has the most model slots of any rail and no way to see any of their states, which is a gap rather than a design choice — see docs/RAIL_CONTRACT.md.",
-    "Its GET /api/models is NOT a chip endpoint. It is a passthrough of the broker's installed-model inventory, and predates the chip contract. The name collides with the chip route on co-worker and terminal-fun; do not confuse the two payloads.",
+    "Its three slots are the platform's widest: chat, vision AND image. The image slot is why this rail's modelstate.py copy diverges from the others \u2014 a media-worker backend (flux-schnell / sdxl-turbo) is not an Ollama model and never appears in /v1/models, so resolving it the normal way reported MISSING forever on a feature that works. Image slots are resolved against the broker's media block instead.",
+    "For the icon slot, 'cold' is the healthy steady state, not a warning: the broker's media worker is a short-lived subprocess that exits to reclaim VRAM after every render, so an image backend is green only DURING a render. The chip tooltip says so.",
+    "GET /api/models now serves the chip contract like every other rail's. It previously returned the broker's installed-model inventory \u2014 a name collision with the chip route that meant something completely different. Nothing consumed it, so the inventory moved to /api/broker/models.",
     "Holds the one sanctioned exception to the @role rule: RECIPE_BOOK_LLM_MODEL in broker.py is a module-level fallback with no role of its own. It is not a manifest slot because nothing configures it per-deployment."
   ]
 }

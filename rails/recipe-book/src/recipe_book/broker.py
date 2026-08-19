@@ -144,6 +144,25 @@ def models() -> dict:
     return {"broker_up": True, "models": out}
 
 
+def installed_models() -> list[dict]:
+    """Every model installed in Ollama, raw. Distinct from models() above, which reshapes the
+    list for a UI picker — the chips need the plain names to tell "not installed at all" apart
+    from "installed but cold"."""
+    resp = _get("/v1/models")
+    if isinstance(resp, dict) and isinstance(resp.get("models"), list):
+        return resp["models"]
+    return resp if isinstance(resp, list) else []
+
+
+def roles() -> list[dict]:
+    """The broker's role table (each role + the concrete model it resolves to), so the chips can
+    name the model behind an @role."""
+    resp = _get("/v1/roles")
+    if isinstance(resp, dict) and isinstance(resp.get("roles"), list):
+        return resp["roles"]
+    return resp if isinstance(resp, list) else []
+
+
 def status() -> dict:
     """Broker/GPU status passthrough (loaded models, VRAM, queue depth)."""
     return _get("/v1/status")

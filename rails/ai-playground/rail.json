@@ -1,0 +1,42 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "ai-playground",
+  "label": "AI Playground",
+  "icon": "🛝",
+  "package": "ai_playground",
+  "federation_name": "ai_playground",
+  "css_wrapper": "ai-playground",
+  "layout": "src",
+  "env_prefix": "AI_PLAYGROUND_",
+  "ports": {
+    "backend": 8850,
+    "dev": 5250
+  },
+  "status_route": null,
+  "model_slots": [
+    {
+      "slot": "generation",
+      "label": "Generation",
+      "env": "AI_PLAYGROUND_CHAT_MODEL",
+      "role": "ai-playground",
+      "kind": "chat",
+      "admin_panel": true,
+      "pinned_default_ok": true,
+      "note": "The in-code default is the concrete 'nemotron-3-nano:4b', not '@ai-playground', and that is deliberate rather than the drift RC013 usually catches: the standalone demo is meant to be end-to-end NVIDIA before anyone touches the NIM toggle, and @ai-playground currently resolves to gemma3:4b on this host. The container overrides it to the role, so Admin -> Rails is authoritative in the only place that panel exists. Waiving the rule here rather than repointing the default, because changing a demo's intended behaviour to satisfy a checker is the wrong direction."
+    },
+    {
+      "slot": "retrieval",
+      "label": "Retrieval",
+      "env": "AI_PLAYGROUND_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false,
+      "note": "Shares the generic @embed role. Out of the Admin -> Rails panel's scope, like every embedder."
+    }
+  ],
+  "notes": [
+    "status_route is null: this rail renders no model chips. Unlike recipe-book (which had the same gap and has since been fixed), the omission is more defensible here — the RAG demo can route generation to NVIDIA's cloud NIM instead of the local broker, so a chip showing local residency would be actively misleading while the NIM toggle is on. Wiring chips here means teaching them to say 'not this rail's problem right now', which is a design question rather than an oversight.",
+    "The Embedding Lab benchmarks embedders head-to-head, including CPU-ONNX models the broker does not own. Those are NOT manifest slots: they are demo subjects the rail manages itself, not models it asks the broker to serve on its behalf.",
+    "Not in this deployment's PLATFORM_ENABLED_APPS, so it is in the catalog and the tree but not currently running."
+  ]
+}
