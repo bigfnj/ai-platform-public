@@ -36,6 +36,14 @@
       "type": "string",
       "description": "Fallback emoji shown in the shell rail. Must match APP_CATALOG. A rail may additionally get a real SVG via the shell's iconOverrides, which does not change this value."
     },
+    "nav_group": {
+      "type": "string",
+      "description": "OPTIONAL. Sort the rail under this name instead of its own label, to keep related rails adjacent when plain alphabetisation would separate them. The rail's position is otherwise derived — see catalog.py's nav_sort_key. Set this only for a real pairing; the shipped case is edu-suite + IEP, where IEP is a second instance of the same dashboard image and Gemini CX would otherwise land between them.\n\nThe VALUE lives in the gateway's catalog (the gateway image has no access to these manifests) and is mirrored here so a reader of one is not misled about the other. Held in agreement by RC003."
+    },
+    "nav_order": {
+      "type": "integer",
+      "description": "OPTIONAL. Tiebreak within a nav_group. Ignored without a group. Defaults to 0."
+    },
     "package": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$",

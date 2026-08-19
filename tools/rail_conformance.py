@@ -177,8 +177,16 @@ def _literal_assign(py: Path, name: str) -> Any:
     return None
 
 
-def gateway_catalog() -> list[dict[str, str]]:
-    return _literal_assign(GATEWAY / "catalog.py", "APP_CATALOG") or []
+def gateway_catalog() -> list[dict[str, Any]] | None:
+    """The catalog's raw entries.
+
+    Reads ``_ENTRIES``, not ``APP_CATALOG``: the latter is now ``sorted(_ENTRIES, ...)``, so it
+    is no longer a literal and literal_eval cannot see it. Returns None (not []) when the
+    literal cannot be read at all, because those are different problems — an empty list means
+    "the rail is not registered", while unparseable means "this tool cannot tell", and
+    reporting the second as the first blames nine rails for one refactor.
+    """
+    return _literal_assign(GATEWAY / "catalog.py", "_ENTRIES")
 
 
 def gateway_rail_slots() -> dict[str, list[dict[str, str]]]:
@@ -279,18 +287,32 @@ def _all_vite_ports() -> dict[str, int]:
     return out
 
 
-@rule("RC003", "The manifest's id, label and icon match the gateway's APP_CATALOG entry.")
+@rule("RC003", "The manifest's id, label, icon and nav placement match the gateway's catalog.")
 def rc003(m: Manifest, _all: list[Manifest]) -> list[Finding]:
-    entry = next((e for e in gateway_catalog() if e.get("id") == m.id), None)
+    where = rel(GATEWAY / "catalog.py")
+    entries = gateway_catalog()
+    if entries is None:
+        return [F("RC003", m, "could not read the catalog's _ENTRIES literal, so nothing here "
+                              "is verified — this is a checker/catalog mismatch, not a rail "
+                              "defect", where, level="warn")]
+    entry = next((e for e in entries if e.get("id") == m.id), None)
     if entry is None:
-        return [F("RC003", m, "no APP_CATALOG entry — the shell cannot draw a rail item",
-                  rel(GATEWAY / "catalog.py"))]
+        return [F("RC003", m, "no catalog entry — the shell cannot draw a rail item", where)]
     out = []
     for key in ("label", "icon"):
         want, got = m.data.get(key), entry.get(key)
         if want != got:
             out.append(F("RC003", m, f"catalog {key} is {got!r} but the manifest says "
-                                     f"{want!r}", rel(GATEWAY / "catalog.py")))
+                                     f"{want!r}", where))
+    # Nav placement lives in the catalog because the gateway image has no access to the
+    # manifests. Mirrored in rail.json so a reader of one is not misled about the other;
+    # absent on both sides is agreement (the common, alphabetical case).
+    for key in ("nav_group", "nav_order"):
+        want, got = m.data.get(key), entry.get(key)
+        if (want or None) != (got or None):
+            out.append(F("RC003", m, f"catalog {key} is {got!r} but the manifest says "
+                                     f"{want!r} — the rail would sort differently than its "
+                                     f"manifest claims", where))
     return out
 
 
