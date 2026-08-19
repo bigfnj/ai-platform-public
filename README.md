@@ -60,7 +60,38 @@ makes that drift visible. The one deliberate exception is documented where it oc
 Speech is served two ways, and the distinction matters: `/v1/tts` (XTTS) takes the full GPU gate
 and evicts every resident heavy model per utterance, while `/v1/tts_light` (Kokoro-82M, ~350 MB in
 a short-lived worker) takes neither the gate nor an eviction. Rails that hold a model resident use
-`tts_light`.
+`tts_light`. They are not alternatives to consolidate: XTTS clones a voice from a reference clip
+and returns per-segment timings for highlight-sync; Kokoro does neither.
+
+## Voice
+
+Speech in and out is a **platform capability**, not a per-rail one. The browser talks to the
+gateway, which holds the broker token and enforces the session, so no rail needs a broker client,
+a broker URL, or the token:
+
+```
+browser ──► gateway /api/platform/{tts_light,transcribe} ──► broker /v1/{tts_light,transcribe}
+            (any logged-in user; 502 on broker error)         (no GPU gate, no eviction)
+```
+
+Both broker paths call the media worker directly rather than through the gated path, so a mic
+press never queues behind a chat completion and speaking never unloads the model the user is
+talking to. That property is asserted structurally (`services/broker/tests/test_voice_ungated.py`)
+rather than by round-trip, because a round-trip passes either way.
+
+Rails consume it as chips from `@web-core`:
+
+| Component | Where | Why |
+|---|---|---|
+| `DictateButton` | a rail | Takes `onTranscript`, so the transcript goes through the rail's own state setter — no DOM write |
+| `SpeakButton` | a rail | Takes the text **explicitly**; only the rail knows which passage it means |
+| `VoiceControls` | the shell top bar | Fallback mic for rails without a chip, plus the shared voice/speed/device settings |
+
+STT is `faster-whisper` on CPU. **The model must be multilingual, never a `.en` build** — those
+silently ignore the `language` parameter and turn other languages into nonsense rather than
+erroring. Dictation deliberately has **no browser `SpeechRecognition` fallback**: that API streams
+the microphone to a cloud service, so a silent fallback would exfiltrate exactly the audio that
+must stay local. Broker down means dictation reports itself down.
 
 ## Admin
 
@@ -81,10 +112,11 @@ GPU control (cancel a job, unload, load) is admin-only.
 packages/platform_core/   Shared Python (config base, BrokerClient)
 services/broker/          GPU / Model Broker, the only thing that touches the GPU
 apps/platform/            Gateway (reverse proxy + auth + entitlements) + React shell host + Admin
-web/                      Shared @web-core design system (styles + AppShell + ModelWidget)
-rails/<name>/             The federated rail apps
+web/                      Shared @web-core design system (styles + AppShell + ModelWidget + voice)
+rails/<name>/             The federated rail apps, each declaring itself in rail.json
 deploy/                   docker-compose + Caddyfile + service-install + activate-model-roles.ps1
-docs/                     INSTALL.md (lean installer) + architecture.md
+docs/                     INSTALL.md + architecture.md + RAIL_CONTRACT.md + BACKLOG.md + schema
+tools/                    rail_conformance.py — checks every rail against its manifest
 ```
 
 ## Run it
