@@ -39,23 +39,36 @@ function AttentionRow({
   a: AttentionItem
   onStatus: (id: string, status: Status) => void
   resolved: boolean
-  /** Merged view only — in a lane view every row has the same source, so it is noise. */
+  /** True on the Top 10 view. Switches the leading icon from category to source: on a lane
+   *  view every row shares one source, so the lane glyph would be a column of identical
+   *  icons — which is exactly the problem this swap exists to fix. */
   showSource?: boolean
 }) {
   const cm = CATEGORY_META[a.category] ?? CATEGORY_META.other
   const um = URGENCY_META[a.urgency]
   const sm = a.source ? SOURCES.find((s) => s.id === a.source) : undefined
 
+  // The leading icon shows whichever field actually VARIES in the current view.
+  //
+  // It used to always be the category icon, which made it a column of identical handshakes:
+  // the synthesis prompt ranks client work above everything else and attentionRank breaks
+  // urgency ties by category with 'client' first, so a top-10 of same-day items is
+  // client-by-construction. Worse, the category was already spelled out in the chip on the
+  // right of the same row — the icon and its "Client" tooltip said nothing the badge didn't.
+  //
+  // Source is the field that genuinely differs row to row once lanes are merged, and it was
+  // buried inline before the headline. So on the Top 10 the lead is the lane; on a lane view
+  // the lane is constant and the category is the discriminating field, so it takes the slot.
+  // Category is never lost either way: the chip on the right always carries it as text.
+  const lead = showSource && sm
+    ? { icon: sm.icon, title: `Surfaced by the ${sm.label} pass` }
+    : { icon: cm.icon, title: cm.label }
+
   return (
     <div className={`cw-att u-${a.urgency}${resolved ? ' resolved' : ''}`}>
-      <span className="cw-att-icon" title={cm.label}>{cm.icon}</span>
+      <span className="cw-att-icon" title={lead.title}>{lead.icon}</span>
       <div className="cw-att-main">
         <div className="cw-att-head">
-          {showSource && sm && (
-            <span className="cw-att-src" title={`Surfaced by the ${sm.label} pass`}>
-              {sm.icon}
-            </span>
-          )}
           {renderInline(a.headline, `${a.id}-h`)}
         </div>
         {a.why && <div className="cw-att-why">{a.why}</div>}

@@ -122,7 +122,7 @@ src/prompts.example.ts  sanitised template (real prompts.ts is gitignored)
 ordered by data freshness, since insights is a weekly synthesis of the other three and never
 newer than them), a "top N of M surfaced across lanes" line so the 10-item cap accounts for
 what it holds back,
-attention count badge per lane, source badge on merged rows, "Partial pass" banner only
+attention count badge per lane, a leading icon that shows whichever field discriminates in the current view (source lane on Top 10, category on a lane view — it was always the category, which made it a column of identical handshakes since client work is ranked first by construction and the category was already on the row as a chip), "Partial pass" banner only
 on genuine context truncation (not deliberate noise filtering), failed-source warning,
 re-synthesize button (single lane or all), auto-refresh on staleness.
 
