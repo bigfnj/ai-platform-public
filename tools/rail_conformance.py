@@ -697,6 +697,57 @@ def rc014(m: Manifest, _all: list[Manifest]) -> list[Finding]:
     return out
 
 
+@rule("RC015", "A rail with a status_route polls it, so its chips cannot freeze.")
+def rc015(m: Manifest, _all: list[Manifest]) -> list[Finding]:
+    """The four states describe LIVE residency, and residency changes with nobody touching
+    the UI: the broker evicts on a keep_alive expiry, and asking a question warms a model
+    back up. So a one-shot fetch on mount renders a state that is right for about a second
+    and silently wrong afterwards.
+
+    That is not hypothetical. smb-partner fetched /api/capabilities once in a mount effect
+    with an empty dep array and never again, so its chips sat on `cold` for a model that was
+    loaded and actively answering — while the shell's own top-bar widget, which does poll,
+    correctly showed it resident. Every other rule here passed on that rail, because the
+    payload SHAPE was perfect. Liveness is a property of the caller, not the envelope, so no
+    amount of shape-checking would ever have caught it.
+
+    Deliberately narrow. It looks at the files that touch the status route (directly or via
+    an accessor exported from the rail's api module) and only complains when NOT ONE of them
+    sets an interval. A rail that polls by some other mechanism, or whose fetch site this
+    misses, is a silent pass — a false negative, which is the side to err on.
+    """
+    route = str(m.data.get("status_route") or "")
+    if not route:
+        return []
+    srcs = {p: read(p) for p in m.ts_sources()}
+    if not srcs:
+        return []
+
+    # The accessor(s) wrapping the route — typically one export in api.ts.
+    accessors: set[str] = set()
+    for src in srcs.values():
+        for hit in re.finditer(
+            rf"export\s+(?:const|function)\s+(\w+)[^\n]*{re.escape(route)}", src
+        ):
+            accessors.add(hit.group(1))
+
+    # Every file that either names the route or calls one of its accessors. The polling has
+    # to live in one of them.
+    touching = {
+        p for p, src in srcs.items()
+        if route in src or any(re.search(rf"\b{a}\s*\(", src) for a in accessors)
+    }
+    if not touching:
+        return []
+    if any("setInterval" in srcs[p] for p in touching):
+        return []
+    where = sorted(touching, key=lambda p: (p.name != "module.tsx", str(p)))[0]
+    return [F("RC015", m, f"fetches {route} but nothing sets an interval, so the chips "
+                          f"render their page-load state forever — a model that loads "
+                          f"afterwards keeps reporting the state it had at mount",
+              rel(where))]
+
+
 # --- runner ----------------------------------------------------------------
 
 

@@ -153,6 +153,23 @@ inventory — the same route name as the chip endpoint, meaning something entire
 had no callers anywhere in the repo, so it now serves the chip contract like every other rail's
 and the inventory moved to `/api/broker/models`. One fewer name meaning two things.
 
+#### Liveness — RC015
+
+**The payload being right is only half of it. The rail has to keep asking.** The four states
+describe residency *right now*, and residency changes with nobody touching the UI: the broker
+evicts on a `keep_alive` expiry, and asking a question warms a model back up. A one-shot fetch in
+a mount effect renders a state that is correct for about a second and silently wrong from then on.
+
+smb-partner shipped exactly that: `getCapabilities()` in a `useEffect` with an empty dep array and
+no interval. Its chips sat on `cold` for a model that was loaded and actively answering, while the
+shell's own top-bar widget — which does poll — correctly showed it resident. **Every other rule
+here passed on that rail**, because the envelope shape was perfect. Liveness is a property of the
+caller, not the payload, so no amount of shape-checking would have found it.
+
+Poll the status route on a **6 s** interval, and clear it on unmount. That cadence matches the
+shell's own status polling, and the warming window is ~7 s on this box, so an orange transition is
+actually visible rather than stepped over.
+
 ### Ports — RC002, RC009
 
 Backend and dev ports are unique across **every** rail in the tree, manifested or not. Checking

@@ -388,9 +388,23 @@ export default function SmbPartnerModule() {
   const [caps, setCaps] = useState<Capabilities | null>(null)
   const [preview, setPreview] = useState(false)
 
+  // Poll the capabilities payload — the chips are derived from live residency, which changes
+  // on its own: the broker evicts on a keep_alive expiry, and asking a question warms the
+  // model back up. A one-shot fetch on mount froze the chips at page-load state, so a model
+  // that loaded afterwards (i.e. the moment you actually used the rail) kept reporting `cold`
+  // forever while the shell's own top-bar widget correctly showed it resident. 6s matches the
+  // cadence co-worker, terminal-fun, gemini-cx and recipe-book already use, and the warming
+  // window is ~7s on this box, so a transition is visible rather than skipped over.
   useEffect(() => {
-    getCapabilities().then(setCaps).catch(() => setCaps(null))
-    return () => stopSpeaking()
+    let live = true
+    const tick = () => {
+      getCapabilities()
+        .then((d) => { if (live) setCaps(d) })
+        .catch(() => { if (live) setCaps(null) })
+    }
+    tick()
+    const id = window.setInterval(tick, 6000)
+    return () => { live = false; window.clearInterval(id); stopSpeaking() }
   }, [])
 
   return (
