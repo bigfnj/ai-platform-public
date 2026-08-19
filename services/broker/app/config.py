@@ -123,17 +123,28 @@ class BrokerSettings(BaseSettings):
     media_voices_dir: str = ""
     # Kokoro ONNX model file (kokoro-v1.0.fp16-gpu.onnx for DirectML, etc.).
     #
-    # ON A SMALL CARD, PREFER A CPU BUILD. "No eviction" is a property of this code — tts_light
-    # never calls _evict_other_heavy — but it is not a promise the hardware always keeps. The
-    # fp16-gpu model runs through onnxruntime's DirectML provider and therefore allocates VRAM,
-    # and measured on an 8 GB laptop GPU shared with the Windows desktop (2.6–7.2 GB consumed by
-    # the desktop alone), a COLD Kokoro session was enough to make Ollama drop a resident 3 GB
-    # model. A warm session was not: the same model survived a 6.7 s warm synthesis untouched,
-    # while the 39 s cold load evicted it.
+    # DESPITE THE FILENAME, THIS RUNS ON CPU — and that is not a misconfiguration.
+    # kokoro-onnx passes onnxruntime's full provider list to InferenceSession, so DirectML is
+    # *offered* on this box, but the session falls back to CPUExecutionProvider because DML
+    # cannot execute this graph at all: forcing ONNX_PROVIDER=DmlExecutionProvider raises
+    #   RUNTIME_EXCEPTION ... ConvTranspose node '/encoder/F0.1/pool/ConvTranspose'
+    #   DmlExecutionProvider ... 80070057 The parameter is incorrect
+    # The silent fallback is therefore ORT doing the right thing. Verified by reading
+    # sess.get_providers(), which reports CPUExecutionProvider with and without the override.
     #
-    # So on an 8 GB box, point this at a CPU/fp32 Kokoro build so speech never competes for the
-    # card — the same reasoning that already puts whisper on CPU/int8 below. Kokoro is 82M
-    # params; CPU synthesis is viable. On a 24 GB card the GPU build is free and faster.
+    # Two consequences worth knowing before tuning anything:
+    #
+    # 1. Kokoro consumes NO VRAM here, so speech cannot be the cause of a model eviction. If a
+    #    resident model disappears around a TTS call on a small card, look at what else is using
+    #    the GPU (on the dev box the Windows desktop alone swung between 2.6 and 7.2 GB of an
+    #    8 GB card) rather than at this path. tts_light never calls _evict_other_heavy.
+    #
+    # 2. An fp16 file is the WRONG build for a CPU-only path — CPU has to convert every weight.
+    #    Measured on the dev box: 9.7 s to synthesise 4.3 s of audio (RTF 2.25x, i.e. slower
+    #    than real time), which is poor for interactive read-aloud. If TTS latency matters,
+    #    point this at an int8 or fp32 CPU Kokoro build rather than at this GPU-tuned one.
+    #    Switching to "a CPU model" to save VRAM would be pointless; switching to one for
+    #    SPEED is the real win.
     kokoro_model_path: str = ""
     # Kokoro voices embedding file (voices-v1.0.bin).
     kokoro_voices_path: str = ""
