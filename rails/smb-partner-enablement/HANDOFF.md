@@ -6,10 +6,23 @@ the context that is not obvious from the code.
 
 ## Where it stands
 
-Working end to end on a dev server: six scenarios, a 67-file sourced corpus across 13 collections
-(~1,050 chunks), grounded generation with a live reasoning trace. **Not deployed** — it is not in
-`PLATFORM_ENABLED_APPS`, so it does not appear at `localhost:1111`. Nobody but the author has
-used it.
+> **Updated 2026-08-18.** The three "where to pick up" items below are all **done**: the rail is
+> deployed, the mobile surface is wired, and voice runs server-side in **both** directions. The
+> rest of this file is still accurate context; treat the "Where to pick up" section as history.
+
+Working end to end and **deployed at `localhost:1111`** behind the entitlement gate: six
+scenarios, a 67-file sourced corpus across 13 collections (~1,050 chunks), grounded generation
+with a live reasoning trace, a standalone mobile SPA at `/smb-partner-enablement/m/`, and
+server-side voice — **Kokoro-82M** out (`/v1/tts_light`, backing *Read aloud* via `/api/speak`)
+and **faster-whisper** in (`/v1/transcribe` via `/api/transcribe`). Both take no GPU gate and
+evict nothing.
+
+**The one non-obvious thing about speech input:** it is server-side because it *had* to be, not
+only for privacy. The browser's `SpeechRecognition` has no device API — it always listens to the
+OS default input, so the rail's own microphone picker could never steer it, and choosing a headset
+produced a silent recording and a `no-speech` error. `getUserMedia({ deviceId })` + `MediaRecorder`
++ broker STT is the only arrangement where the picker means anything. Do not "simplify" it back to
+Web Speech.
 
 ## How to run it
 
@@ -73,9 +86,32 @@ is the highest-consequence code in the rail and it currently has no test.
 
 ## Where to pick up
 
-In the order I would do it: **deploy it** (nobody can reach it), then **mobile** (Dan's second
-pillar, and the surface where voice actually matters), then **Kokoro** (biggest jump in demo feel,
-largest infrastructure risk). Detail for each is in `BACKLOG.md`.
+**All three items below shipped on 2026-08-18** — kept for the reasoning, not as a task list.
+The current list is in `BACKLOG.md`; the top open item is the **warm media worker**, which now
+matters twice as much because both voice directions pay the subprocess cold-start (of a 4.8s STT
+round trip, only ~1.7s is actual transcription).
+
+*Original note:* in the order I would do it: **deploy it** (nobody can reach it), then **mobile**
+(Dan's second pillar, and the surface where voice actually matters), then **Kokoro** (biggest jump
+in demo feel, largest infrastructure risk). Detail for each is in `BACKLOG.md`.
+
+## Deploy loop — the trap that cost hours
+
+`build` **silently reuses stale layers here**. Four consecutive gateway builds printed
+`Successfully built` while every step said `Using cache`, including the `COPY` of a frontend file
+that had demonstrably changed — so none of the fixes reached the browser, and because the layer
+was cached `tsc` never re-ran either. A green build proved nothing.
+
+Use `--no-cache` on build and `--force-recreate` on up (`up -d` can print `Running` and skip the
+swap entirely). **Each rail is two containers** — the gateway carries the frontend, the rail
+backend is separate and behind its own `--profile`; a new endpoint needs both. Then verify inside
+the *running* container rather than trusting the log:
+
+```bash
+podman exec platform-gateway-1 sh -c 'grep -rlF "/api/transcribe" /app/dist/smb-partner-enablement'
+```
+
+Grep for a literal that survives minification (a route, a CSS class); identifier names get mangled.
 
 ## Unrelated change carried in
 
