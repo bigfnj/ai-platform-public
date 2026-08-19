@@ -267,8 +267,23 @@
   z-index: 10;
 }
 
+/* --- rail head: logo · titles · controls, matching every other rail -------- */
+.smbp .smbp-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 4px 16px;
+}
+.smbp .smbp-logo { font-size: 26px; line-height: 1; }
+.smbp .smbp-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.smbp .smbp-titles h1 { font-size: 19px; margin: 0; }
+.smbp .smbp-sub { color: var(--muted); font-size: 12.5px; max-width: 62ch; }
+/* Pushes the audio pickers to the right edge without pinning them, so they wrap under the
+   title on a narrow rail instead of colliding with it. */
+.smbp .smbp-spacer { flex: 1; }
+
 /* --- audio device pickers (inside SMB rail header, not fixed) ------------ */
-.smbp header { display: flex; align-items: center; justify-content: space-between; }
 /* Recording is user-terminated, so the button has to read as armed, not merely active. */
 .smbp button.recording {
   border-color: #dc2626;

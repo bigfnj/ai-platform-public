@@ -384,14 +384,22 @@ export default function SmbPartnerModule() {
 
   return (
     <div className="smbp">
-      <header>
-        {/* Chips sit UNDER the bold title, not beside it — the layout every rail now shares
-            (co-worker, terminal-fun, gemini-cx). minWidth:0 lets the chip row wrap instead of
-            forcing the header wider than its container. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-          <h2 style={{ margin: 0 }}>SMB Partner Enablement</h2>
+      {/* logo · titles · status, then the rail's own controls pushed right — the head shape
+          every rail shares (co-worker, terminal-fun, gemini-cx). The 🤝 is this rail's
+          catalog.py icon, so the header matches the sidebar item that opened it. Chips sit
+          UNDER the bold title; minWidth:0 lets the chip row wrap instead of forcing the
+          header wider than its container. */}
+      <header className="smbp-head">
+        <span className="smbp-logo" aria-hidden="true">🤝</span>
+        <div className="smbp-titles">
+          <h1>SMB Partner Enablement</h1>
+          <span className="smbp-sub">
+            A two-minute meeting kit for Microsoft SMB partners — grounded only in curated
+            SME material, every claim cited
+          </span>
           <AiStatus caps={caps} />
         </div>
+        <span className="smbp-spacer" />
         <AudioDevicePicker />
       </header>
       <div className="tabs" role="tablist">
