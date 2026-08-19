@@ -346,6 +346,10 @@ input.cw-check { accent-color: var(--ac); width: 15px; height: 15px; cursor: poi
   font-size: 11px; font-weight: 700; color: var(--ink);
   background: var(--s2); border: 1px solid var(--bd); border-radius: 999px; padding: 1px 8px;
 }
+/* The "top 10 of 24" line beside a section count. Normal weight and muted so it reads as an
+   explanation of the badge rather than competing with it. */
+.cw-block-sub { margin-left: 10px; font-size: 11.5px; font-weight: 500; color: var(--mut);
+  letter-spacing: 0; text-transform: none; }
 .cw-block-list {
   margin: 0; padding: 0; list-style: none;
   display: flex; flex-direction: column; gap: 6px;

@@ -158,7 +158,7 @@ export default function BriefView({
 
   const qs = lens === 'all' ? '' : `?source=${lens}`
   const lensLabel = lens === 'all'
-    ? 'Merged'
+    ? 'Top 10'
     : SOURCES.find((s) => s.id === lens)?.label ?? lens
 
   const load = useCallback(() => {
@@ -232,6 +232,16 @@ export default function BriefView({
     (a) => (triaged[a.id] ?? 'open') === 'open',
   ).length
 
+  // How many attention items the lane passes surfaced in total. The merged view ranks those and
+  // keeps ten, so without this number the page shows 10 while the lane tabs add up to 24 and
+  // nothing accounts for the difference — the arithmetic that made "Merged" read as a lie.
+  //
+  // Deliberately phrased as "surfaced across lanes" rather than "10 of 24": the merge de-dupes
+  // by item id before capping, so some of the gap is duplicates removed, not items ranked out.
+  // Claiming 14 were outranked would be a more precise number and a less true statement.
+  const laneTotal = Object.values(passes).reduce((n, p) => n + (p.attention ?? 0), 0)
+  const heldBack = lens === 'all' && laneTotal > attention.length
+
   return (
     <div className="cw-brief">
       <div className="cw-brief-bar">
@@ -259,22 +269,25 @@ export default function BriefView({
           onClick={refresh}
           disabled={busy}
           title={lens === 'all'
-            ? 'One pass per source, then rebuild the merged brief'
+            ? 'One pass per source, then re-rank them into the Top 10'
             : `Re-run only the ${lensLabel} pass`}
         >
           {busy ? 'Synthesizing…' : lens === 'all' ? '⟳ Re-synthesize all' : `⟳ Re-synthesize ${lensLabel}`}
         </button>
       </div>
 
-      {/* One lens per synthesis pass. The merged view is the top 10 across every lane;
-          a lane view is everything that lane's pass surfaced, which is where an item
-          ranked 11th overall is still findable. */}
+      {/* One lens per synthesis pass, plus the cross-lane pick. That pick was labelled
+          "Merged", which described how it is BUILT (fold the lane passes together) rather than
+          what you get, and invited the reasonable arithmetic "four lanes of six, so twenty-four
+          cards" — when it is hard-capped at ten by _merge_briefs. "Top 10" says the actual
+          thing. A lane view is everything that lane's pass surfaced, which is where an item
+          ranked 11th overall is still findable; the header says how many that is. */}
       <div className="cw-brief-lens">
         <button
           className={`cw-tab${lens === 'all' ? ' on' : ''}`}
           onClick={() => setLens('all')}
         >
-          ★ Merged
+          ★ Top 10
         </button>
         {SOURCES.map((s) => {
           const p = passes[s.id]
@@ -344,6 +357,12 @@ export default function BriefView({
             <h2>
               <span>🎯</span> Needs your attention{' '}
               <span className="cw-block-n">{openCount}</span>
+              {heldBack && (
+                <span className="cw-block-sub">
+                  top {attention.length} of {laneTotal} surfaced across{' '}
+                  {Object.keys(passes).length} lanes — open a lane for the rest
+                </span>
+              )}
             </h2>
             {attention.length === 0 ? (
               <p className="cw-sub">

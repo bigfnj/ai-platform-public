@@ -300,9 +300,14 @@ export function attentionRank(a: AttentionItem): number {
 
 // --- display metadata -------------------------------------------------------
 
+// Lens tabs, ordered by how FRESH each lane's data is rather than alphabetically, so the
+// staleness gradient reads left to right instead of being invisible: email is harvested daily,
+// calendar weekly, teams monthly, and insights is a weekly synthesis OF the other three (a
+// separate scheduled task on the host) — two derivations from source data and never newer than
+// the lanes it summarises. See the harvest-loop table in the rail README.
 export const SOURCES: { id: Source; label: string; icon: string }[] = [
-  { id: 'calendar', label: 'Calendar', icon: '📅' },
   { id: 'email', label: 'Email', icon: '✉️' },
+  { id: 'calendar', label: 'Calendar', icon: '📅' },
   { id: 'teams', label: 'Teams', icon: '💬' },
   { id: 'insights', label: 'Insights', icon: '🧭' },
 ]

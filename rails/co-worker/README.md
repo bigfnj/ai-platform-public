@@ -118,7 +118,10 @@ src/module.tsx       the all-items dashboard
 src/prompts.example.ts  sanitised template (real prompts.ts is gitignored)
 ```
 
-**Brief view features:** lens tabs (★ Merged / Email / Calendar / Teams / Insights),
+**Brief view features:** lens tabs (★ Top 10 / Email / Calendar / Teams / Insights — lanes
+ordered by data freshness, since insights is a weekly synthesis of the other three and never
+newer than them), a "top N of M surfaced across lanes" line so the 10-item cap accounts for
+what it holds back,
 attention count badge per lane, source badge on merged rows, "Partial pass" banner only
 on genuine context truncation (not deliberate noise filtering), failed-source warning,
 re-synthesize button (single lane or all), auto-refresh on staleness.
