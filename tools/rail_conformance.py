@@ -694,11 +694,19 @@ def load_manifests() -> tuple[list[Manifest], list[Finding]]:
 
 def unmanifested_rails() -> list[str]:
     """Rail directories with a frontend but no manifest — in the tree yet outside the
-    contract, which is the state every drift so far started from."""
+    contract, which is the state every drift so far started from.
+
+    An empty directory skeleton is not a rail. `rails/bouquet/` is a gitignored local scaffold:
+    every subdirectory, zero files. Reporting it as "outside the contract" is noise, and noise
+    is how a report stops being read — so require at least one actual file.
+    """
     out = []
     for d in sorted(RAILS.iterdir()):
-        if d.is_dir() and not (d / "rail.json").is_file() and (d / "frontend").is_dir():
-            out.append(d.name)
+        if not d.is_dir() or (d / "rail.json").is_file() or not (d / "frontend").is_dir():
+            continue
+        if not any(p.is_file() for p in d.rglob("*")):
+            continue
+        out.append(d.name)
     return out
 
 
