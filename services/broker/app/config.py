@@ -122,6 +122,18 @@ class BrokerSettings(BaseSettings):
     # XTTS reference voice clips (english_reference.wav / spanish_reference.wav).
     media_voices_dir: str = ""
     # Kokoro ONNX model file (kokoro-v1.0.fp16-gpu.onnx for DirectML, etc.).
+    #
+    # ON A SMALL CARD, PREFER A CPU BUILD. "No eviction" is a property of this code — tts_light
+    # never calls _evict_other_heavy — but it is not a promise the hardware always keeps. The
+    # fp16-gpu model runs through onnxruntime's DirectML provider and therefore allocates VRAM,
+    # and measured on an 8 GB laptop GPU shared with the Windows desktop (2.6–7.2 GB consumed by
+    # the desktop alone), a COLD Kokoro session was enough to make Ollama drop a resident 3 GB
+    # model. A warm session was not: the same model survived a 6.7 s warm synthesis untouched,
+    # while the 39 s cold load evicted it.
+    #
+    # So on an 8 GB box, point this at a CPU/fp32 Kokoro build so speech never competes for the
+    # card — the same reasoning that already puts whisper on CPU/int8 below. Kokoro is 82M
+    # params; CPU synthesis is viable. On a 24 GB card the GPU build is free and faster.
     kokoro_model_path: str = ""
     # Kokoro voices embedding file (voices-v1.0.bin).
     kokoro_voices_path: str = ""
