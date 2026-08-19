@@ -27,7 +27,14 @@ POST /v1/load        {"model": "...", "keep_alive": -1}  -> evicts other heavy m
 POST /v1/unload      {"model": "..."}
 POST /v1/chat        {"model": "...", "messages": [{"role":"user","content":"hi"}]}
 POST /v1/embed       {"model": "bge-m3", "input": "text or [texts]"}
+POST /v1/tts_light   {"text": "..."}       -> Kokoro-82M WAV; no gate, no eviction
+POST /v1/transcribe  {"audio_b64": "..."}  -> faster-whisper text; no gate, CPU/int8
 ```
+
+`tts_light` and `transcribe` deliberately bypass the VRAM policy below. Both are small enough
+to coexist with a resident heavy model, and voice is the one path where an eviction-induced
+model swap per utterance would be worse than the work itself. See `.env.example` for the
+`BROKER_KOKORO_*` / `BROKER_WHISPER_*` settings and the media-venv requirement.
 
 ## Smoke test
 
