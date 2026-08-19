@@ -1679,3 +1679,67 @@ textarea { resize: vertical; }
 .tm-swatch[data-pal='github'] { background: linear-gradient(120deg, #58a6ff, #a371f7); }
 .tm-swatch[data-pal='abyss'] { background: linear-gradient(120deg, #3d8fd1, #7752a6); }
 .tm-swatch[data-pal='kimbie'] { background: linear-gradient(120deg, #d3af86, #b1642e); }
+
+/* --- voice: platform-wide dictation + read-aloud ----------------------------
+   Colours come from the SEMANTIC tokens (--critical / --good / --muted), never literals, so
+   the recording state reads identically on all 63 palettes. "Listening" is the only state
+   that moves, for the same reason the model chips only animate on 'warming': motion should
+   mean something is happening right now. */
+
+.voice-wrap { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+
+.voice-mic, .voice-gear, .dictate-btn, .speak-btn {
+  font: inherit; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 9px; border-radius: 8px;
+  border: 1px solid var(--border); background: transparent; color: var(--text-primary);
+}
+.voice-mic:hover, .voice-gear:hover, .dictate-btn:hover, .speak-btn:hover {
+  border-color: var(--accent);
+}
+.voice-mic:disabled, .dictate-btn:disabled, .speak-btn:disabled {
+  opacity: 0.45; cursor: not-allowed; border-color: var(--border);
+}
+
+/* Recording. Critical rather than accent: a hot microphone is a state a user must never be
+   unsure about, so it must not blend into whatever the palette accent happens to be. */
+.voice-mic.on, .dictate-btn.on {
+  background: var(--critical); color: #fff; border-color: transparent;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+.speak-btn.on { background: var(--good); color: #fff; border-color: transparent; }
+.voice-mic.busy, .dictate-btn.busy, .speak-btn.busy { color: var(--muted); }
+@keyframes voice-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.voice-gear { padding: 5px 7px; color: var(--text-secondary); }
+.dictate-lbl, .speak-lbl { font-size: 12px; font-weight: 600; }
+
+.voice-err {
+  max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; color: var(--critical);
+}
+
+.voice-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  min-width: 290px; padding: 12px 14px;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.voice-row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary); }
+.voice-row select, .voice-row input[type='range'] { font: inherit; min-width: 0; }
+/* Style the ELEMENT, not just the wrapper: `.voice-row select` alone leaves the control on the
+   browser's default grey (THEMING.md rule 5). */
+.voice-pop select {
+  padding: 4px 6px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary);
+}
+.voice-row em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--muted); }
+.voice-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--muted); }
+.voice-stop {
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 5px 10px; border-radius: 8px; align-self: flex-start;
+  border: 1px solid var(--border); background: transparent; color: var(--text-primary);
+}
+.voice-stop:hover { border-color: var(--accent); }

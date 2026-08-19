@@ -30,7 +30,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, WebSocket
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from websockets.asyncio.client import connect as ws_connect
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -371,6 +371,59 @@ async def platform_status(user: User = Depends(require_user)) -> dict[str, Any]:
 async def platform_models(user: User = Depends(require_user)) -> Any:
     try:
         return await app.state.broker.models()
+    except BrokerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+# --- voice: a PLATFORM capability, not a per-rail one ------------------------
+# Speech in and out are proxied here rather than implemented in any rail, so every rail gets
+# them for free and none needs a broker client, a broker URL, or the broker token. The gateway
+# already holds that token; a rail asking the browser to reach the broker directly would either
+# expose it or need its own copy.
+#
+# Gated on ANY logged-in user, deliberately not admin-only: dictation and read-aloud are
+# ordinary interaction, and an accessibility affordance behind an admin check is no affordance.
+# Both broker paths are ungated and non-evicting (see BrokerClient.tts_light / .transcribe), so
+# neither can queue behind a chat completion or unload a resident model.
+
+
+class TtsLightBody(BaseModel):
+    # 8k chars is a long read-aloud and a hard ceiling on how much work one request can ask
+    # the media worker for; the browser chunks anything larger.
+    text: str = Field(min_length=1, max_length=8000)
+    # Voice and language travel together or not at all — a Spanish voice under the English
+    # phonemiser is noise. Omit both to take the platform default (BROKER_KOKORO_VOICE).
+    voice: str | None = None
+    lang_code: str | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=2.0)
+
+
+class TranscribeBody(BaseModel):
+    # ~15 MB of base64 is a couple of minutes of audio: far past any single dictated phrase,
+    # and bounded so a stuck recorder cannot post an unbounded body.
+    audio_b64: str = Field(min_length=1, max_length=15_000_000)
+    suffix: str | None = None
+    language: str | None = None
+
+
+@app.post("/api/platform/tts_light")
+async def platform_tts_light(body: TtsLightBody, user: User = Depends(require_user)) -> Any:
+    """Kokoro speech for any rail. Returns {audio_b64, sample_rate, voice, lang}."""
+    try:
+        return await app.state.broker.tts_light(
+            body.text, voice=body.voice, lang_code=body.lang_code, speed=body.speed
+        )
+    except BrokerError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/platform/transcribe")
+async def platform_transcribe(body: TranscribeBody, user: User = Depends(require_user)) -> Any:
+    """faster-whisper dictation for any rail. Returns {text, language, duration, model}."""
+    try:
+        return await app.state.broker.transcribe(
+            body.audio_b64, suffix=body.suffix, language=body.language
+        )
     except BrokerError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

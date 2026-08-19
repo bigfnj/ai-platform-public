@@ -17,7 +17,14 @@ and what had to change.
 |---|---|---|---|---|
 | Reasoning / RAG | `@smb-partner-rag` | `llama3.2:3b` | heavy | yes, `keep_alive=30m` |
 | Retrieval | `@embed` | `bge-m3` | embed | yes, always |
-| Voice | `@smb-partner-voice` | Kokoro-82M | media | see below |
+| Voice | *(no role — platform capability)* | Kokoro-82M | media | see below |
+
+The voice row deliberately has no `@role`. Voice is served platform-wide by the broker's
+`/v1/tts_light`, and the default speaker is a broker setting (`BROKER_KOKORO_VOICE`), so it
+is changeable for every rail at once without a rebuild. There was once an
+`@smb-partner-voice` role here that resolved to `kokoro` — the only light TTS backend — so
+it could not select anything, nothing read it, and the Admin → Rails panel excludes TTS by
+design. It has been removed rather than wired up.
 
 Note there are really **three** models, not two. The original counted the LLM and the TTS; it
 had no RAG corpus, so it had no embedder. This rebuild does, which is the whole point of

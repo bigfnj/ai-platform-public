@@ -8,6 +8,7 @@
 // a schema-version mismatch and any file the backend couldn't parse both surface as
 // visible warnings, because silent degradation is the failure mode that matters here.
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DictateButton } from '@web-core'
 import { getJSON, patchJSON } from './api'
 import { renderInline, renderMarkdown } from './markdown'
 import BriefView from './BriefView'
@@ -606,6 +607,14 @@ export default function CoWorkerModule() {
             placeholder="Search…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+          />
+          {/* Platform dictation, via the shared chip. The transcript arrives as a CALLBACK and
+              goes through this rail's own setQ, so there is no DOM write and nothing to
+              reconcile with React — the state is updated exactly as if it had been typed. The
+              shell's top-bar mic is a fallback for rails that have not adopted a chip. */}
+          <DictateButton
+            onTranscript={(text) => setQ((prev) => (prev ? `${prev} ${text}` : text))}
+            title="Dictate a search"
           />
 
           <select className="cw-select" value={type} onChange={(e) => setType(e.target.value)}>

@@ -190,7 +190,9 @@ export function AppShell({
 }) {
   return (
     <div className="pshell">
-      <nav className="app-rail" aria-label="Apps">
+      {/* data-voice-ignore: shell chrome is never a dictation target. Without it, the
+          mic would happily type into the nav's own controls. */}
+      <nav className="app-rail" aria-label="Apps" data-voice-ignore>
         {onBrandClick ? (
           <button
             className={`rail-brand rail-brand-btn ${brandActive ? 'on' : ''}`}
@@ -216,7 +218,7 @@ export function AppShell({
           </button>
         ))}
       </nav>
-      <header className="ptopbar">
+      <header className="ptopbar" data-voice-ignore>
         <span className="app-title">{title}</span>
         <span className="spacer" />
         {topbarExtra}

@@ -4,6 +4,7 @@
 // Attention items carry an `id` pointing back at an inbox item, so Done/Dismiss
 // hits the same PATCH endpoint the card grid uses and the two views stay in sync.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { SpeakButton } from '@web-core'
 import { getJSON, postJSON } from './api'
 import { renderInline, renderMarkdown } from './markdown'
 import {
@@ -361,7 +362,14 @@ export default function BriefView({
         <>
           {brief.client_pulse && (
             <section className="cw-pulse">
-              <h2>🤝 Client pulse</h2>
+              <h2>
+                🤝 Client pulse
+                {/* Read-aloud takes the text EXPLICITLY: this rail knows the pulse paragraph is
+                    the thing worth hearing, which a shell-level "read the page" button could
+                    only guess at — it would recite the nav and the lens tabs too. Markdown is
+                    flattened by the shared speakable(). */}
+                <SpeakButton text={brief.client_pulse} className="cw-speak" />
+              </h2>
               <p>{renderInline(brief.client_pulse, 'pulse')}</p>
             </section>
           )}

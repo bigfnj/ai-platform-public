@@ -31,7 +31,7 @@ ROLE_RAIL = {
     "recipe": "Recipe Book", "recipe-vision": "Recipe Book", "recipe-icon": "Recipe Book",
     "terminal-fun": "Terminal Fun",
     "ai-playground": "AI Playground",
-    "smb-partner-rag": "SMB Partner Enablement", "smb-partner-voice": "SMB Partner Enablement",
+    "smb-partner-rag": "SMB Partner Enablement",
     "gemini-cx-rag": "Gemini CX",
 }
 
@@ -363,23 +363,34 @@ class Broker:
                 "Kokoro model paths not configured "
                 "(set BROKER_KOKORO_MODEL_PATH and BROKER_KOKORO_VOICES_PATH)"
             )
+        # Defaults come from broker settings, so the platform voice is changeable for everyone
+        # without touching a rail. Voice and language resolve TOGETHER: a caller naming only a
+        # voice would otherwise get it phonemised by the default language, and a Spanish voice
+        # under lang_code 'a' is noise rather than an accent.
+        use_voice = voice or self.settings.kokoro_voice
+        use_lang = lang_code or self.settings.kokoro_lang_code
         spec: dict[str, Any] = {
             "op": "kokoro_tts",
             "text": text,
             "model_path": self.settings.kokoro_model_path,
             "voices_path": self.settings.kokoro_voices_path,
+            "voice": use_voice,
+            "lang_code": use_lang,
         }
-        if voice:
-            spec["voice"] = voice
-        if lang_code:
-            spec["lang_code"] = lang_code
+        # Omitted rather than sent as null when unset: a key that is present and meaningless
+        # invites a caller to think it was honoured.
         if speed is not None:
             spec["speed"] = speed
-        return await media.run_media_job(
-            python_exe=self.settings.media_python,
+        out = await media.run_media_job(
+            python_exe=self.settings.media_python_for("kokoro_tts"),
             spec=spec,
             timeout=self.settings.media_timeout,
         )
+        # Echo what was actually used. A caller that passed nothing otherwise has no way to know
+        # which voice it got, which makes "why does it sound different there" unanswerable.
+        out.setdefault("voice", use_voice)
+        out.setdefault("lang", use_lang)
+        return out
 
     async def transcribe(
         self,
@@ -406,11 +417,16 @@ class Broker:
             spec["suffix"] = suffix
         if language:
             spec["language"] = language
-        return await media.run_media_job(
-            python_exe=self.settings.media_python,
+        out = await media.run_media_job(
+            python_exe=self.settings.media_python_for("transcribe"),
             spec=spec,
             timeout=self.settings.media_timeout,
         )
+        # Report which model produced the text. Whisper builds differ in ways that are invisible
+        # in the output but decisive in interpreting it — a '.en' build silently ignores the
+        # language parameter — so a caller debugging a bad transcript needs this named.
+        out.setdefault("model", self.settings.whisper_model)
+        return out
 
     # --- media (gated; VRAM reclaimed by the worker process exiting) ---------
 

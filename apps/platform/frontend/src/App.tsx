@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { AppShell, Button, ModelWidget, platformApi } from '@web-core'
+import { AppShell, Button, ModelWidget, VoiceControls, platformApi } from '@web-core'
 import type { AppEntry, Me, PlatformStatus, Theme, ThemeState } from '@web-core'
 import Login from './Login'
 import AdminPage from './AdminPage'
@@ -368,6 +368,13 @@ export default function App() {
       }}
       topbarExtra={
         <>
+          {/* FALLBACK dictation, mounted once. The primary path is a per-rail DictateButton
+              chip, which hands the transcript to the rail's own state setter and so never
+              writes into a field it does not own. This mic exists for rails that have not
+              adopted a chip: it fakes typing into whichever field has focus, which works only
+              because federated remotes share this document — and needs four workarounds to
+              survive React's value tracker (see VoiceControls). Prefer the chip. */}
+          <VoiceControls />
           <ModelWidget
             status={status}
             busy={busy}

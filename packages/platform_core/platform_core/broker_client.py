@@ -144,6 +144,62 @@ class BrokerClient:
             payload["negative_prompt"] = negative_prompt
         return await self._request("POST", "/v1/image", json=payload)
 
+    async def tts_light(
+        self,
+        text: str,
+        *,
+        voice: str | None = None,
+        lang_code: str | None = None,
+        speed: float | None = None,
+    ) -> dict[str, Any]:
+        """Kokoro-82M speech. Returns {"audio_b64", "sample_rate", "voice", "lang"}.
+
+        This is the path platform-wide voice runs on, and the reason is structural: unlike
+        ``tts()`` below it takes neither the GPU gate nor an eviction, so it can be called
+        mid-conversation from any rail without queueing behind a chat completion or unloading
+        the model the user is talking to.
+
+        Every argument is optional. Omitted voice/lang resolve from the broker's own settings
+        (BROKER_KOKORO_VOICE / BROKER_KOKORO_LANG_CODE), which is what makes the platform voice
+        changeable for everyone without redeploying a caller. The response echoes what was
+        actually used.
+
+        Pass voice and lang_code TOGETHER or not at all: Kokoro voice ids are language-scoped by
+        prefix, so a Spanish voice under the English phonemiser produces noise, not an accent.
+        """
+        payload: dict[str, Any] = {"text": text}
+        if voice:
+            payload["voice"] = voice
+        if lang_code:
+            payload["lang_code"] = lang_code
+        if speed is not None:
+            payload["speed"] = speed
+        return await self._request("POST", "/v1/tts_light", json=payload)
+
+    async def transcribe(
+        self,
+        audio_b64: str,
+        *,
+        suffix: str | None = None,
+        language: str | None = None,
+    ) -> dict[str, Any]:
+        """faster-whisper speech-to-text. Returns {"text", "language", "duration", "model"}.
+
+        Runs CPU/int8 in the media worker, so it is off the card entirely: it neither evicts the
+        resident model nor waits behind GPU work. That matters more here than for TTS — the user
+        has just stopped speaking and is watching for their words to appear.
+
+        ``language`` is a hint (e.g. "es"); leave it unset to let whisper detect. It is only
+        honoured by a MULTILINGUAL model — an English-only ``.en`` build ignores it silently and
+        returns English-shaped nonsense, which is why the broker default is guarded by a test.
+        """
+        payload: dict[str, Any] = {"audio_b64": audio_b64}
+        if suffix:
+            payload["suffix"] = suffix
+        if language:
+            payload["language"] = language
+        return await self._request("POST", "/v1/transcribe", json=payload)
+
     async def tts(self, segments: list[dict[str, Any]]) -> dict[str, Any]:
         """Synthesize speech (XTTS v2) for an ordered segment list. Returns
         {"audio_b64", "sample_rate", "timings"}. Each segment is

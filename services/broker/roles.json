@@ -15,6 +15,5 @@
   "co-worker-synthesis": "gemma3:4b",
   "smb-partner-rag": "llama3.2:3b",
   "gemini-cx-rag": "gemma3:4b",
-  "recipe-icon": "flux-schnell",
-  "smb-partner-voice": "kokoro"
+  "recipe-icon": "flux-schnell"
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -45,8 +46,11 @@ DEFAULT_ROLES: dict[str, str] = {
     "gemini-cx-rag": "gemma4*:12b",
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator
-    # Media (voice) role — a TTS backend in the media worker, NOT an Ollama model.
-    "smb-partner-voice": "kokoro",             # SMB Partner Enablement spoken answers
+    # NOTE: there is deliberately no voice ROLE. Voice is a platform capability served by
+    # /v1/tts_light, and its default speaker lives in BROKER_KOKORO_VOICE below. A role called
+    # @smb-partner-voice used to sit here resolving to "kokoro" — the only light TTS backend —
+    # so it could never select anything, no rail ever read it, and the admin panel excludes TTS
+    # by design. It looked like a control and was not one.
 }
 
 
@@ -104,6 +108,15 @@ class BrokerSettings(BaseSettings):
     media_enabled: bool = False
     # Interpreter with torch / diffusers / TTS + edu_media_core importable.
     media_python: str = ""
+    # Interpreter for the VOICE ops (kokoro_tts, transcribe) when they must not share the
+    # image/XTTS venv. Empty falls back to media_python.
+    #
+    # These need separating because their dependency floors collide: kokoro-onnx requires
+    # numpy>=2.0.2, while simple-lama-inpainting (in the image stack) requires numpy<2.0.0.
+    # Installing both into one venv silently moves numpy under every image path, which is the
+    # kind of breakage that shows up as garbled output rather than an import error. Voice is
+    # also torch-free, so its venv stays small and cannot disturb a CUDA install.
+    media_python_voice: str = ""
     # edu_media_core source root, prepended to the worker's sys.path.
     media_core_src: str = ""
     # XTTS reference voice clips (english_reference.wav / spanish_reference.wav).
@@ -112,14 +125,48 @@ class BrokerSettings(BaseSettings):
     kokoro_model_path: str = ""
     # Kokoro voices embedding file (voices-v1.0.bin).
     kokoro_voices_path: str = ""
+    # Default Kokoro voice + language, applied when a caller does not name one. Deliberately
+    # a BROKER setting rather than a frontend constant or a per-rail env var: voice is now a
+    # platform capability, so changing it for everyone should not require rebuilding a rail.
+    #
+    # VOICE AND LANGUAGE MUST TRAVEL TOGETHER. Kokoro voice ids are language-scoped by their
+    # prefix ('af_'/'am_' = American female/male, 'bf_'/'bm_' = British, 'ef_'/'em_' = Spanish),
+    # and lang_code selects the phonemiser ('a'=en-us, 'b'=en-gb, 'e'=es, 'f'=fr, 'j'=ja).
+    # A Spanish voice under lang_code 'a' is phonemised as English and comes out as noise, so
+    # a caller overriding one should override both.
+    kokoro_voice: str = "af_heart"
+    kokoro_lang_code: str = "a"
     # faster-whisper STT. CPU/int8 by default: speech input must never evict the resident
     # RAG model, and a short question transcribes in ~1.7s on CPU anyway. Weights come from
     # the HuggingFace cache, so no path setting is needed — only the model id.
-    whisper_model: str = "small.en"
+    #
+    # MULTILINGUAL, NEVER A '.en' VARIANT. This defaulted to "small.en", which is English-only
+    # and silently IGNORES the `language` parameter rather than erroring — so a Spanish
+    # utterance came back as English-shaped nonsense with language reported as "en". Measured
+    # on this box: "La reunion con el cliente es el martes por la manana" transcribed as
+    # "La reu?a un con el cliente es el martes por la manana" under small.en, and verbatim
+    # under small. Guarded by tests/test_whisper_model.py, which asserts the default is not a
+    # '.en' build, because the failure is silent and plausible-looking.
+    whisper_model: str = "small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
     # Per-job timeout (seconds); a cold model load + a batch can be slow.
     media_timeout: float = 1200.0
+
+    # Media ops served by the VOICE interpreter when one is configured. Both are torch-free
+    # and want numpy>=2; everything else in the media worker wants the image/XTTS venv.
+    VOICE_OPS: ClassVar[frozenset[str]] = frozenset({"kokoro_tts", "transcribe"})
+
+    def media_python_for(self, op: str) -> str:
+        """The interpreter that should run `op`.
+
+        Voice ops prefer media_python_voice and fall back to media_python, so a deployment that
+        has only ever configured one interpreter keeps working unchanged. Routing per op rather
+        than per call site means a future image/XTTS venv cannot quietly capture voice.
+        """
+        if op in self.VOICE_OPS and self.media_python_voice:
+            return self.media_python_voice
+        return self.media_python
 
     def embed_hints(self) -> list[str]:
         return [h.strip().lower() for h in self.embed_name_hints.split(",") if h.strip()]
