@@ -3,7 +3,7 @@
 The single owner of the GPU. Apps never touch Ollama directly — they call this.
 v0 is Ollama-only. See `../../docs/architecture.md` for the why.
 
-## Run (Windows PowerShell, from the repo root `D:\.claude\projects\platform`)
+## Run (Windows PowerShell, from the repo root `D:\.ai-work\projects\platform`)
 
 ```powershell
 # one-time: create a venv and install

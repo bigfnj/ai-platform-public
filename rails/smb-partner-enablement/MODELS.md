@@ -116,7 +116,7 @@ synthesis the moment the broker can serve it.
 - Kokoro — **not available.** It is not an Ollama model (`ollama.com/library/kokoro` → 404); it
   needs its own ONNX runtime, so it can only arrive via the broker's media worker.
 - Broker media worker — **disabled** (`media.enabled: false`). `BrokerSettings.media_python`
-  points at `D:\.claude\projects\edu-suite\.venv\...`, a path that does not exist on this
+  points at `D:\.ai-work\projects\edu-suite\.venv\...`, a path that does not exist on this
   machine. This is a pre-existing platform issue, not one this rail introduced, and it means
   server-side TTS of *any* kind is currently unavailable regardless of policy.
 

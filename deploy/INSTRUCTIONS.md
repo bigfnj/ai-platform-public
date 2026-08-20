@@ -24,7 +24,7 @@ broker and bring up the containers.
 Leave this running.
 
 ```powershell
-cd D:\.claude\projects\platform
+cd D:\.ai-work\projects\platform
 .\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --app-dir services\broker --host 0.0.0.0 --port 11500
 ```
@@ -36,7 +36,7 @@ Sanity check (new terminal): `curl http://127.0.0.1:11500/healthz` should return
 ## 2. Terminal 2 — build + start the stack
 
 ```powershell
-cd D:\.claude\projects\platform\deploy
+cd D:\.ai-work\projects\ai-platform\deploy
 docker compose up -d --build
 ```
 
@@ -97,7 +97,7 @@ services (as **you**, so your models/caches are found):
 
 ```powershell
 # In an ELEVATED (Administrator) PowerShell:
-powershell -ExecutionPolicy Bypass -File D:\.claude\projects\platform\deploy\install-services.ps1
+powershell -ExecutionPolicy Bypass -File D:\.ai-work\projects\ai-platform\deploy\install-services.ps1
 ```
 
 It fetches NSSM automatically and installs the services as **LocalSystem** — no

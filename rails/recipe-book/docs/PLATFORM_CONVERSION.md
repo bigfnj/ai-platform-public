@@ -77,8 +77,8 @@ adherence (real ribs/ramen/martini vs SDXL blobs). What changed:
   Dinnerly/Thai/To Try), ~40 keywords, and a `_TITLE_SUBJECT` exact-title override dict (17 user-reviewed
   one-offs). Coverage: 761 keyword-specific / 133 category / 0 generic.
 - The GPU side (broker `model` routing, `edu_media_core.images.get_flux`, the media CUDA venv) is in the
-  broker + edu-suite; the broker service was repointed to a new media venv (`D:\.claude\media-venv`) and
-  HF cache (`D:\.claude\hf-cache`) after the monorepo cutover deleted the old edu-suite venv.
+  broker + edu-suite; the broker service was repointed to a new media venv (`D:\.ai-work\venvs\media-venv`) and
+  HF cache (`D:\.ai-work\cache\hf-cache`) after the monorepo cutover deleted the old edu-suite venv.
 
 **Re-running a full regen** (all 894): `docker exec -e RECIPE_BOOK_BROKER_TIMEOUT=1600
 platform-recipe-book-1 python /tmp/full_regen.py` (chunk 250). **The `-e` timeout override is required** —

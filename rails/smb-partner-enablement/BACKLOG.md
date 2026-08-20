@@ -22,7 +22,7 @@ onnxruntime on CPU or GPU.
    short-lived subprocess that exits to reclaim VRAM. Correct for XTTS v2 and SDXL. Wrong for
    a 350 MB voice model: it makes every spoken answer cost a full model swap.
 2. **The media worker is disabled on this workstation.** `media.enabled: false`, because
-   `BrokerSettings.media_python` points at `D:\.claude\projects\edu-suite\.venv\...`, which
+   `BrokerSettings.media_python` points at `D:\.ai-work\projects\edu-suite\.venv\...`, which
    does not exist here. Pre-existing platform issue, not this rail's.
 
 **The work:**
