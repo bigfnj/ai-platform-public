@@ -24,6 +24,7 @@ export default defineConfig({
         co_worker: '/co-worker/assets/remoteEntry.js',
         smb_partner: '/smb-partner-enablement/assets/remoteEntry.js',
         gemini_cx: '/gemini-cx/assets/remoteEntry.js',
+        meeting_atlas: '/meeting-atlas/assets/remoteEntry.js',
       },
       shared: ['react', 'react-dom'],
     }),
@@ -51,6 +52,8 @@ export default defineConfig({
       '/smb-partner-enablement': { target: 'http://127.0.0.1:8700', ws: true },
       // ws:true so Gemini CX's /gemini-cx/ws/ask token stream proxies through in dev.
       '/gemini-cx': { target: 'http://127.0.0.1:8700', ws: true },
+      // No ws:true - meeting-atlas has no WebSocket surface.
+      '/meeting-atlas': 'http://127.0.0.1:8700',
     },
   },
 })
