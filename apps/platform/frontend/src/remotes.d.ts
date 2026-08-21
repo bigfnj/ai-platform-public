@@ -45,3 +45,8 @@ declare module 'gemini_cx/module' {
   const GeminiCxModule: ComponentType
   export default GeminiCxModule
 }
+declare module 'meeting_atlas/module' {
+  import type { ComponentType } from 'react'
+  const MeetingAtlasModule: ComponentType
+  export default MeetingAtlasModule
+}
