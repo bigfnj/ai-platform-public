@@ -16,6 +16,7 @@ const AiPlaygroundModule = lazy(() => import('ai_playground/module'))
 const CoWorkerModule = lazy(() => import('co_worker/module'))
 const GeminiCxModule = lazy(() => import('gemini_cx/module'))
 const SmbPartnerModule = lazy(() => import('smb_partner/module'))
+const MeetingAtlasModule = lazy(() => import('meeting_atlas/module'))
 
 const STATUS_MS = 5000
 
@@ -283,6 +284,18 @@ export default function App() {
         }
       >
         <SmbPartnerModule />
+      </Suspense>
+    )
+  } else if (activeEntry?.id === 'meeting-atlas') {
+    content = (
+      <Suspense
+        fallback={
+          <div className="module">
+            <div className="card"><div className="empty">Loading Meeting Atlas…</div></div>
+          </div>
+        }
+      >
+        <MeetingAtlasModule />
       </Suspense>
     )
   } else if (activeEntry?.id === 'gemini-cx') {

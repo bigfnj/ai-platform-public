@@ -43,6 +43,7 @@ class GatewaySettings(PlatformSettings):
     app_co_worker_url: str = "http://127.0.0.1:8860"
     app_smb_partner_enablement_url: str = "http://127.0.0.1:8870"
     app_gemini_cx_url: str = "http://127.0.0.1:8880"
+    app_meeting_atlas_url: str = "http://127.0.0.1:8740"
 
     # Direct Ollama endpoint — used ONLY by the admin model-pool "Delete" action (ollama rm),
     # which the broker has no verb for. All inference still goes through the broker. Container
@@ -53,7 +54,7 @@ class GatewaySettings(PlatformSettings):
     # catalog show on the rail as 'soon' but aren't reachable. Accepts a comma-separated env string
     # (PLATFORM_ENABLED_APPS=terminal-fun,recipe-book); NoDecode stops pydantic-settings from trying
     # to JSON-decode the env value first (which errors on a bare comma list), so the validator splits.
-    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "workstation", "terminal-fun", "ai-playground", "smb-partner-enablement", "gemini-cx")
+    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("edu-suite", "iep", "recipe-book", "workstation", "terminal-fun", "ai-playground", "smb-partner-enablement", "gemini-cx", "meeting-atlas")
 
     @field_validator("enabled_apps", mode="before")
     @classmethod
@@ -75,6 +76,7 @@ class GatewaySettings(PlatformSettings):
     # StaticFiles mount serves at /smb-partner-enablement/m/ (html=True).
     smb_partner_enablement_dist: str = "rails/smb-partner-enablement/frontend/dist"
     gemini_cx_dist: str = "rails/gemini-cx/frontend/dist"
+    meeting_atlas_dist: str = "rails/meeting-atlas/frontend/dist"
 
     # --- auth / multi-tenant (PLATFORM_ env prefix) -------------------------
     # SQLite on a mounted volume in the container; the seam is a SQLAlchemy URL so
@@ -112,6 +114,7 @@ class GatewaySettings(PlatformSettings):
             "co-worker": self.app_co_worker_url.rstrip("/"),
             "smb-partner-enablement": self.app_smb_partner_enablement_url.rstrip("/"),
             "gemini-cx": self.app_gemini_cx_url.rstrip("/"),
+            "meeting-atlas": self.app_meeting_atlas_url.rstrip("/"),
         }
         return {name: urls[name] for name in self.enabled_apps if name in urls}
 
@@ -129,7 +132,8 @@ class GatewaySettings(PlatformSettings):
                "ai-playground": self.ai_playground_dist,
                "co-worker": self.co_worker_dist,
                "smb-partner-enablement": self.smb_partner_enablement_dist,
-               "gemini-cx": self.gemini_cx_dist}
+               "gemini-cx": self.gemini_cx_dist,
+               "meeting-atlas": self.meeting_atlas_dist}
         out: dict[str, Path] = {}
         for name in self.enabled_apps:
             p = Path(raw.get(name, ""))

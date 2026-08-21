@@ -132,6 +132,30 @@ services:
       - "8880"
     restart: always
 
+  meeting-atlas:                 # Meeting Atlas — indexes Meetily recordings; no inference
+    profiles: ["meeting-atlas"]
+    build:
+      context: ../../rails/meeting-atlas
+      dockerfile: deploy/Dockerfile
+    image: meeting-atlas-backend:latest
+    environment:
+      MEETING_ATLAS_RECORDINGS_DIR: /data/recordings
+      MEETING_ATLAS_MEETILY_DB: ${MEETING_ATLAS_MEETILY_DB_IN_CONTAINER:-}
+      MEETING_ATLAS_DISPLAY_TZ: ${TZ:-America/Los_Angeles}
+      MEETING_ATLAS_AUTOREINDEX_SECONDS: ${MEETING_ATLAS_AUTOREINDEX_SECONDS:-300}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      # READ-ONLY. This is a 9p mount under Podman/Hyper-V and 9p rejects
+      # rename-over-an-existing-file; the backend keeps its index in memory so it needs
+      # no write path here. Falls back to an empty volume => an empty rail, not a crash.
+      - ${MEETING_ATLAS_RECORDINGS_MOUNT:-meeting_atlas_recordings}:/data/recordings:ro
+      - ${MEETING_ATLAS_MEETILY_DB_MOUNT:-meeting_atlas_db}:/data/meetily:ro
+    expose:
+      - "8740"
+    restart: always
+
   gateway:                       # shell host + reverse proxy; frontends baked into the image
     build:
       context: ../..
@@ -148,6 +172,7 @@ services:
       PLATFORM_APP_CO_WORKER_URL: http://co-worker:8860
       PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
       PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
+      PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
     extra_hosts:
       - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
     volumes:
@@ -190,6 +215,8 @@ volumes:
   smb_partner_data:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_smb_partner_data
+  meeting_atlas_recordings:  # fallback when MEETING_ATLAS_RECORDINGS_MOUNT is unset
+  meeting_atlas_db:          # fallback when MEETING_ATLAS_MEETILY_DB_MOUNT is unset
   gemini_cx_data:
     external: true
     name: ${COMPOSE_PROJECT_NAME:-platform}_gemini_cx_data

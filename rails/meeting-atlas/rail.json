@@ -1,0 +1,25 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "meeting-atlas",
+  "label": "Meeting Atlas",
+  "icon": "🗓️",
+  "package": "meeting_atlas_app",
+  "federation_name": "meeting_atlas",
+  "css_wrapper": "ma",
+  "layout": "backend",
+  "env_prefix": "MEETING_ATLAS_",
+  "ports": {
+    "backend": 8740,
+    "dev": 5290
+  },
+  "status_route": null,
+  "model_slots": [],
+  "notes": [
+    "No model slots and no chips, correctly: this rail does no inference at all. It indexes Meetily recording folders and serves the result. Re-transcription and summarisation are owned by an external co-work task running a frontier model on the host, which writes sidecar files this backend reads — the same writer/reader split as the co-worker rail's inbox. status_route is null and RC005/RC013/RC014 (broker token, @role, compose token) therefore do not apply.",
+    "READ-ONLY on its bind mount, deliberately. The recordings directory is a Windows path bind-mounted through Podman/Hyper-V, which means 9p, and 9p rejects rename-over-an-existing-file — the trap that silently broke every co-worker triage write. This backend never writes to the mount: the index is held in memory and rebuilt on POST /api/reindex, so there is no write path to get wrong.",
+    "The Meetily SQLite is the ONLY place the real meeting title and Meetily's own generated summary live; the recording folder holds just an auto-generated name like 'Meeting 2026-08-20_06-59-29'. Mounting that DB read-only is optional — a summary.json sidecar can supply the title instead, which is the path once co-work owns summarisation.",
+    "Segment display_time in transcripts.json is UTC while the folder name's leading timestamp is LOCAL. metadata.json created_at is treated as the only canonical instant; reading either of the other two naively puts every meeting hours off.",
+    "Meetily writes no speaker labels (the transcripts table's speaker column is NULL for every row), so per-speaker talk time is impossible from raw Meetily data. It appears automatically once a co-work task supplies transcript.enriched.json with speaker fields — see INGEST.md.",
+    "Summaries are treated as claims, not facts. The indexer locates each action item's cited quote in the real transcript and flags mismatched timestamps, missing quotes, reused quotes and uniform due dates. This exists because a local 4B model's output dated every action item to one invented day and cited a single line as the evidence for three unrelated tasks."
+  ]
+}

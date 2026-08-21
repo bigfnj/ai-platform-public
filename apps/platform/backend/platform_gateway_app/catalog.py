@@ -72,6 +72,10 @@ _ENTRIES: list[dict[str, Any]] = [
     # fronted by a curated question deck rather than a bare chat box. The emoji is only a
     # fallback: the shell draws the real Gemini spark via iconOverrides (see App.tsx).
     {"id": "gemini-cx", "label": "Gemini CX", "icon": "✨", "status": "ready"},
+    # Meeting Atlas — indexes Meetily recording folders and rolls them up by day, week
+    # and month. Does no inference: an external co-work task writes the transcripts and
+    # summaries it reads (rails/meeting-atlas/INGEST.md).
+    {"id": "meeting-atlas", "label": "Meeting Atlas", "icon": "🗓️", "status": "ready"},
 ]
 
 # 'ready' before 'soon'; anything unrecognised sorts last rather than crashing.

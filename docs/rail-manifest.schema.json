@@ -65,7 +65,7 @@
     },
     "env_prefix": {
       "type": "string",
-      "pattern": "^[A-Z][A-Z0-9]*_$",
+      "pattern": "^[A-Z][A-Z0-9_]*_$",
       "description": "The rail's own environment-variable prefix. Rail-specific settings use it. The BROKER_AUTH_TOKEN is deliberately NOT prefixed — see the broker-token rule in docs/RAIL_CONTRACT.md."
     },
     "ports": {

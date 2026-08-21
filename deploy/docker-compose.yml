@@ -300,6 +300,43 @@ services:
       - "8880"
     restart: always
 
+  meeting-atlas:                 # Meeting Atlas — indexes Meetily recordings and rolls
+    # them up by day, week and month. Does NO inference and never calls the broker, so it
+    # gets no BROKER_AUTH_TOKEN and declares no model slots (see rails/meeting-atlas/rail.json).
+    #
+    # Same writer/reader split as co-worker: an external co-work task running a frontier
+    # model on the host writes transcript.enriched.json / summary.json sidecars into each
+    # meeting folder, and this backend reads them. Contract: rails/meeting-atlas/INGEST.md.
+    build:
+      context: ../rails/meeting-atlas   # uses meeting-atlas/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: meeting-atlas-backend:latest
+    environment:
+      MEETING_ATLAS_RECORDINGS_DIR: /data/recordings
+      MEETING_ATLAS_MEETILY_DB: ${MEETING_ATLAS_MEETILY_DB_IN_CONTAINER:-}
+      # Recording timestamps are UTC; everything a user reads is local. A wrong value
+      # here shifts every meeting by hours while looking entirely plausible.
+      MEETING_ATLAS_DISPLAY_TZ: ${TZ:-America/Los_Angeles}
+      MEETING_ATLAS_AUTOREINDEX_SECONDS: ${MEETING_ATLAS_AUTOREINDEX_SECONDS:-300}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      # The Meetily recordings tree, READ-ONLY. Read-only is not just hygiene: this is a
+      # 9p mount under Podman/Hyper-V, and 9p rejects rename-over-an-existing-file — the
+      # trap that silently broke every co-worker triage write. The backend holds its index
+      # in memory so it has no write path here at all.
+      # MEETING_ATLAS_RECORDINGS_MOUNT is the host path (see deploy/.env). Falls back to
+      # an empty named volume, which yields an empty rail rather than a startup failure.
+      - ${MEETING_ATLAS_RECORDINGS_MOUNT:-meeting_atlas_recordings}:/data/recordings:ro
+      # OPTIONAL: the Meetily SQLite, read-only. The only place Meetily keeps the real
+      # meeting title and its own summary. Leave the mount and the env var unset to rely
+      # on summary.json sidecars for titles instead.
+      - ${MEETING_ATLAS_MEETILY_DB_MOUNT:-meeting_atlas_db}:/data/meetily:ro
+    expose:
+      - "8740"
+    restart: always
+
   gateway:                       # shell host + reverse proxy
     build:
       context: ..
@@ -359,6 +396,7 @@ services:
       # Contains dist/m/ too — the standalone mobile build, served at /smb-partner-enablement/m/.
       - ../rails/smb-partner-enablement/frontend/dist:/app/smb-partner-dist:ro
       - ../rails/gemini-cx/frontend/dist:/app/gemini-cx-dist:ro
+      - ../rails/meeting-atlas/frontend/dist:/app/meeting-atlas-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
@@ -398,3 +436,5 @@ volumes:
   co_worker_prompts:  # fallback when CO_WORKER_PROMPTS_MOUNT is unset (hides prompts panel)
   smb_partner_data:   # SMB Partner chunk index + uploaded SME docs (seed KB baked into the image)
   gemini_cx_data:     # Gemini CX chunk index + uploaded docs (seed GECX corpus baked into the image)
+  meeting_atlas_recordings:  # fallback when MEETING_ATLAS_RECORDINGS_MOUNT is unset (empty rail)
+  meeting_atlas_db:          # fallback when MEETING_ATLAS_MEETILY_DB_MOUNT is unset (no titles)

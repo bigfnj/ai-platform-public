@@ -1,0 +1,22 @@
+[project]
+name = "meeting-atlas"
+version = "0.1.0"
+description = "Meeting Atlas — a platform rail that indexes Meetily recordings and rolls them up by day, week and month."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    # Windows has no system zoneinfo database, so ZoneInfo() raises there
+    # without this. A silent UTC fallback shifts every meeting by hours.
+    "tzdata>=2024.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["meeting_atlas_app*"]
