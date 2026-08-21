@@ -127,6 +127,22 @@ def norm(s):
     return re.sub(r"[^a-z0-9 ]", "", str(s).lower()).strip()
 
 
+def folder_key(path):
+    """Case-folded final path component, for a path using EITHER separator.
+
+    os.path.basename is platform-dependent: on Linux it does not split on
+    backslashes. The Meetily database stores absolute Windows paths (drive
+    letter, backslash separators) while this backend runs in a Linux container,
+    so basename() handed back the whole path and no title or summary ever
+    matched its folder. That failure was invisible on Windows, where the same
+    code passed, and silent in the container - every meeting simply showed
+    under its auto-generated name.
+
+    os.path.normcase is likewise a no-op on Linux, so the fold is explicit.
+    """
+    return re.split(r"[\\/]+", str(path).strip().rstrip("\\/"))[-1].lower()
+
+
 # ---------------------------------------------------------------- meetily sqlite
 
 def read_db(db_path, log=None):
@@ -163,7 +179,7 @@ def read_db(db_path, log=None):
             if not fp:
                 continue
             sp = summaries.get(row["id"])
-            out[os.path.normcase(os.path.basename(fp))] = {
+            out[folder_key(fp)] = {
                 "db_id": row["id"],
                 "title": row["title"],
                 "db_created": row["created_at"],
@@ -664,7 +680,7 @@ def build_index(recordings_dir, db_path=None, tz=None, log=None):
     for m in loaded:
         folder, segs, meta = m["folder"], m["segments"], m["meta"]
         base = os.path.basename(folder)
-        rec = dict(db.get(os.path.normcase(base), {}))
+        rec = dict(db.get(folder_key(base), {}))
         if m["sidecar"]:
             rec.update({k: v for k, v in m["sidecar"].items() if v is not None})
 
