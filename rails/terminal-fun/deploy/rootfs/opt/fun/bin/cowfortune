@@ -1,0 +1,17 @@
+#!/bin/sh
+# A rainbow fortune-telling cow, on a loop. Tunable via env (set by the backend from a
+# validated schema): COW_FILE (cowfile name), COW_MOOD (a cowsay mood flag like -d/-g/-y),
+# COW_RAINBOW (1=lolcat, 0=plain).
+while :; do
+  clear 2>/dev/null || true
+  args=""
+  [ -n "$COW_FILE" ] && args="$args -f $COW_FILE"
+  [ -n "$COW_MOOD" ] && args="$args $COW_MOOD"
+  out=$(fortune | cowsay $args 2>/dev/null || fortune | cowsay)
+  if [ "$COW_RAINBOW" != "0" ] && command -v lolcat >/dev/null 2>&1; then
+    printf '%s\n' "$out" | lolcat
+  else
+    printf '%s\n' "$out"
+  fi
+  sleep 4
+done

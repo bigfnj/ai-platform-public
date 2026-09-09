@@ -1,0 +1,82 @@
+# Bundled gateway image for the INSTALLER (lean, no host Node needed).
+#
+# Same gateway backend as Dockerfile.gateway, but a multi-stage build ALSO compiles the shell
+# + the installer's rail frontends (terminal-fun, recipe-book) and BAKES their dists into the
+# image, so a fresh install is pure `docker compose build && up` with no Node/Vite on the host.
+# The dev/full-stack setup still uses Dockerfile.gateway + bind-mounted host dists (untouched).
+#
+# Build from the repo root:  docker build -f deploy/Dockerfile.gateway.bundled -t platform-gateway-bundled .
+
+# --- stage 1: build the frontends (shell host + the installer's federated rail remotes) ---
+# The repo layout is preserved so each frontend's ``@platform/web-core`` dependency resolves:
+# it is declared as `file:../../../web`, so npm install needs web/ sitting at the same relative
+# depth it occupies in the repo. That used to be a vite alias reaching up out of the folder;
+# it is a real dependency now, but the depth is still load-bearing HERE.
+FROM node:20-slim AS web
+WORKDIR /build
+COPY web ./web
+COPY apps/platform/frontend ./apps/platform/frontend
+COPY rails/terminal-fun/frontend ./rails/terminal-fun/frontend
+COPY rails/recipe-book/frontend ./rails/recipe-book/frontend
+COPY rails/co-worker/frontend ./rails/co-worker/frontend
+COPY rails/smb-partner-enablement/frontend ./rails/smb-partner-enablement/frontend
+COPY rails/gemini-cx/frontend ./rails/gemini-cx/frontend
+COPY rails/meeting-atlas/frontend ./rails/meeting-atlas/frontend
+COPY rails/ai-playground/frontend ./rails/ai-playground/frontend
+# Every selectable rail's remote must be baked in, whether or not its profile is chosen: the
+# shell resolves module-federation remotes at BUILD time, so a rail absent from this image can
+# never be mounted at runtime no matter what the installer enables.
+RUN set -eux; \
+    for d in apps/platform/frontend rails/terminal-fun/frontend rails/recipe-book/frontend \
+             rails/co-worker/frontend rails/smb-partner-enablement/frontend rails/gemini-cx/frontend \
+             rails/meeting-atlas/frontend rails/ai-playground/frontend; do \
+      (cd "$d" && npm install --no-audit --no-fund --loglevel=error && npm run build); \
+    done
+
+# --- stage 2: the gateway (identical deps to Dockerfile.gateway) + baked dists ---
+FROM python:3.11-slim
+RUN pip install --no-cache-dir \
+        "fastapi>=0.111" "uvicorn[standard]>=0.30" "httpx>=0.27" \
+        "pydantic>=2.7" "pydantic-settings>=2.2" \
+        "sqlalchemy>=2.0" "pwdlib[argon2]>=0.2.1" \
+        "websockets>=13"
+
+WORKDIR /app
+COPY packages/platform_core/platform_core /app/packages/platform_core/platform_core
+COPY apps/platform/backend /app/apps/platform/backend
+
+# Baked frontends (no runtime bind-mounts).
+COPY --from=web /build/apps/platform/frontend/dist    /app/dist/shell
+COPY --from=web /build/rails/terminal-fun/frontend/dist /app/dist/terminal-fun
+COPY --from=web /build/rails/recipe-book/frontend/dist  /app/dist/recipe-book
+COPY --from=web /build/rails/co-worker/frontend/dist    /app/dist/co-worker
+COPY --from=web /build/rails/smb-partner-enablement/frontend/dist /app/dist/smb-partner-enablement
+COPY --from=web /build/rails/gemini-cx/frontend/dist    /app/dist/gemini-cx
+COPY --from=web /build/rails/meeting-atlas/frontend/dist /app/dist/meeting-atlas
+COPY --from=web /build/rails/ai-playground/frontend/dist /app/dist/ai-playground
+
+# Container-network backend URLs + baked dist paths. PLATFORM_ENABLED_APPS + PLATFORM_ADMIN_*
+# are supplied by the installer's .env at run time (the chooser decides the enabled set).
+ENV PYTHONPATH=/app/apps/platform/backend:/app/packages/platform_core \
+    PLATFORM_BROKER_URL=http://host.docker.internal:11500 \
+    PLATFORM_APP_TERMINAL_FUN_URL=http://terminal-fun:8730 \
+    PLATFORM_APP_RECIPE_BOOK_URL=http://recipe-book:8830 \
+    PLATFORM_APP_CO_WORKER_URL=http://co-worker:8890 \
+    PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL=http://smb-partner-enablement:8870 \
+    PLATFORM_APP_GEMINI_CX_URL=http://gemini-cx:8880 \
+    PLATFORM_APP_MEETING_ATLAS_URL=http://meeting-atlas:8740 \
+    PLATFORM_APP_AI_PLAYGROUND_URL=http://ai-playground:8850 \
+    PLATFORM_FRONTEND_DIST=/app/dist/shell \
+    PLATFORM_TERMINAL_FUN_DIST=/app/dist/terminal-fun \
+    PLATFORM_RECIPE_BOOK_DIST=/app/dist/recipe-book \
+    PLATFORM_CO_WORKER_DIST=/app/dist/co-worker \
+    PLATFORM_SMB_PARTNER_ENABLEMENT_DIST=/app/dist/smb-partner-enablement \
+    PLATFORM_GEMINI_CX_DIST=/app/dist/gemini-cx \
+    PLATFORM_MEETING_ATLAS_DIST=/app/dist/meeting-atlas \
+    PLATFORM_AI_PLAYGROUND_DIST=/app/dist/ai-playground \
+    PLATFORM_ENABLED_APPS=terminal-fun,recipe-book \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8700
+CMD ["uvicorn", "platform_gateway_app.main:app", "--app-dir", "apps/platform/backend", \
+     "--host", "0.0.0.0", "--port", "8700"]

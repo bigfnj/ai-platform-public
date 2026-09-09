@@ -1,0 +1,8 @@
+/* Standalone dev only. In the platform shell the host provides the page chrome + the
+   palette tokens; here we set a neutral page background so the module is legible when
+   run on its own via `npm run dev`. */
+:root { --page: #f7f7fb; }
+:root[data-theme="dark"] { --page: #12121a; color-scheme: dark; }
+
+html, body { margin: 0; background: var(--page); min-height: 100vh; }
+#root { padding: 18px; }

@@ -1,0 +1,750 @@
+<#
+  AI-Platform lean installer. Targets an 8 GB-VRAM Windows box with no HuggingFace token and no
+  media/image pipeline. Installs: the shell (admin) + Terminal Fun + optional Recipe Book, on
+  gemma3:4b + bge-m3, with the native broker service (Ollama runs via its own app on :11434).
+
+  Run (GUI window):  powershell -ExecutionPolicy Bypass -File install.ps1
+  Run in-terminal:   powershell -ExecutionPolicy Bypass -File install.ps1 -Console
+  Doctor only:       powershell -ExecutionPolicy Bypass -File install.ps1 -Check
+
+  Design: the front-end (this process, non-elevated) collects inputs and tails a log; the actual
+  provisioning re-launches this script with -Provision, elevated, which writes progress to the
+  shared log + a DONE/FAIL marker. (Start-Process -Verb RunAs can't redirect stdout, hence the
+  file-based log.)
+#>
+[CmdletBinding()]
+param(
+  [switch]$Check,                 # run the prereq doctor to the console and exit
+  [switch]$Console,               # run the whole install in this terminal (no GUI window)
+  [switch]$Provision,             # internal: run the elevated provisioning steps
+  [switch]$Force,                 # bypass the existing-install guard
+  [string]$AdminUser,
+  [string]$AdminPass,
+  [string]$EnabledApps,           # comma list, e.g. "terminal-fun,recipe-book"
+  # internal: which container runtime to drive. 'podman' (daemonless, Hyper-V or WSL machine),
+  # 'desktop' (Docker Desktop) or 'wsl' (Docker Engine inside WSL2). -DockerMode is kept as an
+  # alias so older invocations and docs keep working.
+  [Alias('DockerMode')]
+  [ValidateSet('', 'podman', 'desktop', 'wsl')]
+  [string]$RuntimeMode
+)
+
+$ErrorActionPreference = 'Stop'
+$Root      = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # deploy/installer -> repo root
+$Installer = $PSScriptRoot
+# $env:TEMP can be the 8.3 short form (C:\Users\YOURNA~1\...), which fails to resolve on boxes
+# with 8.3 name generation disabled. USERPROFILE is the long form, so derive the temp base from it.
+$TempBase  = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
+if (-not (Test-Path $TempBase)) { $TempBase = $env:TEMP }
+# Human-readable install log lives in the install folder (deploy\logs\install.log - reachable via the
+# menu's "Open the install folder"); the done/fail markers stay in temp.
+$LogDir    = Join-Path $Root 'deploy\logs'
+try { New-Item -ItemType Directory -Force -Path $LogDir -ErrorAction Stop | Out-Null } catch {}
+$LogFile   = if (Test-Path $LogDir) { Join-Path $LogDir 'install.log' } else { Join-Path $TempBase 'ai-platform-install.log' }
+$DoneFile  = Join-Path $TempBase 'ai-platform-install.done'
+$FailFile  = Join-Path $TempBase 'ai-platform-install.fail'
+$DockerBin = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin'
+if (Test-Path $DockerBin) { $env:Path = "$DockerBin;$env:Path" }
+# Podman installs per-user to %LOCALAPPDATA%\Programs\Podman and adds itself to the USER PATH; the
+# winget shim for docker-compose.exe lands in WinGet\Links. Neither is visible to a shell that was
+# already open when they were installed, so prepend both (same trick as $DockerBin above).
+foreach ($dir in @((Join-Path $env:LOCALAPPDATA 'Programs\Podman'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'))) {
+  if ((Test-Path $dir) -and ($env:Path -notlike "*$dir*")) { $env:Path = "$dir;$env:Path" }
+}
+
+# ---------------------------------------------------------------------------
+# Prereq doctor
+# ---------------------------------------------------------------------------
+function Test-Prereqs {
+  # Every probe below is a native exe that reports "not ready" on STDERR (podman with no machine,
+  # a stopped docker daemon, wsl with no distro). Under the script's ErrorActionPreference='Stop',
+  # PS 5.1 promotes that benign stderr to a terminating NativeCommandError and the whole doctor
+  # dies. Relax it for the duration of this function (assignment is function-scoped, so it
+  # restores on exit) and judge everything by $LASTEXITCODE instead.
+  $ErrorActionPreference = 'Continue'
+  $r = @()
+  # Container runtime. Tri-runtime, in preference order:
+  #   podman  - daemonless; Linux containers run in a `podman machine` VM (Hyper-V provider keeps
+  #             WSL out of the picture entirely, which matters on boxes where WSL2 is unstable).
+  #             Driven with the standalone docker-compose.exe over Podman's Docker-compatible API.
+  #   desktop - Docker Desktop on Windows.
+  #   wsl     - Docker Engine inside WSL2 (Desktop is blocked/paid on some managed boxes).
+  # State: missing | installed (CLI present, no engine/machine running) | running.
+  # Mode: podman | desktop | wsl | none.
+  # Fix='' - none of these are auto-winget'd here; the installer sets each up per-mode.
+  $rtMode = 'none'; $rtState = 'missing'; $rtDetail = 'no container runtime (Podman or Docker)'
+  $podmanExe = Join-Path $env:LOCALAPPDATA 'Programs\Podman\podman.exe'
+  $hasPodman = (Test-Path $podmanExe) -or [bool](Get-Command podman -ErrorAction SilentlyContinue)
+  $winDockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe'
+  $hasWinDocker = (Test-Path $winDockerExe) -or [bool](Get-Command docker -ErrorAction SilentlyContinue)
+  if ($hasPodman) {
+    $rtMode = 'podman'; $rtState = 'installed'
+    $machines = @(& podman machine list --noheading 2>$null | Where-Object { $_ -match '\S' })
+    $rtDetail = if ($machines.Count -eq 0) { 'Podman installed, no machine created yet' } else { 'Podman machine created, not running' }
+    # `podman info` talks to the machine, so a zero exit means the VM is up and serving.
+    & podman info 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $rtState = 'running'
+      $pv = (& podman --version 2>$null)
+      $rtDetail = if ($pv) { "$($pv.ToString().Trim()) (machine running)" } else { 'Podman machine running' }
+      if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
+        $rtDetail += ' - docker-compose.exe MISSING'
+        $rtState = 'installed'   # can't compose without it, so don't claim ready
+      }
+    }
+  }
+  elseif ($hasWinDocker) {
+    $rtMode = 'desktop'; $rtState = 'installed'; $rtDetail = 'Docker Desktop installed, engine not running'
+    & docker version 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) { $rtState = 'running'; $rtDetail = 'Docker Desktop engine running' }
+  }
+  else {
+    & wsl.exe -l -q 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $rtMode = 'wsl'; $rtDetail = 'WSL2 present, Docker Engine not installed'
+      & wsl.exe docker version 1>$null 2>$null
+      if ($LASTEXITCODE -eq 0) {
+        $rtState = 'running'; $ver = (& wsl.exe docker --version 2>$null)
+        $rtDetail = if ($ver) { "WSL2: $($ver.ToString().Trim())" } else { 'WSL2 engine running' }
+      }
+      else {
+        & wsl.exe docker --version 1>$null 2>$null
+        if ($LASTEXITCODE -eq 0) { $rtState = 'installed'; $rtDetail = 'WSL2 Docker CLI present, daemon not running' }
+      }
+    }
+  }
+  $r += [pscustomobject]@{ Key = 'runtime'; Name = 'Container runtime'; Ok = ($rtState -eq 'running'); Detail = $rtDetail; Fix = ''; State = $rtState; Mode = $rtMode }
+  # NVIDIA GPU >= 8 GB
+  $gpuOk = $false; $gpuDetail = 'no NVIDIA GPU detected'
+  try {
+    $mem = (& nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
+    if ($mem) { $mib = [int]($mem.Trim()); $gpuDetail = "$([math]::Round($mib/1024,1)) GB VRAM"; $gpuOk = $mib -ge 7500 }
+  } catch {}
+  $r += [pscustomobject]@{ Key = 'gpu'; Name = 'NVIDIA GPU (>= 8 GB)'; Ok = $gpuOk; Detail = $gpuDetail; Fix = ''; State = '' }
+  # Ollama
+  $ollamaExe = Join-Path $env:USERPROFILE 'AppData\Local\Programs\Ollama\ollama.exe'
+  $ollamaOk = (Test-Path $ollamaExe) -or [bool](Get-Command ollama -ErrorAction SilentlyContinue)
+  $r += [pscustomobject]@{ Key = 'ollama'; Name = 'Ollama'; Ok = $ollamaOk; Detail = $(if ($ollamaOk) { 'installed' } else { 'not found' }); Fix = 'Ollama.Ollama'; State = '' }
+  # Python 3.11+
+  $pyOk = $false; $pyDetail = 'not found'
+  try { $v = (& python --version 2>&1); if ($v -match '(\d+)\.(\d+)') { $pyDetail = $v.ToString().Trim(); $pyOk = ([int]$Matches[1] -eq 3 -and [int]$Matches[2] -ge 10) } } catch {}
+  $r += [pscustomobject]@{ Key = 'python'; Name = 'Python 3.11'; Ok = $pyOk; Detail = $pyDetail; Fix = 'Python.Python.3.11'; State = '' }
+  # Disk (system drive) >= 20 GB. DriveInfo (not Get-PSDrive, which hangs on dead network mounts).
+  $free = [math]::Round((New-Object System.IO.DriveInfo($env:SystemDrive)).AvailableFreeSpace / 1GB, 1)
+  $r += [pscustomobject]@{ Key = 'disk'; Name = 'Disk (>= 20 GB free)'; Ok = ($free -ge 20); Detail = "$free GB free on $env:SystemDrive"; Fix = ''; State = '' }
+  return $r
+}
+
+function Test-ExistingInstall {
+  if (Get-Service platform-broker -ErrorAction SilentlyContinue) { return 'platform-broker service exists' }
+  # Ask whichever runtime is actually present. This used to only ever run `wsl docker ps`, so the
+  # guard was blind in desktop mode (and would be blind under Podman too).
+  $probes = @()
+  if (Get-Command podman -ErrorAction SilentlyContinue) { $probes += , @('podman', @('ps', '--format', '{{.Names}}')) }
+  if (Get-Command docker -ErrorAction SilentlyContinue) { $probes += , @('docker', @('ps', '--format', '{{.Names}}')) }
+  $probes += , @('wsl.exe', @('docker', 'ps', '--format', '{{.Names}}'))
+  foreach ($p in $probes) {
+    try {
+      $ps = & $p[0] @($p[1]) 2>$null
+      if ($ps -match 'platform-') { return "platform-* containers exist ($($p[0]))" }
+    } catch {}
+  }
+  if (Test-Path (Join-Path $Root 'deploy\.env')) { return 'deploy\.env already exists' }
+  return $null
+}
+
+# Locate the Docker Desktop launcher (to start its engine in desktop mode).
+function Get-DockerDesktopExe {
+  foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+    if ($base) { $p = Join-Path $base 'Docker\Docker\Docker Desktop.exe'; if (Test-Path $p) { return $p } }
+  }
+  return $null
+}
+# Convert a Windows path (C:\a\b) to a WSL /mnt path (/mnt/c/a/b) so `wsl docker` can read it.
+# Shared runtime helpers (podman/docker/wsl detection, atomic .env writes, compose invocation).
+. (Join-Path $PSScriptRoot 'lib-runtime.ps1')
+
+# ---------------------------------------------------------------------------
+# Provisioning (runs elevated via -Provision; logs to $LogFile + a marker)
+# ---------------------------------------------------------------------------
+function Write-Log($m) {
+  $line = "{0}  {1}" -f (Get-Date -Format 'HH:mm:ss'), $m
+  Add-Content -Path $LogFile -Value $line -Encoding utf8
+  Write-Host "  $line" -ForegroundColor DarkCyan   # echo live (console runs this in-process); harmless in the GUI's hidden subprocess
+}
+
+function Invoke-Provision {
+  Remove-Item $DoneFile, $FailFile -ErrorAction SilentlyContinue
+  # Native tools (ollama, docker) write progress to stderr; with `2>&1 | Tee-Object` under the
+  # script's ErrorActionPreference='Stop', that benign stderr is wrapped as a terminating error
+  # (PS 5.1 NativeCommandError). Relax it here and gate on explicit exit codes instead.
+  $ErrorActionPreference = 'Continue'
+  try {
+    Write-Log "=== AI-Platform lean install ==="
+    Write-Log "repo root: $Root"
+    Write-Log "full log: $LogFile"
+
+    # 1. config: deploy/.env from the lean template + roles.lean.json -> broker roles.json
+    Write-Log 'writing deploy\.env (lean) ...'
+    $tmpl = Get-Content (Join-Path $Installer 'env.lean.example') -Raw
+    $tmpl = $tmpl.Replace('{{ADMIN_USER}}', $AdminUser).Replace('{{ADMIN_PASSWORD}}', $AdminPass).Replace('{{ENABLED_APPS}}', $EnabledApps)
+    $envFile = Join-Path $Root 'deploy\.env'
+    # UTF-8 with NO BOM, written whole. See Set-EnvValue for why this is not Set-Content -Encoding utf8.
+    [System.IO.File]::WriteAllText($envFile, $tmpl, (New-Object System.Text.UTF8Encoding($false)))
+    Copy-Item (Join-Path $Installer 'roles.lean.json') (Join-Path $Root 'services\broker\roles.json') -Force
+
+    # The Co-Worker rail reads a Windows-side inbox that a host process writes into, so the container
+    # needs a bind mount to it. Under WSL that path must be the /mnt/<drive> form; podman/desktop take
+    # the Windows path as-is. (This conversion was documented in the compose file but never implemented.)
+    $inboxWin = Join-Path $Root 'data\co-worker\inbox'
+    try { New-Item -ItemType Directory -Force -Path $inboxWin -ErrorAction Stop | Out-Null } catch {}
+    $inboxMount = if ($RuntimeMode -eq 'wsl') { ConvertTo-WslPath $inboxWin } else { $inboxWin }
+    Set-EnvValue -Path $envFile -Key 'CO_WORKER_INBOX_WIN'   -Value $inboxWin
+    Set-EnvValue -Path $envFile -Key 'CO_WORKER_INBOX_MOUNT' -Value $inboxMount
+    Write-Log "co-worker inbox: $inboxMount"
+
+    # How containers reach the NATIVE broker/Ollama on the Windows host.
+    if ($RuntimeMode -eq 'wsl' -or $RuntimeMode -eq 'podman') {
+      Write-Log "detecting the container -> Windows host address ($RuntimeMode)..."
+      $winHost = Get-ContainerHostIp -Mode $RuntimeMode
+      if ($winHost) {
+        Set-EnvValue -Path $envFile -Key 'WINDOWS_HOST' -Value $winHost
+        Write-Log "WINDOWS_HOST=$winHost (rails reach the native broker/ollama here)"
+      }
+      else { Write-Log 'WARNING: could not detect the container->host address; containers may not reach the broker.' }
+    }
+    Write-Log 'config written.'
+
+    # 2. native broker service. This is the ONLY step that needs admin (registering the LocalSystem
+    # NSSM service), so we elevate JUST this and keep the rest of provisioning non-elevated - `wsl.exe`
+    # deadlocks when invoked from an elevated process, so the WSL/Docker steps below must NOT be
+    # elevated. install-native has no wsl calls, so elevating it is safe. (Ollama runs via its own app
+    # on :11434 - no second server; the full 24 GB stack keeps the Ollama NSSM service.)
+    Write-Log 'installing the native broker service (approve the UAC prompt that appears)...'
+    $nativeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Installer 'install-native.ps1'), '-PlatformRoot', $Root, '-SkipOllama')
+    # Only WSL-Docker needs the inbound rule: its containers reach the broker across the WSL vNIC.
+    # Podman's gvproxy dials from the host's own loopback, so no rule (and no 0.0.0.0 bind) is needed.
+    if ($RuntimeMode -eq 'wsl') { $nativeArgs += '-OpenWslFirewall' }
+    $np = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList $nativeArgs
+    if ($np.ExitCode -ne 0) { throw "install-native.ps1 failed (exit $($np.ExitCode)); see deploy\logs\platform-broker.err.log" }
+
+    # 3. make sure the Ollama app is serving on :11434 (it usually auto-starts right after the winget
+    # install; launch it if not), then pull the lean models into the user's model store.
+    Write-Log 'ensuring the Ollama app is serving on :11434 ...'
+    function Test-OllamaUp { try { Invoke-WebRequest 'http://127.0.0.1:11434/api/version' -TimeoutSec 3 -UseBasicParsing | Out-Null; return $true } catch { return $false } }
+    if (-not (Test-OllamaUp)) {
+      $app = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe'
+      if (Test-Path $app) { Write-Log 'starting the Ollama app...'; Start-Process $app | Out-Null }
+      for ($i = 0; $i -lt 15 -and -not (Test-OllamaUp); $i++) { Start-Sleep 2 }
+    }
+    if (-not (Test-OllamaUp)) { throw 'Ollama is not serving on :11434 - start the Ollama app and re-run.' }
+    Write-Log 'Ollama is up; pulling the lean models (~4.5 GB total)...'
+    foreach ($m in @('gemma3:4b', 'bge-m3')) {
+      Write-Log "ollama pull $m (progress below)..."
+      & ollama pull $m   # direct to the console: ollama renders its own progress bar; piping it
+      # through Tee mangles the bar (mojibake + red + repeated lines) since it's no longer a TTY.
+      if ($LASTEXITCODE -ne 0) { throw "ollama pull $m failed (exit $LASTEXITCODE)" }
+      Write-Log "  $m pulled."
+    }
+
+    # 4. bundled compose via the detected runtime.
+    #   podman  - docker-compose.exe over Podman's Docker-compat pipe; the machine must be up.
+    #   wsl     - build from /mnt/c, reach the native broker via the injected WINDOWS_HOST.
+    #   desktop - native docker + host-gateway.
+    Write-Log "building + starting containers via $RuntimeMode; first build takes several minutes..."
+    if ($RuntimeMode -eq 'podman') {
+      if (-not (Initialize-PodmanMachine)) { throw 'the podman machine is not running (see the log).' }
+    }
+    elseif ($RuntimeMode -eq 'wsl') {
+      Write-Log 'starting the WSL Docker daemon...'
+      Start-DockerEngineWsl
+    }
+    $paths = Get-ComposePaths
+    $cargs = @('--progress', 'plain', '--env-file', $paths.Env, '-f', $paths.Compose)
+    $cargs += Get-ComposeProfiles -Apps $EnabledApps
+    Initialize-ComposeVolumes -ComposeArgs $cargs   # external volumes must exist before `up`
+    $cargs += @('up', '-d', '--build')
+    Invoke-Compose -Arguments $cargs
+    if ($LASTEXITCODE -ne 0) { throw "compose up failed ($RuntimeMode mode; see the log)." }
+
+    # 5. install the BrokerTray (native tray control), best-effort. Private-repo only: tools/broker-tray
+    # is not part of the public subset, so this step has no counterpart there.
+    try {
+      $tray = Join-Path $Root 'tools\broker-tray\BrokerTray.exe'
+      if (Test-Path $tray) { Start-Process $tray | Out-Null; Write-Log 'launched BrokerTray.' }
+    } catch { Write-Log "tray: $($_.Exception.Message)" }
+
+    # 6. wait for the gateway
+    Write-Log 'waiting for the gateway...'
+    for ($i = 0; $i -lt 60; $i++) {
+      try { Invoke-WebRequest 'http://localhost:1111/api/platform/healthz' -TimeoutSec 3 -UseBasicParsing | Out-Null; break } catch { Start-Sleep 2 }
+    }
+
+    # 7a. Podman mode: start the machine + the stack at logon. A Hyper-V machine does NOT idle-shut-down
+    # the way WSL2 does, so there is no keep-alive/`sleep infinity` hack here - just a normal startup
+    # script. Task Scheduler is Access-denied for non-elevated users on managed boxes, so this is a
+    # Startup-folder shortcut (always user-writable).
+    if ($RuntimeMode -eq 'podman') {
+      Write-Log 'installing a logon startup task (starts the podman machine + the stack)...'
+      try {
+        $startupPs1 = Join-Path $Installer 'platform-startup.ps1'
+        $launcherVbs = Join-Path $Installer 'platform-startup-launcher.vbs'
+        $startup = [Environment]::GetFolderPath('Startup')
+        $lnk = Join-Path $startup 'AI-Platform startup.lnk'
+        $ws = New-Object -ComObject WScript.Shell
+        $sc = $ws.CreateShortcut($lnk)
+        # Target wscript.exe + the VBS trampoline so the window is completely hidden
+        # (WshShortcut.WindowStyle cannot express SW_HIDE=0; WScript.Shell.Run can).
+        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
+        $sc.Arguments = "`"$launcherVbs`""
+        $sc.WindowStyle = 1
+        $sc.Description = 'Starts the podman machine and the AI-Platform stack at logon.'
+        $sc.Save()
+        Write-Log "startup shortcut installed: $lnk"
+      }
+      catch { Write-Log "startup-shortcut note ($($_.Exception.Message)); add it manually to keep the stack up across logons." }
+    }
+
+    # 7b. WSL mode: keep the VM alive. WSL2 shuts an idle VM down (when no session is attached), which
+    # stops the containers; a logon-triggered `wsl --exec sleep infinity` holds it up. Registered as a
+    # current-user task (no admin) and started now so the platform stays up this session too.
+    if ($RuntimeMode -eq 'wsl') {
+      # Keep the WSL VM alive across logons. Task Scheduler is often Access-denied for a non-elevated
+      # user on managed boxes, so use a Startup-folder shortcut (always user-writable) that runs
+      # deploy/installer/platform-startup.sh — it re-detects the WSL gateway IP, updates .env,
+      # runs docker compose up -d, then sleeps forever to hold the VM up.
+      Write-Log 'installing a logon keep-alive (holds the WSL VM + containers up)...'
+      try {
+        $wslScript = (ConvertTo-WslPath $Root) + '/deploy/installer/platform-startup.sh'
+
+        $startup = [Environment]::GetFolderPath('Startup')
+        $lnk = Join-Path $startup 'AI-Platform WSL keep-alive.lnk'
+        $ws = New-Object -ComObject WScript.Shell
+        $sc = $ws.CreateShortcut($lnk)
+        $sc.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $sc.Arguments  = "-WindowStyle Hidden -NoProfile -Command `"wsl bash '$wslScript'`""
+        $sc.WindowStyle = 7
+        $sc.Description = 'Keeps the WSL2 VM alive and re-syncs the broker IP on each logon (AI-Platform).'
+        $sc.Save()
+        # Also launch now so the platform stays up this session
+        Start-Process wsl -ArgumentList 'bash', $wslScript -WindowStyle Hidden
+        Write-Log "keep-alive installed (Startup shortcut) + started: $lnk"
+      }
+      catch { Write-Log "keep-alive note ($($_.Exception.Message)); if the VM idle-shuts-down, add a Startup keep-alive manually." }
+    }
+
+    Write-Log 'DONE. Platform is up at http://localhost:1111  (use localhost; platform.localhost may be proxied on managed browsers).'
+    New-Item -ItemType File -Path $DoneFile -Force | Out-Null
+  } catch {
+    Write-Log "ERROR: $($_.Exception.Message)"
+    Set-Content -Path $FailFile -Value $_.Exception.Message -Encoding utf8
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Console (no-window) installer - the same flow as the GUI, driven in the terminal.
+# ---------------------------------------------------------------------------
+function Invoke-ConsoleInstall {
+  function CW($text, $color = 'Gray') { Write-Host $text -ForegroundColor $color }
+  function Prereq($rs, $key) { $rs | Where-Object { $_.Key -eq $key } }
+  function HardReady($rs) { $d = Prereq $rs 'runtime'; $o = Prereq $rs 'ollama'; return ($d -and $d.State -eq 'running' -and $o -and $o.Ok) }
+
+  function Banner {
+    try { Clear-Host } catch {}
+    CW ''
+    CW '  ==============================================================' 'DarkCyan'
+    CW '        A I - P L A T F O R M      lean install (terminal)' 'White'
+    CW '  ==============================================================' 'DarkCyan'
+    CW '   one GPU, one broker, a handful of rails. lets go.' 'DarkGray'
+  }
+
+  function Show-Doctor {
+    $rs = Test-Prereqs
+    CW ''
+    CW '  Prerequisites' 'Cyan'
+    foreach ($r in $rs) {
+      if ($r.Ok) { Write-Host '   [OK]  ' -ForegroundColor Green -NoNewline }
+      else { Write-Host '   [ - ] ' -ForegroundColor Yellow -NoNewline }
+      Write-Host ("{0,-22} {1}" -f $r.Name, $r.Detail)
+    }
+    return $rs
+  }
+
+  Banner
+  $rs = Show-Doctor
+
+  # 1. offer to install the missing, fixable prerequisites via winget
+  $missing = $rs | Where-Object { -not $_.Ok -and $_.Fix }
+  if ($missing) {
+    CW ''
+    CW ('  Missing: ' + (($missing | ForEach-Object { $_.Name }) -join ', ')) 'Yellow'
+    if ((Read-Host '  Install them now with winget? [Y/n]') -notmatch '^[Nn]') {
+      foreach ($p in $missing) {
+        CW "  installing $($p.Fix) (this can take several minutes)..." 'DarkCyan'
+        Start-Process winget -Wait -ArgumentList @('install', '--id', $p.Fix, '-e', '--accept-source-agreements', '--accept-package-agreements')
+      }
+      $rs = Show-Doctor
+    }
+  }
+
+  # 2. The container runtime must be RUNNING. If missing: create the podman machine, or offer to
+  # install Docker Engine into WSL2; otherwise guide. If installed-but-stopped: start it, spin-wait.
+  $d = Prereq $rs 'runtime'
+  if ($d.State -eq 'missing') {
+    if ($d.Mode -eq 'wsl') {
+      CW ''; CW '  WSL2 is present but Docker Engine is not installed there.' 'Yellow'
+      if ((Read-Host '  Install Docker Engine into WSL2 now? [Y/n]') -notmatch '^[Nn]') {
+        CW '  installing Docker Engine into WSL2 (a few minutes)...' 'DarkCyan'
+        Install-DockerInWsl | Out-Null
+        $rs = Show-Doctor; $d = Prereq $rs 'runtime'
+      }
+    }
+    else {
+      CW ''; CW '  No container runtime. Install Podman (winget install Podman.CLI - and see' 'Red'
+      CW '  docs/INSTALL.md for the Hyper-V prep) or Docker Desktop, then re-run. Aborting.' 'Red'; return
+    }
+  }
+  if ($d.State -eq 'missing') { CW '  Still no container runtime - aborting.' 'Red'; return }
+  if ($d.State -ne 'running') {
+    CW ''
+    if ($d.Mode -eq 'podman') {
+      CW '  starting the podman machine (creates it on first run)...' 'DarkCyan'
+      Initialize-PodmanMachine | Out-Null
+    }
+    elseif ($d.Mode -eq 'desktop') {
+      $dd = Get-DockerDesktopExe
+      if ($dd) { CW '  starting Docker Desktop - accept its license, then hang tight...' 'DarkCyan'; try { Start-Process $dd | Out-Null } catch {} }
+      else { CW '  start Docker Desktop and accept its license...' 'DarkCyan' }
+    }
+    else { CW '  starting the WSL2 Docker daemon...' 'DarkCyan'; Start-DockerEngineWsl }
+    $spin = '|', '/', '-', '\'; $i = 0; $deadline = (Get-Date).AddMinutes(15)
+    while ((Get-Date) -lt $deadline) {
+      $d = Prereq (Test-Prereqs) 'runtime'
+      if ($d.State -eq 'running') { break }
+      Write-Host ("`r   {0}  waiting for the container runtime...   " -f $spin[$i % 4]) -ForegroundColor DarkCyan -NoNewline
+      $i++; Start-Sleep -Milliseconds 700
+    }
+    if ($d.State -eq 'running') { Write-Host "`r   [OK]  container runtime is up.              " -ForegroundColor Green }
+    else {
+      Write-Host "`r   [ - ] container runtime did not come up.    " -ForegroundColor Yellow
+      # Name the cause. A bare "did not come up" sent us digging through Hyper-V error codes once.
+      if ($d.Mode -eq 'podman') {
+        $advice = Get-PodmanMachineMemoryAdvice
+        if ($advice) { CW "        $advice" 'Yellow' }
+      }
+    }
+  }
+
+  # 3. re-read; Ollama just needs to be installed (its own app serves :11434; provisioning verifies).
+  $rs = Test-Prereqs
+  if (-not (HardReady $rs)) {
+    CW ''
+    CW '  Not ready: need a running container runtime + Ollama installed. Fix those and re-run.' 'Red'
+    return
+  }
+  $dmode = (Prereq $rs 'runtime').Mode
+  CW ''
+  CW "  All set - $dmode is up and Ollama is installed." 'Green'
+
+  # 4. existing-install guard
+  $ex = Test-ExistingInstall
+  if ($ex -and -not $Force) {
+    CW ''
+    CW "  An existing platform install was detected ($ex)." 'Red'
+    CW '  This installer refuses to touch it - run on a clean machine/VM (or pass -Force).' 'Red'
+    return
+  }
+
+  # 5. collect inputs
+  CW ''
+  CW '  Super-admin account' 'Cyan'
+  $u = Read-Host '   Username [admin]'; if (-not $u) { $u = 'admin' }
+  function Read-Secret($prompt) {
+    $sec = Read-Host $prompt -AsSecureString
+    $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringAuto($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
+  }
+  # Enter twice and require a match - a single typo here means you can't log in and must reinstall.
+  $pass = ''
+  while (-not $pass) {
+    $p1 = Read-Secret '   Password'
+    if (-not $p1) { CW '   Password cannot be empty.' 'Yellow'; continue }
+    $p2 = Read-Secret '   Confirm password'
+    if ($p1 -ne $p2) { CW '   Passwords do not match - re-enter both.' 'Yellow'; continue }
+    $pass = $p1
+  }
+  CW ''
+  CW '  Rails: Admin shell (always) + Terminal Fun (default).' 'Cyan'
+  # Same optional set the GUI offers; keep the two in step.
+  $consoleRails = @(
+    @{ Id = 'recipe-book';            Prompt = 'Recipe Book (ships with seed)' }
+    @{ Id = 'co-worker';              Prompt = 'Co-Worker (needs a host harvester to have content)' }
+    @{ Id = 'smb-partner-enablement'; Prompt = 'SMB Partner Enablement' }
+    @{ Id = 'gemini-cx';              Prompt = 'Gemini CX' }
+    @{ Id = 'meeting-atlas';          Prompt = 'Meeting Atlas (needs a Meetily recordings tree)' }
+    @{ Id = 'ai-playground';          Prompt = 'AI Playground (RAG demo + Embedding Lab)' }
+  )
+  $enabled = @('terminal-fun')
+  foreach ($r in $consoleRails) {
+    if ((Read-Host "   Also install $($r.Prompt)? [y/N]") -match '^[Yy]') { $enabled += $r.Id }
+  }
+
+  # 6. Provision IN THIS (non-elevated) process, so WSL/Docker steps don't hang. Invoke-Provision
+  # elevates ONLY the broker-service step (its own UAC prompt); everything else runs here and streams
+  # live via Write-Log / Tee-Object (no hidden window, so you can see it's not stuck).
+  CW ''
+  CW '  Provisioning (a UAC prompt will appear for the broker service)...' 'Cyan'
+  CW "  Full log: $LogFile" 'DarkGray'
+  Set-Content -Path $LogFile -Value '' -Encoding utf8
+  $script:AdminUser = $u; $script:AdminPass = $pass; $script:EnabledApps = ($enabled -join ',')
+  $script:RuntimeMode = $dmode
+  Invoke-Provision
+  if (Test-Path $DoneFile) { CW ''; CW '  Done! Open  http://localhost:1111  and log in.' 'Green'; CW '  (use localhost - platform.localhost may be blocked by a managed-browser proxy)' 'DarkGray' }
+  elseif (Test-Path $FailFile) { CW ''; CW ('  Install failed: ' + (Get-Content $FailFile -Raw)) 'Red' }
+  else { CW ''; CW '  Provisioning ended without a clear result - check the log at:' 'Yellow'; CW "  $LogFile" 'Yellow' }
+}
+
+# ---------------------------------------------------------------------------
+# entrypoints
+# ---------------------------------------------------------------------------
+if ($Check) {
+  "AI-Platform prereq check:`n"
+  Test-Prereqs | ForEach-Object { "{0} {1,-24} {2}" -f $(if ($_.Ok) { '[ OK ]' } else { '[FAIL]' }), $_.Name, $_.Detail }
+  $ex = Test-ExistingInstall
+  if ($ex) { "`n[WARN] existing install detected: $ex (installer would refuse without -Force)" }
+  return
+}
+if ($Console) { Invoke-ConsoleInstall; return }
+if ($Provision) { Invoke-Provision; return }
+
+# ---------------------------------------------------------------------------
+# GUI
+# ---------------------------------------------------------------------------
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$form = New-Object Windows.Forms.Form
+$form.Text = 'AI-Platform Installer (lean)'
+$form.Size = New-Object Drawing.Size(680, 688)
+$form.StartPosition = 'CenterScreen'
+$form.Font = New-Object Drawing.Font('Segoe UI', 9)
+
+function New-Label($text, $x, $y, $w, $bold) {
+  $l = New-Object Windows.Forms.Label
+  $l.Text = $text; $l.Location = New-Object Drawing.Point($x, $y); $l.AutoSize = $true
+  if ($bold) { $l.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold) }
+  $form.Controls.Add($l); return $l
+}
+
+New-Label '1. Prerequisites' 16 12 0 $true | Out-Null
+$prereqBox = New-Object Windows.Forms.TextBox
+$prereqBox.Multiline = $true; $prereqBox.ReadOnly = $true; $prereqBox.ScrollBars = 'Vertical'
+$prereqBox.Location = New-Object Drawing.Point(16, 36); $prereqBox.Size = New-Object Drawing.Size(500, 96)
+$prereqBox.Font = New-Object Drawing.Font('Consolas', 9)
+$form.Controls.Add($prereqBox)
+
+$btnCheck = New-Object Windows.Forms.Button
+$btnCheck.Text = 'Re-check'; $btnCheck.Location = New-Object Drawing.Point(528, 36); $btnCheck.Size = New-Object Drawing.Size(120, 28)
+$form.Controls.Add($btnCheck)
+$btnFix = New-Object Windows.Forms.Button
+$btnFix.Text = 'Install missing'; $btnFix.Location = New-Object Drawing.Point(528, 70); $btnFix.Size = New-Object Drawing.Size(120, 28)
+$form.Controls.Add($btnFix)
+
+New-Label '2. Super-admin account' 16 142 0 $true | Out-Null
+New-Label 'Username' 16 170 0 $false | Out-Null
+$txtUser = New-Object Windows.Forms.TextBox; $txtUser.Location = New-Object Drawing.Point(110, 167); $txtUser.Size = New-Object Drawing.Size(180, 24); $txtUser.Text = 'admin'; $form.Controls.Add($txtUser)
+New-Label 'Password' 310 170 0 $false | Out-Null
+$txtPass = New-Object Windows.Forms.TextBox; $txtPass.Location = New-Object Drawing.Point(380, 167); $txtPass.Size = New-Object Drawing.Size(180, 24); $txtPass.UseSystemPasswordChar = $true; $form.Controls.Add($txtPass)
+
+New-Label '3. Rails to install' 16 206 0 $true | Out-Null
+$chkAdmin = New-Object Windows.Forms.CheckBox; $chkAdmin.Text = 'Admin shell (required)'; $chkAdmin.Checked = $true; $chkAdmin.Enabled = $false; $chkAdmin.Location = New-Object Drawing.Point(16, 232); $chkAdmin.AutoSize = $true; $form.Controls.Add($chkAdmin)
+$chkTerm = New-Object Windows.Forms.CheckBox; $chkTerm.Text = 'Terminal Fun'; $chkTerm.Checked = $true; $chkTerm.Location = New-Object Drawing.Point(210, 232); $chkTerm.AutoSize = $true; $form.Controls.Add($chkTerm)
+
+# Optional rails, laid out two per row. Adding one here is a single entry — its compose service
+# (profiled, in docker-compose.installer.yml), its @role in roles.lean.json, and its frontend in
+# Dockerfile.gateway.bundled all have to exist first, or the tile lands on a rail that never came up.
+$OptionalRails = @(
+  @{ Id = 'recipe-book';            Text = 'Recipe Book (ships with seed)' }
+  @{ Id = 'co-worker';              Text = 'Co-Worker (needs a host harvester)' }
+  @{ Id = 'smb-partner-enablement'; Text = 'SMB Partner Enablement' }
+  @{ Id = 'gemini-cx';              Text = 'Gemini CX' }
+  @{ Id = 'meeting-atlas';          Text = 'Meeting Atlas (needs a recordings tree)' }
+  @{ Id = 'ai-playground';          Text = 'AI Playground (RAG demo + Embedding Lab)' }
+)
+$railChecks = @{}
+$i = 0
+foreach ($r in $OptionalRails) {
+  $c = New-Object Windows.Forms.CheckBox
+  $c.Text = $r.Text; $c.Checked = $false; $c.AutoSize = $true
+  # two columns, wrapping into rows under the always-on pair above
+  $c.Location = New-Object Drawing.Point((16 + ($i % 2) * 324), (258 + [math]::Floor($i / 2) * 24))
+  $form.Controls.Add($c)
+  $railChecks[$r.Id] = $c
+  $i++
+}
+
+$btnInstall = New-Object Windows.Forms.Button
+$btnInstall.Text = 'Install'; $btnInstall.Location = New-Object Drawing.Point(16, 316); $btnInstall.Size = New-Object Drawing.Size(140, 34)
+$btnInstall.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold)
+$form.Controls.Add($btnInstall)
+$btnLaunch = New-Object Windows.Forms.Button
+$btnLaunch.Text = 'Open :1111'; $btnLaunch.Location = New-Object Drawing.Point(168, 316); $btnLaunch.Size = New-Object Drawing.Size(140, 34); $btnLaunch.Enabled = $false
+$form.Controls.Add($btnLaunch)
+
+$log = New-Object Windows.Forms.TextBox
+$log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'
+$log.Location = New-Object Drawing.Point(16, 362); $log.Size = New-Object Drawing.Size(632, 268)
+$log.Font = New-Object Drawing.Font('Consolas', 9)
+$form.Controls.Add($log)
+
+$script:prereqs = @()
+$script:pendingInstall = $false     # user asked to install; waiting on the Docker engine to come up
+$script:runtimeAnnounced = $false    # printed "Docker detected" once
+$script:ollamaAnnounced = $false    # printed "Ollama detected" once
+$script:runtimeLaunched = $false     # launched Docker Desktop once (after it appears installed)
+
+function Get-Prereq($key) { $script:prereqs | Where-Object { $_.Key -eq $key } }
+
+# The two prerequisites the build genuinely can't proceed without: a *running* container engine
+# and an *installed* Ollama (the elevated provisioner starts Ollama's service and pulls models).
+# GPU / Python / disk stay soft (a skippable warning).
+function Test-HardReady {
+  $d = Get-Prereq 'runtime'; $o = Get-Prereq 'ollama'
+  return ($d -and $d.State -eq 'running' -and $o -and $o.Ok)
+}
+
+function Refresh-Prereqs {
+  $script:prereqs = Test-Prereqs
+  $prereqBox.Text = ($script:prereqs | ForEach-Object { "{0} {1,-22} {2}" -f $(if ($_.Ok) { '[OK]  ' } else { '[MISS]' }), $_.Name, $_.Detail }) -join "`r`n"
+}
+
+# Launch the elevated provisioning and tail its log. Called directly when Docker is already up,
+# or by the watcher once the engine comes online.
+function Start-Provisioning {
+  $ex = Test-ExistingInstall
+  if ($ex -and -not $Force) { [Windows.Forms.MessageBox]::Show("An existing platform install was detected ($ex).`nThis installer refuses to touch it. Run on a clean machine/VM.", 'Installer'); return }
+  $enabled = @('terminal-fun') + @($OptionalRails | Where-Object { $railChecks[$_.Id].Checked } | ForEach-Object { $_.Id })
+  $btnInstall.Enabled = $false
+  $log.AppendText("starting provisioning (elevated)...`r`n")
+  Set-Content -Path $LogFile -Value '' -Encoding utf8
+  $script:pos = 0
+  $pargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Provision',
+    '-AdminUser', $txtUser.Text, '-AdminPass', $txtPass.Text, '-EnabledApps', ($enabled -join ','), '-RuntimeMode', (Get-Prereq 'runtime').Mode)
+  # No per-rail switch: Invoke-Provision derives the compose profiles from -EnabledApps via
+  # Get-ComposeProfiles, so the selection travels in one place.
+  # Non-elevated subprocess: Invoke-Provision elevates only the broker-service step (its own UAC),
+  # keeping WSL/Docker calls out of an elevated context (where wsl.exe hangs).
+  Start-Process powershell -WindowStyle Hidden -ArgumentList $pargs
+  $timer = New-Object Windows.Forms.Timer; $timer.Interval = 800
+  $timer.Add_Tick({
+      if (Test-Path $LogFile) {
+        $all = Get-Content $LogFile -Raw -ErrorAction SilentlyContinue
+        if ($all -and $all.Length -gt $script:pos) { $log.AppendText($all.Substring($script:pos)); $script:pos = $all.Length }
+      }
+      if (Test-Path $DoneFile) { $timer.Stop(); $btnLaunch.Enabled = $true; $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show('Install complete. Click "Open :1111".', 'Installer') }
+      elseif (Test-Path $FailFile) { $timer.Stop(); $btnInstall.Enabled = $true; [Windows.Forms.MessageBox]::Show("Install failed:`n" + (Get-Content $FailFile -Raw), 'Installer') }
+    }.GetNewClosure())
+  $timer.Start()
+}
+
+# Poll every 3s for Docker + Ollama to come up after an install/launch, then auto-continue.
+$script:watchTimer = New-Object Windows.Forms.Timer
+$script:watchTimer.Interval = 3000
+$script:watchTimer.Add_Tick({
+    Refresh-Prereqs
+    $d = Get-Prereq 'runtime'; $ol = Get-Prereq 'ollama'
+    # Docker finished installing in the background but its engine isn't up yet: launch it once.
+    if ($d -and $d.State -eq 'installed' -and -not $script:runtimeLaunched) { $script:runtimeLaunched = $true; Start-ContainerRuntime }
+    if ($d -and $d.State -eq 'running' -and -not $script:runtimeAnnounced) { $script:runtimeAnnounced = $true; $log.AppendText("Docker detected.`r`n") }
+    if ($ol -and $ol.Ok -and -not $script:ollamaAnnounced) { $script:ollamaAnnounced = $true; $log.AppendText("Ollama detected.`r`n") }
+    if (Test-HardReady) {
+      if ($script:pendingInstall) {
+        $script:pendingInstall = $false
+        $script:watchTimer.Stop()
+        $log.AppendText("prerequisites ready, continuing.`r`n")
+        Start-Provisioning
+      }
+      else { $script:watchTimer.Stop() }   # ready, nothing queued
+    }
+  }.GetNewClosure())
+
+Refresh-Prereqs
+
+# Bring the detected runtime up: start the podman machine, launch Docker Desktop, or start the
+# WSL2 Docker daemon.
+function Start-ContainerRuntime {
+  $d = Get-Prereq 'runtime'
+  if ($d.Mode -eq 'podman') {
+    $log.AppendText("starting the podman machine (created on first run; Hyper-V init needs admin)...`r`n")
+    # Off the UI thread would be nicer, but machine start is quick and the watcher re-polls anyway.
+    Initialize-PodmanMachine | Out-Null
+  }
+  elseif ($d.Mode -eq 'desktop') {
+    $dd = Get-DockerDesktopExe
+    if ($dd) { $log.AppendText("starting Docker Desktop - accept its license, then wait for the engine...`r`n"); try { Start-Process $dd | Out-Null } catch {} }
+    else { $log.AppendText("start Docker Desktop and accept its license to start the engine.`r`n") }
+  }
+  else { $log.AppendText("starting the WSL2 Docker daemon (systemctl start docker)...`r`n"); Start-DockerEngineWsl }
+}
+
+# Kick off a winget install WITHOUT blocking the UI thread. The watcher polls for completion via
+# the prereq re-check, so the window stays responsive during a multi-minute Docker download.
+function Start-WingetInstall($id) {
+  $log.AppendText("winget install $id (running in the background; this can take several minutes)...`r`n")
+  try { Start-Process winget -ArgumentList @('install', '--id', $id, '-e', '--accept-source-agreements', '--accept-package-agreements') | Out-Null }
+  catch { $log.AppendText("  could not launch winget for ${id}: $($_.Exception.Message)`r`n") }
+}
+
+# Re-check: manual refresh; if both hard prereqs are ready and an install was queued, continue now.
+$btnCheck.Add_Click({
+    Refresh-Prereqs
+    if ((Test-HardReady) -and $script:pendingInstall) { $script:pendingInstall = $false; $script:watchTimer.Stop(); Start-Provisioning }
+  })
+
+# Install missing: winget the fixable gaps, then (if a hard prereq still isn't ready) launch
+# Docker Desktop and start watching so a later "Install" continues automatically.
+$btnFix.Add_Click({
+    $missing = $script:prereqs | Where-Object { -not $_.Ok -and $_.Fix }
+    if (-not $missing) { $log.AppendText("nothing to install - all fixable prerequisites are present.`r`n"); return }
+    $script:runtimeLaunched = $false
+    foreach ($p in $missing) { Start-WingetInstall $p.Fix }
+    Refresh-Prereqs
+    if (-not (Test-HardReady)) {
+      $d = Get-Prereq 'runtime'
+      if ($d -and $d.State -eq 'installed') { $script:runtimeLaunched = $true; Start-ContainerRuntime }
+      $log.AppendText("watching for prerequisites (auto-continues once Docker + Ollama are ready)...`r`n")
+      $script:watchTimer.Start()
+    }
+  })
+
+# Install: proceed when Docker is running AND Ollama is installed; otherwise install/launch the
+# missing hard prereq(s) and continue automatically once both are ready. GPU/Python/disk stay a
+# soft, skippable warning.
+$btnInstall.Add_Click({
+    if (-not $txtPass.Text) { [Windows.Forms.MessageBox]::Show('Set a super-admin password.', 'Installer'); return }
+    Refresh-Prereqs
+    $d = Get-Prereq 'runtime'; $o = Get-Prereq 'ollama'
+    $soft = $script:prereqs | Where-Object { -not $_.Ok -and $_.Key -notin @('runtime', 'ollama') }
+    if ($soft) { if ([Windows.Forms.MessageBox]::Show("Unmet prerequisites:`n" + (($soft | ForEach-Object { $_.Name }) -join ', ') + "`n`nContinue anyway?", 'Installer', 'YesNo') -ne 'Yes') { return } }
+
+    if (Test-HardReady) { Start-Provisioning; return }
+
+    # A hard prereq is missing / not up: install what's missing, launch Docker, then let the
+    # watcher continue once BOTH the engine is running and Ollama is installed.
+    $script:pendingInstall = $true
+    $script:runtimeLaunched = $false
+    if ($d.State -eq 'missing') {
+      if ($d.Mode -eq 'podman') { $log.AppendText("creating + starting the podman machine...`r`n"); Start-ContainerRuntime }
+      elseif ($d.Mode -eq 'wsl') { $log.AppendText("installing Docker Engine into WSL2 (a few minutes)...`r`n"); Install-DockerInWsl | Out-Null }
+      else { [Windows.Forms.MessageBox]::Show("No container runtime. Install Podman (winget install Podman.CLI) or Docker Desktop, then re-run.", 'Installer'); $script:pendingInstall = $false; return }
+    }
+    elseif ($d.State -eq 'installed') { $script:runtimeLaunched = $true; Start-ContainerRuntime }
+    if (-not $o.Ok) { Start-WingetInstall 'Ollama.Ollama' }
+    $log.AppendText("waiting for Docker + Ollama; the install continues automatically once both are ready...`r`n")
+    $script:watchTimer.Start()
+  })
+
+$btnLaunch.Add_Click({ Start-Process 'http://localhost:1111' })
+
+[void]$form.ShowDialog()

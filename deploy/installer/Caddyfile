@@ -1,0 +1,11 @@
+# Caddy front door for a local lean install: serves the gateway at http://platform.localhost:1111
+# (and plain localhost). local_certs = Caddy's internal CA, so https://platform.localhost is
+# trusted on this machine. No public domain / Cloudflare here — that's the full-stack setup.
+{
+	local_certs
+}
+
+http://platform.localhost, http://localhost {
+	encode zstd gzip
+	reverse_proxy gateway:8700
+}

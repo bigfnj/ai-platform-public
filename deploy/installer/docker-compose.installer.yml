@@ -1,0 +1,254 @@
+# Lean installer stack: the bundled gateway (frontends baked in) + the two installable rail
+# backends + caddy. No dist bind-mounts (the gateway image carries them), no host Node.
+# recipe-book is behind a profile so it only comes up when the chooser selected it.
+#
+# The installer runs this from deploy/ with an explicit env file, e.g.:
+#   docker compose --env-file .env -f installer/docker-compose.installer.yml [--profile recipe-book] up -d --build
+#
+# Build contexts are relative to THIS file (deploy/installer/), so ../.. is the repo root.
+name: platform
+
+services:
+  terminal-fun:                  # local terminal games/toys + a broker-backed AI assistant
+    build:
+      context: ../../rails/terminal-fun
+      dockerfile: deploy/Dockerfile
+    image: terminal-fun-backend:latest
+    environment:
+      TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
+      # One platform-wide shared secret, passed under the canonical UNPREFIXED name every
+      # rail reads. Empty is the lean default and leaves the broker open, so this line is
+      # inert until a token is configured — and the day one is, this path keeps working
+      # instead of 401ing on every model call with nothing reporting why.
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-@terminal-fun}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    expose:
+      - "8730"
+    restart: always
+
+  recipe-book:                   # recipe + cocktail book (opt-in; ships with seed + baked icons)
+    profiles: ["recipe-book"]
+    build:
+      context: ../../rails/recipe-book
+      dockerfile: deploy/Dockerfile
+    image: recipe-book-backend:latest
+    environment:
+      RECIPE_BOOK_DATA_DIR: /srv/var
+      RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      # See the note on terminal-fun: canonical unprefixed name, inert while unset.
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      # @role, not a pinned model name: a concrete pin here silently overrides whatever
+      # Admin → Rails is set to, so the panel appears to do nothing. Every lean role resolves
+      # to the same model via roles.lean.json, so this is behaviour-preserving.
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-@recipe}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-@recipe-vision}
+      RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-@embed}
+      RECIPE_BOOK_PRIMARY_USER: ${PLATFORM_ADMIN_USER:-admin}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - recipe_book_data:/srv/var
+    expose:
+      - "8830"
+    restart: always
+
+  co-worker:                     # Co-Worker — email/calendar/Teams intelligence inbox (opt-in)
+    profiles: ["co-worker"]
+    # ⚠ Port 8890, NOT the 8860 the public sibling uses: 8860 belongs to ai-voice in this repo,
+    # and the collision was resolved in co-worker's favour of 8890 when the rail was imported.
+    # Keep this in step with deploy/docker-compose.yml and rails/co-worker/rail.json (RC001/RC011).
+    #
+    # Renders empty until something harvests into the inbox — that writer is an external host-side
+    # process, not part of this stack. An empty dashboard is the correct lean-install outcome.
+    build:
+      context: ../../rails/co-worker
+      dockerfile: deploy/Dockerfile
+    image: co-worker-backend:latest
+    environment:
+      CO_WORKER_INBOX_DIR: /data/inbox
+      CO_WORKER_PROMPTS_DIR: /data/prompts
+      CO_WORKER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      CO_WORKER_SYNTHESIS_MODEL: ${CO_WORKER_SYNTHESIS_MODEL:-@co-worker-synthesis}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      # Both fall back to empty named volumes when unset, which yields an empty panel rather
+      # than a startup failure — the right default for an install with no harvester yet.
+      - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
+      - ${CO_WORKER_PROMPTS_MOUNT:-co_worker_prompts}:/data/prompts:ro
+    expose:
+      - "8890"
+    restart: always
+
+  smb-partner-enablement:        # SMB Partner Enablement — grounded RAG + voice surface (opt-in)
+    profiles: ["smb-partner-enablement"]
+    build:
+      context: ../../rails/smb-partner-enablement
+      dockerfile: deploy/Dockerfile
+    image: smb-partner-backend:latest
+    environment:
+      SMB_PARTNER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      SMB_PARTNER_RAG_MODEL: ${SMB_PARTNER_RAG_MODEL:-@smb-partner-rag}
+      SMB_PARTNER_EMBED_MODEL: ${SMB_PARTNER_EMBED_MODEL:-@embed}
+      # 'auto' probes the broker's media worker and falls back to browser speech synthesis.
+      SMB_PARTNER_VOICE_BACKEND: ${SMB_PARTNER_VOICE_BACKEND:-auto}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - smb_partner_data:/srv/var
+    expose:
+      - "8870"
+    restart: always
+
+  gemini-cx:                     # Gemini Enterprise CX — grounded RAG over a GECX corpus (opt-in)
+    profiles: ["gemini-cx"]
+    build:
+      context: ../../rails/gemini-cx
+      dockerfile: deploy/Dockerfile
+    image: gemini-cx-backend:latest
+    environment:
+      GEMINI_CX_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      GEMINI_CX_RAG_MODEL: ${GEMINI_CX_RAG_MODEL:-@gemini-cx-rag}
+      GEMINI_CX_EMBED_MODEL: ${GEMINI_CX_EMBED_MODEL:-@embed}
+      # Kokoro-82M via the broker's tts_light — NOT /v1/tts, which evicts every heavy model
+      # per utterance. 'auto' probes media and falls back to browser speech.
+      GEMINI_CX_VOICE_BACKEND: ${GEMINI_CX_VOICE_BACKEND:-auto}
+      GEMINI_CX_VOICE_SPEAKER: ${GEMINI_CX_VOICE_SPEAKER:-af_heart}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - gemini_cx_data:/srv/var
+    expose:
+      - "8880"
+    restart: always
+
+  ai-playground:                 # AI Playground — RAG over documents + the Embedding Lab (opt-in)
+    profiles: ["ai-playground"]
+    build:
+      context: ../../rails/ai-playground
+      dockerfile: deploy/Dockerfile
+    image: ai-playground-backend:latest
+    environment:
+      AI_PLAYGROUND_DATA_DIR: /srv/var
+      AI_PLAYGROUND_SEED_DIR: /srv/seed/corpora
+      AI_PLAYGROUND_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      AI_PLAYGROUND_CHAT_MODEL: ${AI_PLAYGROUND_CHAT_MODEL:-@ai-playground}
+      AI_PLAYGROUND_EMBED_MODEL: ${AI_PLAYGROUND_EMBED_MODEL:-@embed}
+      # NVIDIA NIM toggle: key from the gitignored .env. Absent => the toggle greys out and
+      # generation stays local, which is the intended default for a lean install.
+      AI_PLAYGROUND_NVIDIA_API_KEY: ${AI_PLAYGROUND_NVIDIA_API_KEY:-}
+      AI_PLAYGROUND_NVIDIA_BASE_URL: ${AI_PLAYGROUND_NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      AI_PLAYGROUND_NVIDIA_CHAT_MODEL: ${AI_PLAYGROUND_NVIDIA_CHAT_MODEL:-nvidia/nemotron-mini-4b-instruct}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - ai_playground_data:/srv/var
+    expose:
+      - "8850"
+    restart: always
+
+  meeting-atlas:                 # Meeting Atlas — indexes Meetily recordings; no inference (opt-in)
+    profiles: ["meeting-atlas"]
+    build:
+      context: ../../rails/meeting-atlas
+      dockerfile: deploy/Dockerfile
+    image: meeting-atlas-backend:latest
+    environment:
+      MEETING_ATLAS_RECORDINGS_DIR: /data/recordings
+      # Derived from the mount below, not set independently. These were two operator variables
+      # for one path, so setting either alone gave you a mounted-but-unread database or a
+      # configured-but-missing one, and the only symptom was titles quietly falling back to the
+      # folder name. `:+` substitutes only when the mount is set.
+      MEETING_ATLAS_MEETILY_DB: ${MEETING_ATLAS_MEETILY_DB_MOUNT:+/data/meetily.db}
+      # Recording timestamps are UTC; everything a user reads is local. A wrong value here
+      # shifts every meeting by hours while looking entirely plausible.
+      MEETING_ATLAS_DISPLAY_TZ: ${TZ:-America/Los_Angeles}
+      MEETING_ATLAS_AUTOREINDEX_SECONDS: ${MEETING_ATLAS_AUTOREINDEX_SECONDS:-300}
+      MEETING_ATLAS_SERVE_AUDIO: ${MEETING_ATLAS_SERVE_AUDIO:-true}
+      TZ: ${TZ:-America/Los_Angeles}
+    # No extra_hosts, and no BROKER_AUTH_TOKEN: this rail compiles in no HTTP client and does no
+    # inference at all (rail.json declares zero model slots), so it never contacts the host.
+    volumes:
+      # READ-ONLY, and not merely as hygiene: under Podman/Hyper-V this is a 9p mount, and 9p
+      # rejects rename-over-an-existing-file. The backend holds its index in memory and rebuilds
+      # on POST /api/reindex, so it has no write path here to get wrong. Unset falls back to an
+      # empty named volume, which yields an empty rail rather than a startup failure.
+      - ${MEETING_ATLAS_RECORDINGS_MOUNT:-meeting_atlas_recordings}:/data/recordings:ro
+      # OPTIONAL: the Meetily SQLite, read-only — the only place the real meeting title and
+      # Meetily's own summary live. ONE variable: point it at the database FILE on the host and
+      # the env above follows. Unset, titles come from summary.json sidecars instead.
+      - ${MEETING_ATLAS_MEETILY_DB_MOUNT:-meeting_atlas_db}:/data/meetily.db:ro
+    expose:
+      - "8740"
+    restart: always
+
+  gateway:                       # shell host + reverse proxy; frontends baked into the image
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.gateway.bundled
+    image: platform-gateway-bundled:latest
+    depends_on:
+      - terminal-fun
+    environment:
+      # Container-network URLs for the profiled rails. Harmless when a profile is not selected:
+      # the gateway only routes an app that is ALSO in PLATFORM_ENABLED_APPS.
+      PLATFORM_APP_CO_WORKER_URL: http://co-worker:8890
+      PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
+      PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
+      PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
+      PLATFORM_DB_URL: sqlite:////data/platform.db
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
+      PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - gateway_data:/data
+    expose:
+      - "8700"
+    restart: always
+
+  caddy:                         # front door on host :1111
+    # Fully qualified: Podman has no implicit Docker Hub default, and the installer is the
+    # path most likely to meet a fresh podman machine with no registries.conf at all. See the
+    # matching note in deploy/docker-compose.yml.
+    image: docker.io/library/caddy:2
+    depends_on:
+      - gateway
+    ports:
+      - "1111:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+volumes:
+  recipe_book_data:
+  co_worker_inbox:
+  co_worker_prompts:
+  smb_partner_data:
+  gemini_cx_data:
+  ai_playground_data:         # corpora DB + uploads; the Embedding Lab's onnx assets land here too
+  meeting_atlas_recordings:   # empty by default; point MEETING_ATLAS_RECORDINGS_MOUNT at the real tree
+  meeting_atlas_db:           # empty by default; the optional read-only Meetily SQLite
+  gateway_data:
+  caddy_data:
+  caddy_config:

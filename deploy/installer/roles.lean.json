@@ -1,0 +1,19 @@
+{
+  "_comment": "Lean role map for an 8 GB-VRAM / no-media install (the installer copies this over services/broker/roles.json). Everything runs on gemma3:4b — it's small AND multimodal, so it covers @chat/@vision together — plus bge-m3 for embeddings. Two pulls, ~4.5 GB, fits 8 GB with headroom. The full 24 GB role map (mistral-small/qwen3.6/gemma3:27b/FLUX) lives in services/broker/roles.json.",
+  "_per_rail": "Every PER-RAIL role a lean-installable rail declares in its rail.json must appear here, or that rail's model call fails to resolve at runtime. They all point at the same lean model; the indirection is what lets Admin → Rails repoint one rail without moving the others. Keep in step with the rails carried in docker-compose.installer.yml.",
+  "chat": "gemma3:4b",
+  "chat-fast": "gemma3:4b",
+  "chat-large": "gemma3:4b",
+  "reasoning": "gemma3:4b",
+  "code": "gemma3:4b",
+  "vision": "gemma3:4b",
+  "embed": "bge-m3",
+
+  "terminal-fun": "gemma3:4b",
+  "recipe": "gemma3:4b",
+  "recipe-vision": "gemma3:4b",
+  "co-worker-synthesis": "gemma3:4b",
+  "smb-partner-rag": "gemma3:4b",
+  "gemini-cx-rag": "gemma3:4b",
+  "ai-playground": "gemma3:4b"
+}

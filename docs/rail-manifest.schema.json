@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/bigfnj/ai-platform-public/docs/rail-manifest.schema.json",
+  "title": "Rail manifest",
+  "description": "The declarative contract a rail publishes about itself, at rails/<id>/rail.json.\n\nA rail is an INDEPENDENT DEPLOYABLE: its own image, its own dependency set, its own config idiom. Nothing here is imported at runtime — no rail reads its own manifest, and no shared package is installed to make this work. The manifest exists so that the facts a rail already restates in six places (its code, its vite config, its Dockerfile, the compose service, the gateway registries, the admin model panel) have ONE authoritative statement to be checked against.\n\ntools/rail_conformance.py reads every manifest and verifies the rest of the tree agrees with it. When a check fails, the manifest is right and the code is wrong — unless the manifest is what drifted, which is a judgement call for a human, not the checker.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "label",
+    "icon",
+    "package",
+    "federation_name",
+    "css_wrapper",
+    "layout",
+    "env_prefix",
+    "ports",
+    "status_route",
+    "model_slots"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Relative path to this schema, for editor completion."
+    },
+    "also_serves": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "description": "OPTIONAL. Additional catalog ids this rail's IMAGE backs, beyond its own. The shipped case is edu-suite, which also serves 'iep' (IEP Present Levels) — the same image run with IEP_ONLY=1 against its own library/DB/cache volumes so student PII is physically separate. Each listed id still needs its own gateway route and dist; RC003 and RC004 check them, which is otherwise the one tile nothing verifies."
+    },
+    "compose_service": {
+      "type": "string",
+      "description": "OPTIONAL. The docker-compose service name, when it differs from the rail id. The shipped case is edu-suite, whose service is still called `dashboard` (the rail was renamed, the service was not)."
+    },
+    "container_port": {
+      "type": "integer",
+      "description": "OPTIONAL. The port the backend listens on INSIDE its container, when that differs from `ports.backend`. The edu-suite family runs three separate containers that all listen on 8800; the gateway's 8800/8801/8802 are host-native defaults for standalone dev, overridden per-container in compose. Both numbers are real, so both are declared rather than one being quietly wrong."
+    },
+    "css_wrapper": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The single class the rail renders everything inside, and under which all its CSS is scoped. Where the theming contract's derived local tokens are declared (web/THEMING.md)."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 400,
+      "description": "One or two sentences of USER-facing copy: what this rail is for, in the words someone deciding whether to enable it would use. Distinct from `notes`, which is developer caveats, and from `label`, which is a tile caption. Read by the admin Rail Manager. Say what it does and for whom; do not describe the implementation."
+    },
+    "dir": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "OPTIONAL. The rails/ directory name, when it differs from the catalog id. Normally they are the same and this is omitted. The shipped exception is rails/iep/, whose catalog id is 'iep-goals' (the catalog's 'iep' tile is IEP Present Levels, a different thing entirely). Declaring it makes the mismatch an explicit, reviewed statement rather than something the checker silently tolerates. Enforced by RC001."
+    },
+    "env_prefix": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*_$",
+      "description": "The rail's own environment-variable prefix. Rail-specific settings use it. The BROKER_AUTH_TOKEN is deliberately NOT prefixed — see the broker-token rule in docs/RAIL_CONTRACT.md."
+    },
+    "extra_packages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "OPTIONAL. Additional package directories whose Python counts as this rail's own for source-reading rules, resolved relative to the rail root. A value may walk up out of the rail (../../packages/...) to name a PLATFORM package the rail delegates to — that is not a coupling, it is the rail declaring what it depends on. The shipped case is edu-suite, whose dashboard delegates every broker call to packages/edu-media-core; read the dashboard alone and the rail looks like it never handles a broker token."
+    },
+    "federation_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The module-federation remote name. The shell imports '<federation_name>/module'. Underscored, because it is a JS identifier."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Fallback emoji shown in the shell rail. Must match APP_CATALOG. A rail may additionally get a real SVG via the shell's iconOverrides, which does not change this value."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The rail id. Must match the APP_CATALOG entry, the compose service name, the gateway's /<id>/ mount, and vite's base."
+    },
+    "label": {
+      "type": "string",
+      "description": "Human label shown in the shell rail. Must match APP_CATALOG."
+    },
+    "layout": {
+      "enum": [
+        "src",
+        "backend"
+      ],
+      "description": "Which of the two backend layouts this rail uses. 'src' = pyproject at the rail root + src/<package>/ + a create_api() factory. 'backend' = backend/pyproject.toml + backend/<package>/ + a module-level app. Both are supported; this records which, so the checker looks in the right place."
+    },
+    "model_slots": {
+      "type": "array",
+      "description": "Every model this rail asks the broker for, in chip display order. Empty for a rail that does no model work.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot",
+          "label",
+          "env",
+          "role",
+          "kind",
+          "admin_panel"
+        ],
+        "properties": {
+          "slot": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "Stable slot id. MUST be identical in the rail's own chip code and in the gateway's RAIL_MODEL_SLOTS — they are two views of one slot, and a rail whose chip says 'llm' while the admin panel says 'synthesis' gives an operator no way to connect what they changed to what they see."
+          },
+          "label": {
+            "type": "string",
+            "description": "Short label on the chip. Need not match the admin panel's longer description."
+          },
+          "env": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "The environment variable that carries this slot's model reference."
+          },
+          "role": {
+            "type": "string",
+            "description": "The broker role this slot's env var should point at, WITHOUT the @. Admin -> Rails repoints this role in roles.json."
+          },
+          "kind": {
+            "enum": [
+              "chat",
+              "vision",
+              "image",
+              "embed",
+              "tts",
+              "stt"
+            ],
+            "description": "What capability the slot needs. Governs which models the admin picker offers. Only chat/vision/image reach that panel."
+          },
+          "admin_panel": {
+            "type": "boolean",
+            "description": "True when this slot is surfaced in Admin -> Rails, and therefore must have a matching RAIL_MODEL_SLOTS entry. Embedders, TTS and STT are deliberately out of that panel's scope, so they set false and the checker does not expect a counterpart."
+          },
+          "pinned_default_ok": {
+            "type": "boolean",
+            "default": false,
+            "description": "Set true ONLY for a documented, deliberate exception to the @role rule, and say why in 'note'. There are currently NO shipped exceptions: the one that used to be cited here, recipe-book's RECIPE_BOOK_LLM_MODEL fallback, turned out to be unreachable dead code and was deleted rather than exempted."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why this slot deviates from a rule, when it does."
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Rail-specific facts a reader of this manifest would otherwise get wrong."
+    },
+    "package": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "The importable Python package name of the backend (e.g. co_worker_app, gemini_cx)."
+    },
+    "package_path": {
+      "type": "string",
+      "description": "OPTIONAL. Path from the rail root to the Python package directory, when neither `layout` fits. The shipped case is edu-suite, a multi-app rail whose platform backend lives at apps/dashboard/src/dashboard. Without it the checker looks in the wrong place and every source-reading rule silently verifies nothing."
+    },
+    "ports": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "dev"
+      ],
+      "properties": {
+        "backend": {
+          "type": "integer",
+          "minimum": 8000,
+          "maximum": 8999,
+          "description": "The port the FastAPI backend listens on, in-container and standalone. Must be unique across rails: the gateway routes to it and compose exposes it."
+        },
+        "dev": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 5999,
+          "description": "The vite dev-server port for standalone frontend work. Must be unique across rails, or two rails cannot be developed at once — and the second one silently serves the first one's proxy config."
+        }
+      }
+    },
+    "status_route": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The route serving this rail's model-chip payload, relative to the rail's /api. Null for a rail with no model slots and no chips. The ROUTE is deliberately not standardised — a rail with more to report than models (corpus size, voice backend) legitimately serves a richer /api/capabilities. What IS standardised is the envelope: see model_status_envelope in docs/RAIL_CONTRACT.md."
+    },
+    "surfaces": {
+      "type": "array",
+      "description": "Extra built surfaces beyond the federated remote, served from the same dist (e.g. smb-partner's standalone mobile build at dist/m/).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "description"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

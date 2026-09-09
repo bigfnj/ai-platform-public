@@ -1,0 +1,35 @@
+# Caddy in front of the platform gateway (the unified shell + reverse proxy).
+#
+# `local_certs` = Caddy's internal CA (no public ACME), right for a home/LAN box.
+# From THIS machine: https://platform.localhost (localhost is auto-trusted).
+# From other LAN devices: change the site address to this machine's name/IP and
+# import Caddy's root CA (see deploy/README.md); or use http://platform.localhost
+# for quick, trust-free testing.
+{
+	local_certs
+}
+
+# Bare-HTTP LAN origins are NOT a secure context, and there is nothing the app or this
+# proxy can send to change that — getUserMedia (the mic / dictation) is undefined there,
+# and with PLATFORM_COOKIE_SECURE=true the session cookie will not stick either. So don't
+# serve the app on them: 308-redirect to the one origin that is trustworthy end to end,
+# the public HTTPS front door (TLS terminated at Cloudflare's edge). 308 preserves the
+# method and the full path+query, so a deep link survives the bounce.
+http://elsewhere, http://192.168.1.11 {
+	redir https://platform.example.com{uri} 308
+}
+
+# Served directly (NOT redirected):
+#   * platform.localhost is a secure context over plain HTTP — browsers treat *.localhost as
+#     potentially trustworthy — so on-box use gets the mic without any TLS setup.
+#   * bare localhost is equally a secure context, and is what a new user actually types (it is
+#     also what docs/INSTALL.md tells them to open, since a managed browser can route *.localhost
+#     through a corporate proxy). Without it Caddy matches NO site and answers 200 with an EMPTY
+#     body — a blank page with no error anywhere, which is the worst possible failure mode.
+#   * platform.example.com arrives here through the cloudflared tunnel with public HTTPS
+#     already terminated at Cloudflare's edge, reaching us over loopback. Redirecting it would
+#     loop; the http->https hop is Cloudflare's job, not ours.
+http://localhost, http://platform.localhost, http://platform.example.com {
+	encode zstd gzip
+	reverse_proxy gateway:8700
+}

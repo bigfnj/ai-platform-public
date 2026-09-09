@@ -1,0 +1,14 @@
+# Keep the gateway build context small. It only needs platform_core + the gateway
+# backend (Python); never the venv, node_modules, built dists, or git history.
+.git
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/dist
+
+# ai-voice host-native engine runtimes (venvs/models/GPT-SoVITS ~30 GB) live under the
+# rail but are broker-dispatched native, never needed in any image build context.
+rails/ai-voice/native/

@@ -1,0 +1,19 @@
+[project]
+name = "co-worker"
+version = "0.1.0"
+description = "Co-Worker — a platform rail that surfaces harvested email/calendar intelligence."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["co_worker_app*"]

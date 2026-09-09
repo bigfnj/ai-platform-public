@@ -1,0 +1,344 @@
+/*
+ * The mobile surface is standalone — it is NOT rendered inside the platform shell, so it owns
+ * its own reset and palette rather than deriving from the shell's CSS custom properties (which
+ * are not present on this document). Dark by default, matching the original prototype.
+ */
+:root {
+  --ink: #e8eaed;
+  --muted: #9aa4b2;
+  --bg: #0b0d10;
+  --s1: #12161c;
+  --s2: #1a1f27;
+  --bd: rgba(255, 255, 255, 0.09);
+  --accent: #2f81f7;
+  --warn: #f0b429;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.muted { color: var(--muted); }
+.pad { padding: 16px; }
+
+/* The app is a fixed-height column: header and tabs pinned, only the thread scrolls. Without
+   this the composer scrolls away mid-conversation, which is the one thing that must not move. */
+.m {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: env(safe-area-inset-top);
+}
+
+.mtop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bd);
+  flex: none;
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+/* The four-square mark, drawn rather than shipped as an asset. */
+.logo {
+  width: 16px;
+  height: 16px;
+  background:
+    linear-gradient(#f25022 0 0) 0 0 / 7px 7px no-repeat,
+    linear-gradient(#7fba00 0 0) 9px 0 / 7px 7px no-repeat,
+    linear-gradient(#00a4ef 0 0) 0 9px / 7px 7px no-repeat,
+    linear-gradient(#ffb900 0 0) 9px 9px / 7px 7px no-repeat;
+}
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mtabs { display: flex; border-bottom: 1px solid var(--bd); flex: none; }
+.mtabs button {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 12px 4px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mtabs button[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.mbody { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.chead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 4px;
+  flex: none;
+}
+.chead h2 { margin: 0; font-size: 16px; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot.on { background: #22c55e; }
+
+.thread { flex: 1; overflow-y: auto; padding: 8px 16px; -webkit-overflow-scrolling: touch; }
+
+.empty { text-align: center; padding: 48px 16px; }
+.empty .glyph { font-size: 44px; }
+.empty h3 { margin: 12px 0 6px; font-size: 17px; font-weight: 600; }
+.empty p { color: var(--muted); font-size: 12px; margin: 0; }
+
+.bubble {
+  border-radius: 16px;
+  padding: 11px 14px;
+  margin: 8px 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+.bubble.me { background: var(--accent); color: #fff; margin-left: auto; border-bottom-right-radius: 4px; }
+.bubble.bot { background: var(--s2); border: 1px solid var(--bd); border-bottom-left-radius: 4px; }
+
+.warn { color: var(--warn); font-size: 12px; margin-top: 8px; }
+.cites { margin-top: 10px; font-size: 11px; color: var(--muted); }
+
+/* Floats over the transcript so it is reachable the instant the assistant starts talking —
+   a partner silencing it mid-meeting cannot be made to scroll first. */
+.stopvoice {
+  position: fixed;
+  left: 16px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  z-index: 20;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+/* Compact stop button in the header bar — appears while audio is playing */
+.stop-audio-btn {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.composer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px 0;
+  border-top: 1px solid var(--bd);
+  flex: none;
+}
+.composer input {
+  flex: 1;
+  min-width: 0;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  color: var(--ink);
+  padding: 11px 16px;
+  /* 16px prevents iOS Safari from zooming the viewport on focus. */
+  font-size: 16px;
+}
+.composer input:disabled { opacity: 0.6; }
+
+.mic {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 21px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.mic:disabled { opacity: 0.5; }
+.mic.hearing { animation: pulse 1.3s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(47, 129, 247, 0.55); }
+  50% { box-shadow: 0 0 0 12px rgba(47, 129, 247, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mic.hearing { animation: none; outline: 2px solid var(--accent); outline-offset: 3px; }
+}
+
+.hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 6px 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  flex: none;
+}
+
+.scard { display: flex; gap: 12px; background: var(--s2); border: 1px solid var(--bd); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.scard .icon { font-size: 24px; }
+.scard .title { font-weight: 600; }
+.scard .fit { color: var(--accent); font-size: 12px; margin: 2px 0 6px; }
+.scard p { margin: 0; font-size: 13px; }
+
+/* --- scenario builder: scrollable pane inside mbody ----------------------- */
+.bscroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.bpad { padding: 16px; }
+
+/* --- diagnostic question flow --------------------------------------------- */
+.qhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.qbar { height: 3px; background: var(--bd); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+.qbar > span { display: block; height: 100%; background: var(--accent); transition: width 180ms ease; }
+
+.why {
+  border-left: 2px solid var(--accent);
+  padding: 6px 0 6px 12px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.opts { display: grid; gap: 8px; }
+.opt {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  padding: 14px;
+  text-align: left;
+}
+.opt.unsure {
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+  width: 100%;
+}
+.ghost {
+  background: none;
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 14px;
+}
+
+/* --- generation checklist ------------------------------------------------- */
+.checklist { list-style: none; margin: 0 0 12px; padding: 0; }
+.ck { align-items: baseline; color: var(--muted); display: flex; font-size: 14px; gap: 10px; padding: 6px 0; }
+.ck .ckmark { width: 1em; flex: none; }
+.ck.active { color: var(--ink); }
+.ck.active .ckmark, .ck.done .ckmark { color: var(--accent); }
+.ck.error { color: #f87171; }
+
+/* --- live reasoning trace — collapsible on mobile ------------------------- */
+.trace-wrap { margin-top: 4px; }
+.trace-toggle { margin-bottom: 8px; }
+.trace {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  font-size: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 12px;
+}
+.tracehead { color: var(--muted); font-size: 11px; letter-spacing: 0.08em; margin-bottom: 10px; text-transform: uppercase; }
+.tblock { margin-bottom: 12px; }
+.tkey { color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.tline { color: var(--muted); line-height: 1.5; padding: 1px 0; }
+.tline.rule { color: var(--ink); }
+.tline.open { font-style: italic; }
+.tscore { color: var(--accent); display: inline-block; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.tsrc { opacity: 0.55; }
+.tstream {
+  border-left: 2px solid var(--bd);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 6px;
+  opacity: 0.75;
+  padding-left: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- package output ------------------------------------------------------- */
+.nextmove {
+  background: var(--s2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+.ptabs { display: flex; gap: 4px; border-bottom: 1px solid var(--bd); margin-bottom: 12px; overflow-x: auto; }
+.ptab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.ptab.sel { color: var(--ink); border-bottom-color: var(--accent); }
+.ptab.dis { opacity: 0.4; cursor: not-allowed; }
+
+.md h4 { font-size: 14px; margin: 14px 0 6px; }
+.md h5 { color: var(--muted); font-size: 13px; margin: 10px 0 4px; }
+.md p { line-height: 1.55; margin: 0 0 10px; font-size: 14px; }
+.md ul { margin: 0 0 10px; padding-left: 20px; }
+.md li { line-height: 1.55; margin-bottom: 6px; font-size: 14px; }
+
+.ungrounded { border-left: 2px solid var(--accent); padding-left: 10px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+.cites { margin-top: 12px; }
+.cite { font-size: 12px; color: var(--muted); border-left: 2px solid var(--bd); padding-left: 8px; margin-bottom: 6px; }

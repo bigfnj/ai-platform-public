@@ -1,0 +1,101 @@
+{
+  "name": "Embedding concepts",
+  "queries": [
+    {
+      "q": "how can I shrink a stored vector to 256 numbers without retraining the model",
+      "targets": [
+        "matryoshka-embeddings.md"
+      ]
+    },
+    {
+      "q": "which distance measure should I use once my vectors are unit length",
+      "targets": [
+        "cosine-similarity.md"
+      ]
+    },
+    {
+      "q": "improving the ordering of my shortlist with a heavier second model",
+      "targets": [
+        "reranking.md"
+      ]
+    },
+    {
+      "q": "how large should each passage be when I split up a long document",
+      "targets": [
+        "chunking-strategies.md"
+      ]
+    },
+    {
+      "q": "a fast structure for approximate nearest-neighbor lookup at scale",
+      "targets": [
+        "hnsw-index.md"
+      ]
+    },
+    {
+      "q": "make an encoder smaller and faster with eight-bit weights",
+      "targets": [
+        "quantization-int8.md"
+      ]
+    },
+    {
+      "q": "why do bert and gemma split the same sentence into different pieces",
+      "targets": [
+        "tokenization-wordpiece.md"
+      ]
+    },
+    {
+      "q": "what happens to the end of a passage longer than the model can read",
+      "targets": [
+        "context-window.md"
+      ]
+    },
+    {
+      "q": "should I glue an instruction to the front of a search phrase",
+      "targets": [
+        "query-document-asymmetry.md"
+      ]
+    },
+    {
+      "q": "finding matching text written in different languages",
+      "targets": [
+        "multilingual-embeddings.md"
+      ]
+    },
+    {
+      "q": "turning per-token vectors into a single passage vector",
+      "targets": [
+        "pooling-strategies.md"
+      ]
+    },
+    {
+      "q": "combining keyword search with semantic vector search",
+      "targets": [
+        "hybrid-search.md"
+      ]
+    },
+    {
+      "q": "the standard public scoreboard for ranking embedding models",
+      "targets": [
+        "mteb-benchmark.md"
+      ]
+    },
+    {
+      "q": "running several large models on one graphics card without running out of memory",
+      "targets": [
+        "gpu-vram-sharing.md"
+      ]
+    },
+    {
+      "q": "embedding text on the cpu with the model file beside the app and no server",
+      "targets": [
+        "onnx-runtime-cpu.md"
+      ]
+    },
+    {
+      "q": "drafting a fake answer and searching with it instead of the question",
+      "targets": [
+        "hyde.md"
+      ]
+    }
+  ]
+}

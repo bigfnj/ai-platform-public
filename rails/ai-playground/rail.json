@@ -1,0 +1,42 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "ai-playground",
+  "label": "AI Playground",
+  "description": "A showcase of what the platform's AI plumbing can actually do: ask questions of a document set and get answers with citations, or benchmark embedding models head-to-head — GPU against CPU — to see which one retrieves better on your own corpus.",
+  "icon": "🛝",
+  "package": "ai_playground",
+  "federation_name": "ai_playground",
+  "css_wrapper": "ai-playground",
+  "layout": "src",
+  "env_prefix": "AI_PLAYGROUND_",
+  "ports": {
+    "backend": 8850,
+    "dev": 5250
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "generation",
+      "label": "RAG generation (local)",
+      "env": "AI_PLAYGROUND_CHAT_MODEL",
+      "role": "ai-playground",
+      "kind": "chat",
+      "admin_panel": true
+    },
+    {
+      "slot": "embed",
+      "label": "Retrieval embedder",
+      "env": "AI_PLAYGROUND_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false,
+      "note": "Embedders are out of the admin panel's scope (it surfaces chat/vision/image only), so this correctly has no RAIL_MODEL_SLOTS counterpart."
+    }
+  ],
+  "notes": [
+    "The shell overrides this rail's emoji with a real inline SVG via iconOverrides; the emoji here stays the catalog fallback and is what RC003 compares.",
+    "Two demos: RAG-over-documents (cited, token-streamed, local⇄NVIDIA-NIM toggle) and the Embedding Lab, which benchmarks embedders across broker/GPU and CPU int8-ONNX on one footing.",
+    "Retrieval stays local even when the NIM toggle sends generation to the NVIDIA cloud — that split is deliberate and should not be 'simplified'.",
+    "Torch-free rail; the Embedding Lab's onnx assets live on the ai_playground_data volume and are fetched at runtime, not baked into the image."
+  ]
+}

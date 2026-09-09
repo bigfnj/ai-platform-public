@@ -1,0 +1,5 @@
+#!/bin/sh
+# The Sneakers "decrypt" effect (no-more-secrets). Shows scrambled text, then
+# reveals it when you press a key.
+SECRET="$(fortune 2>/dev/null || echo 'ACCESS GRANTED - the cake is a lie')"
+printf 'CLASSIFIED // FOR YOUR EYES ONLY\n\n%s\n\n(press a key to decrypt)\n' "$SECRET" | nms -a
