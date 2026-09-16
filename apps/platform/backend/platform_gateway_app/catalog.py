@@ -91,6 +91,14 @@ _ENTRIES: list[dict[str, Any]] = [
      "description": "Grounded answers about Google Cloud's Gemini Enterprise for Customer Experience, drawn from "
                     "a curated corpus. Every claim is cited, and a deck of starter questions gets you going."
     },
+    # OpenMAIC — a thin wrapper, not the application: the upstream Next.js courseware engine
+    # runs as its own container and the rail reverse-proxies it under /openmaic/api/app/, so
+    # the gateway's user gate stays in front of it. See rails/openmaic/rail.json notes.
+    {"id": "openmaic", "label": "OpenMAIC", "icon": "🎓", "status": "ready",
+     "description": "Turns a topic or an uploaded document into an interactive class: generated slides, quizzes "
+                    "and simulations delivered by an AI teacher with narration and a live whiteboard. Runs the "
+                    "open-source OpenMAIC courseware engine against this platform's own models."
+    },
 ]
 
 # 'ready' before 'soon'; anything unrecognised sorts last rather than crashing.

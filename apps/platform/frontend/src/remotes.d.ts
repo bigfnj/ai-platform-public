@@ -41,3 +41,9 @@ declare module 'gemini_cx/module' {
   const GeminiCxModule: ComponentType
   export default GeminiCxModule
 }
+
+declare module 'openmaic/module' {
+  import type { ComponentType } from 'react'
+  const OpenMaicModule: ComponentType
+  export default OpenMaicModule
+}

@@ -198,6 +198,56 @@ services:
       - "8740"
     restart: always
 
+  openmaic:                      # OpenMAIC — interactive classroom over the platform's models (opt-in)
+    profiles: ["openmaic"]
+    # TWO containers, not one. This is the RAIL: a thin wrapper that reverse-proxies the
+    # openmaic-app container below and hosts the OpenAI-compatible shim the app generates
+    # through, so every token still passes the broker's GPU gate. openmaic-app carries the same
+    # profile, because a rail proxying a container that never started is a tile that only 502s.
+    build:
+      context: ../../rails/openmaic
+      dockerfile: deploy/Dockerfile
+    image: openmaic-backend:latest
+    environment:
+      OPENMAIC_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      OPENMAIC_LLM_MODEL: ${OPENMAIC_LLM_MODEL:-@openmaic}
+      OPENMAIC_EMBED_MODEL: ${OPENMAIC_EMBED_MODEL:-@embed}
+      OPENMAIC_APP_URL: http://openmaic-app:3000
+      # Shared secret the shim requires on /api/llm/v1; openmaic-app presents it as OLLAMA_API_KEY.
+      OPENMAIC_SHIM_TOKEN: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      # Overrides the shim with an external OpenAI-compatible endpoint (a larger-VRAM host on
+      # the LAN). Set, the reasoning chip reports the override rather than broker residency.
+      OPENMAIC_LLM_BASE_URL: ${OPENMAIC_LLM_BASE_URL:-}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    expose:
+      - "8900"
+    restart: always
+
+  openmaic-app:                  # the upstream OpenMAIC Next.js app — PRE-BUILT image (opt-in)
+    profiles: ["openmaic"]
+    # NO `build:` on purpose: this app's source is not in this repo, and a build context that
+    # points outside the repo root breaks the installer build. Build or pull the image
+    # separately and name the tag in OPENMAIC_APP_IMAGE.
+    image: ${OPENMAIC_APP_IMAGE:-openmaic-app:latest}
+    environment:
+      # The rail's shim, NOT Ollama — every token this app generates goes through the broker.
+      OLLAMA_BASE_URL: http://openmaic:8900/api/llm/v1
+      OLLAMA_API_KEY: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      OLLAMA_MODELS: "@openmaic"
+      # MANDATORY: OpenMAIC has no hardcoded model fallback, so generation fails outright when
+      # this is unset rather than degrading to a default. The `ollama:` provider prefix is just
+      # as required — without it the model string is parsed as OpenAI and never reaches the shim.
+      DEFAULT_MODEL: ${OPENMAIC_DEFAULT_MODEL:-ollama:@openmaic}
+      TZ: ${TZ:-America/Los_Angeles}
+    volumes:
+      - openmaic_app_data:/app/data
+    expose:
+      - "3000"
+    restart: always
+
   gateway:                       # shell host + reverse proxy; frontends baked into the image
     build:
       context: ../..
@@ -212,6 +262,7 @@ services:
       PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
       PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
       PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
+      PLATFORM_APP_OPENMAIC_URL: http://openmaic:8900
       PLATFORM_DB_URL: sqlite:////data/platform.db
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
@@ -249,6 +300,7 @@ volumes:
   ai_playground_data:         # corpora DB + uploads; the Embedding Lab's onnx assets land here too
   meeting_atlas_recordings:   # empty by default; point MEETING_ATLAS_RECORDINGS_MOUNT at the real tree
   meeting_atlas_db:           # empty by default; the optional read-only Meetily SQLite
+  openmaic_app_data:          # the upstream OpenMAIC app's own /app/data (generated courses + uploads)
   gateway_data:
   caddy_data:
   caddy_config:

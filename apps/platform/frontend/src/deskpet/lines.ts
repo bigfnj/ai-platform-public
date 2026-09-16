@@ -16,6 +16,7 @@ import coWorker from "./quips/co-worker.json";
 import geminiCx from "./quips/gemini-cx.json";
 import smbPartner from "./quips/smb-partner-enablement.json";
 import meetingAtlas from "./quips/meeting-atlas.json";
+import openMaic from "./quips/openmaic.json";
 import admin from "./quips/admin.json";
 import generic from "./quips/generic.json";
 import welcome from "./quips/welcome.json";
@@ -29,6 +30,7 @@ const RAIL: Record<string, string[]> = {
   "gemini-cx": geminiCx,
   "smb-partner-enablement": smbPartner,
   "meeting-atlas": meetingAtlas,
+  "openmaic": openMaic,
   admin,
 };
 

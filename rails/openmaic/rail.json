@@ -1,0 +1,40 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "openmaic",
+  "label": "OpenMAIC",
+  "icon": "🎓",
+  "description": "Turns a topic or an uploaded document into an interactive class: generated slides, quizzes and simulations delivered by an AI teacher with narration and a live whiteboard. Runs the open-source OpenMAIC courseware engine against this platform's own models.",
+  "package": "openmaic_app",
+  "federation_name": "openmaic",
+  "css_wrapper": "openmaic",
+  "layout": "backend",
+  "env_prefix": "OPENMAIC_",
+  "ports": {
+    "backend": 8900,
+    "dev": 5350
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "reasoning",
+      "label": "LLM",
+      "env": "OPENMAIC_LLM_MODEL",
+      "role": "openmaic",
+      "kind": "chat",
+      "admin_panel": true
+    },
+    {
+      "slot": "embed",
+      "label": "Retrieval",
+      "env": "OPENMAIC_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false
+    }
+  ],
+  "notes": [
+    "This rail is a THIN WRAPPER, not the application. OpenMAIC itself is an upstream Next.js 16 app (THU-MAIC/OpenMAIC) that cannot be a federated remote: it owns its own router, middleware and SSR. It runs as a SECOND container, `openmaic-app`, and this rail reverse-proxies it under /openmaic/api/app/ so the gateway's X-Platform-User gate stays in front of it and the iframe is same-origin. terminal-fun's webtoys iframe is the precedent.",
+    "The broker is Ollama-native (POST /v1/chat, NDJSON) while OpenMAIC speaks OpenAI-compatible (/v1/chat/completions, SSE). This rail therefore hosts a translation shim at /api/llm/v1 and points OpenMAIC at it. Going direct to Ollama would work but would bypass the broker's GPU gate, letting course generation evict other rails' models off an 8 GB card.",
+    "OPENMAIC_LLM_BASE_URL overrides the shim with an external OpenAI-compatible endpoint (e.g. a larger-VRAM host on the LAN). When set, the reasoning chip reports the override rather than broker residency, because the broker is not serving that slot."
+  ]
+}

@@ -14,5 +14,6 @@
   "co-worker-synthesis": "mistral-small3*:24b",
   "smb-partner-rag": "mistral-small3*:24b",
   "gemini-cx-rag": "mistral-small3*:24b",
+  "openmaic": "mistral-small3*:24b",
   "recipe-icon": "flux-schnell"
 }

@@ -25,6 +25,7 @@ export default defineConfig({
         smb_partner: '/smb-partner-enablement/assets/remoteEntry.js',
         gemini_cx: '/gemini-cx/assets/remoteEntry.js',
         meeting_atlas: '/meeting-atlas/assets/remoteEntry.js',
+        openmaic: '/openmaic/assets/remoteEntry.js',
       },
       shared: ['react', 'react-dom'],
     }),
@@ -53,6 +54,8 @@ export default defineConfig({
       '/gemini-cx': { target: 'http://127.0.0.1:8700', ws: true },
       // No ws:true — meeting-atlas has no WebSocket surface.
       '/meeting-atlas': 'http://127.0.0.1:8700',
+      // No ws:true — openmaic has no WebSocket surface.
+      '/openmaic': 'http://127.0.0.1:8700',
     },
   },
 })

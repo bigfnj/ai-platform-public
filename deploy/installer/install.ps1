@@ -483,6 +483,7 @@ function Invoke-ConsoleInstall {
     @{ Id = 'gemini-cx';              Prompt = 'Gemini CX' }
     @{ Id = 'meeting-atlas';          Prompt = 'Meeting Atlas (needs a Meetily recordings tree)' }
     @{ Id = 'ai-playground';          Prompt = 'AI Playground (RAG demo + Embedding Lab)' }
+    @{ Id = 'openmaic';               Prompt = 'OpenMAIC (interactive classroom; needs the openmaic-app image)' }
   )
   $enabled = @('terminal-fun')
   foreach ($r in $consoleRails) {
@@ -526,7 +527,7 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object Windows.Forms.Form
 $form.Text = 'AI-Platform Installer (lean)'
-$form.Size = New-Object Drawing.Size(680, 688)
+$form.Size = New-Object Drawing.Size(680, 712)
 $form.StartPosition = 'CenterScreen'
 $form.Font = New-Object Drawing.Font('Segoe UI', 9)
 
@@ -564,6 +565,11 @@ $chkTerm = New-Object Windows.Forms.CheckBox; $chkTerm.Text = 'Terminal Fun'; $c
 # Optional rails, laid out two per row. Adding one here is a single entry — its compose service
 # (profiled, in docker-compose.installer.yml), its @role in roles.lean.json, and its frontend in
 # Dockerfile.gateway.bundled all have to exist first, or the tile lands on a rail that never came up.
+#
+# The rows also push the controls below: each new ROW (every second entry) costs 24px, and the
+# entry that opens one must move $btnInstall / $btnLaunch / $log / $form.Size down by the same
+# amount. Nothing errors when it doesn't — the last checkbox just draws underneath the Install
+# button, which reads as a rendering glitch rather than a missed edit.
 $OptionalRails = @(
   @{ Id = 'recipe-book';            Text = 'Recipe Book (ships with seed)' }
   @{ Id = 'co-worker';              Text = 'Co-Worker (needs a host harvester)' }
@@ -571,6 +577,7 @@ $OptionalRails = @(
   @{ Id = 'gemini-cx';              Text = 'Gemini CX' }
   @{ Id = 'meeting-atlas';          Text = 'Meeting Atlas (needs a recordings tree)' }
   @{ Id = 'ai-playground';          Text = 'AI Playground (RAG demo + Embedding Lab)' }
+  @{ Id = 'openmaic';               Text = 'OpenMAIC (needs the openmaic-app image)' }
 )
 $railChecks = @{}
 $i = 0
@@ -585,16 +592,16 @@ foreach ($r in $OptionalRails) {
 }
 
 $btnInstall = New-Object Windows.Forms.Button
-$btnInstall.Text = 'Install'; $btnInstall.Location = New-Object Drawing.Point(16, 316); $btnInstall.Size = New-Object Drawing.Size(140, 34)
+$btnInstall.Text = 'Install'; $btnInstall.Location = New-Object Drawing.Point(16, 340); $btnInstall.Size = New-Object Drawing.Size(140, 34)
 $btnInstall.Font = New-Object Drawing.Font('Segoe UI', 10, [Drawing.FontStyle]::Bold)
 $form.Controls.Add($btnInstall)
 $btnLaunch = New-Object Windows.Forms.Button
-$btnLaunch.Text = 'Open :1111'; $btnLaunch.Location = New-Object Drawing.Point(168, 316); $btnLaunch.Size = New-Object Drawing.Size(140, 34); $btnLaunch.Enabled = $false
+$btnLaunch.Text = 'Open :1111'; $btnLaunch.Location = New-Object Drawing.Point(168, 340); $btnLaunch.Size = New-Object Drawing.Size(140, 34); $btnLaunch.Enabled = $false
 $form.Controls.Add($btnLaunch)
 
 $log = New-Object Windows.Forms.TextBox
 $log.Multiline = $true; $log.ReadOnly = $true; $log.ScrollBars = 'Vertical'
-$log.Location = New-Object Drawing.Point(16, 362); $log.Size = New-Object Drawing.Size(632, 268)
+$log.Location = New-Object Drawing.Point(16, 386); $log.Size = New-Object Drawing.Size(632, 268)
 $log.Font = New-Object Drawing.Font('Consolas', 9)
 $form.Controls.Add($log)
 

@@ -78,6 +78,14 @@ RAIL_MODEL_SLOTS: dict[str, list[dict[str, str]]] = {
          "description": "Writes the grounded answer over the retrieved Gemini Enterprise CX corpus, "
                         "refusing figures it cannot cite."},
     ],
+    "openmaic": [
+        # The retrieval slot shares the generic @embed role and is out of this panel's scope,
+        # so only the generative slot appears here.
+        {"slot": "reasoning", "label": "LLM", "role": "openmaic", "kind": "chat",
+         "env": "OPENMAIC_LLM_MODEL", "default": "gemma3:4b",
+         "description": "Writes the generated course content — the slides, quiz questions and "
+                        "simulation scripts the AI teacher delivers."},
+    ],
 }
 
 # Roles this panel is allowed to repoint (guards the PUT: no editing generic @chat etc. here).

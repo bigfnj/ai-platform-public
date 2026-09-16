@@ -338,7 +338,7 @@ function Get-ComposeProfiles {
   # It must also track the chooser lists in install.ps1: a profile absent from those never reaches
   # PLATFORM_ENABLED_APPS, so there is nothing here to match and the service is skipped just as
   # silently. RC025 enforces the three-way agreement.
-  foreach ($a in @('recipe-book', 'co-worker', 'smb-partner-enablement', 'gemini-cx', 'meeting-atlas', 'ai-playground')) {
+  foreach ($a in @('recipe-book', 'co-worker', 'smb-partner-enablement', 'gemini-cx', 'meeting-atlas', 'ai-playground', 'openmaic')) {
     if (($Apps -split ',' | ForEach-Object { $_.Trim() }) -contains $a) { $p += @('--profile', $a) }
   }
   return $p

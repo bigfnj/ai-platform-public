@@ -15,6 +15,7 @@ const CoWorkerModule = lazy(() => import('co_worker/module'))
 const SmbPartnerModule = lazy(() => import('smb_partner/module'))
 const GeminiCxModule = lazy(() => import('gemini_cx/module'))
 const MeetingAtlasModule = lazy(() => import('meeting_atlas/module'))
+const OpenMaicModule = lazy(() => import('openmaic/module'))
 
 const STATUS_MS = 5000
 
@@ -285,6 +286,18 @@ export default function App() {
         }
       >
         <GeminiCxModule />
+      </Suspense>
+    )
+  } else if (activeEntry?.id === 'openmaic') {
+    content = (
+      <Suspense
+        fallback={
+          <div className="module">
+            <div className="card"><div className="empty">Loading OpenMAIC…</div></div>
+          </div>
+        }
+      >
+        <OpenMaicModule />
       </Suspense>
     )
   } else if (activeEntry) {

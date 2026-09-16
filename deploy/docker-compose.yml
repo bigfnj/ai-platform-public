@@ -10,6 +10,7 @@
 name: platform
 
 services:
+  dashboard:                     # edu-suite backend (torch-free; model work via the broker)
     build:
       context: ..                   # repo root — the Dockerfile needs packages/edu-media-core
     environment:
@@ -316,6 +317,57 @@ services:
       - "8740"
     restart: always
 
+  openmaic:                      # OpenMAIC — a topic or an uploaded document becomes an
+    # interactive class: generated slides, quizzes and simulations delivered by an AI teacher.
+    # THIN WRAPPER, not the application. The courseware engine is the openmaic-app container
+    # below; this rail reverse-proxies it under /openmaic/api/app/ so the gateway's
+    # X-Platform-User gate stays in front of it, and hosts the OpenAI-compatible translation
+    # shim at /api/llm/v1 that openmaic-app generates through. Pointing the app straight at
+    # Ollama would work but would bypass the broker's GPU gate, letting course generation evict
+    # every other rail's model off an 8 GB card. See rails/openmaic/rail.json.
+    build:
+      context: ../rails/openmaic       # uses openmaic/deploy/Dockerfile
+      dockerfile: deploy/Dockerfile
+    image: openmaic-backend:latest
+    environment:
+      OPENMAIC_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
+      OPENMAIC_LLM_MODEL: ${OPENMAIC_LLM_MODEL:-@openmaic}
+      OPENMAIC_EMBED_MODEL: ${OPENMAIC_EMBED_MODEL:-@embed}
+      OPENMAIC_APP_URL: http://openmaic-app:3000
+      # Shared secret the shim requires on /api/llm/v1; openmaic-app presents it as OLLAMA_API_KEY.
+      OPENMAIC_SHIM_TOKEN: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      # Overrides the shim with an external OpenAI-compatible endpoint (e.g. a larger-VRAM host
+      # on the LAN). Set, the reasoning chip reports the override rather than broker residency.
+      OPENMAIC_LLM_BASE_URL: ${OPENMAIC_LLM_BASE_URL:-}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    expose:
+      - "8900"
+    restart: always
+
+  openmaic-app:                  # the upstream OpenMAIC Next.js app (THU-MAIC/OpenMAIC).
+    # Its source is NOT in this repo, so this is a PRE-BUILT image with no `build:` stanza — a
+    # build context pointing outside the repo breaks the installer. Build or pull the image
+    # separately and name the tag in OPENMAIC_APP_IMAGE.
+    image: ${OPENMAIC_APP_IMAGE:-openmaic-app:latest}
+    environment:
+      # The rail's shim, NOT Ollama — every token this app generates goes through the broker.
+      OLLAMA_BASE_URL: http://openmaic:8900/api/llm/v1
+      OLLAMA_API_KEY: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      OLLAMA_MODELS: "@openmaic"
+      # MANDATORY: OpenMAIC has no hardcoded model fallback, so generation fails outright when
+      # this is unset rather than degrading to a default. The `ollama:` provider prefix is just
+      # as required — without it the model string is parsed as OpenAI and never reaches the shim.
+      DEFAULT_MODEL: ${OPENMAIC_DEFAULT_MODEL:-ollama:@openmaic}
+      TZ: ${TZ:-America/Los_Angeles}
+    volumes:
+      - openmaic_app_data:/app/data   # generated courses + uploads, persisted across rebuilds
+    expose:
+      - "3000"
+    restart: always
+
   gateway:                       # shell host + reverse proxy
     build:
       context: ..
@@ -331,6 +383,7 @@ services:
       - smb-partner-enablement
       - gemini-cx
       - meeting-atlas
+      - openmaic
     environment:
       PLATFORM_BROKER_URL: http://host.docker.internal:11500
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
@@ -345,6 +398,7 @@ services:
       PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
       PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
       PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
+      PLATFORM_APP_OPENMAIC_URL: http://openmaic:8900
       PLATFORM_FRONTEND_DIST: /app/shell-dist
       PLATFORM_RECIPE_BOOK_DIST: /app/recipe-book-dist
       PLATFORM_WORKSTATION_DIST: /app/workstation-dist
@@ -354,6 +408,7 @@ services:
       PLATFORM_SMB_PARTNER_ENABLEMENT_DIST: /app/smb-partner-dist
       PLATFORM_GEMINI_CX_DIST: /app/gemini-cx-dist
       PLATFORM_MEETING_ATLAS_DIST: /app/meeting-atlas-dist
+      PLATFORM_OPENMAIC_DIST: /app/openmaic-dist
       # auth / multi-tenant
       PLATFORM_DB_URL: sqlite:////data/platform.db
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
@@ -373,6 +428,7 @@ services:
       - ../rails/smb-partner-enablement/frontend/dist:/app/smb-partner-dist:ro
       - ../rails/gemini-cx/frontend/dist:/app/gemini-cx-dist:ro
       - ../rails/meeting-atlas/frontend/dist:/app/meeting-atlas-dist:ro
+      - ../rails/openmaic/frontend/dist:/app/openmaic-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
@@ -415,3 +471,4 @@ volumes:
   co_worker_prompts:  # fallback when CO_WORKER_PROMPTS_MOUNT is unset (hides the prompts panel)
   smb_partner_data:   # SMB Partner chunk index + uploaded SME docs (seed KB baked into the image)
   gemini_cx_data:     # Gemini CX chunk index + uploaded docs (seed GECX corpus baked into the image)
+  openmaic_app_data:  # the upstream OpenMAIC app's own /app/data — generated courses + uploads

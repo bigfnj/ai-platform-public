@@ -15,5 +15,6 @@
   "co-worker-synthesis": "gemma3:4b",
   "smb-partner-rag": "gemma3:4b",
   "gemini-cx-rag": "gemma3:4b",
-  "ai-playground": "gemma3:4b"
+  "ai-playground": "gemma3:4b",
+  "openmaic": "gemma3:4b"
 }

@@ -66,6 +66,11 @@ DEFAULT_ROLES: dict[str, str] = {
     # model swap, which is the property gemini-cx's MODELS.md is written to protect.
     "smb-partner-rag": "mistral-small3*:24b",
     "gemini-cx-rag": "mistral-small3*:24b",
+    # OpenMAIC: writes whole courses — outline, slide bodies, quiz items — from a topic or an
+    # uploaded document. Long-form instruction-following over documents, the same shape of job
+    # as edu and co-worker-synthesis, so it gets the same model. Unlike the RAG rails it has no
+    # embedder to co-reside with during generation; retrieval happens earlier, against @embed.
+    "openmaic": "mistral-small3*:24b",
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator
     # ai-voice rail: text normalization before TTS runs on the default chat model.
