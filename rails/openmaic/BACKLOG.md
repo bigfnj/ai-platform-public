@@ -81,6 +81,19 @@ OpenMAIC → shim → broker → Ollama with a real model. That path has already
 surprises (see the `max_tokens`/`num_predict` and list-content cases, both of which fail silently
 rather than raising).
 
+### P9 [platform] — the gateway image cannot be rebuilt while the platform is running
+
+`.dockerignore` excluded `.venv`, `node_modules` and `dist` but not `deploy/logs/`. The broker
+runs natively and writes there continuously, so the log grows while the build context is being
+tarred and the whole build dies with:
+
+    archive/tar: write too long
+
+That error names neither the file nor the reason, and it only reproduces while the platform is
+up — i.e. exactly when you would be rebuilding. `data/` had the same exposure (SQLite under a
+live gateway). Both are now excluded on this branch; worth carrying upstream rather than
+rediscovering.
+
 ---
 
 ## Environment findings (this workstation, not the code)
@@ -126,3 +139,7 @@ different major that then fails to self-manage down to the pinned one.
 - 37 backend tests passing, including the shim-mount gate and the SSE translation.
 - `openmaic` role added to `DEFAULT_ROLES`, `roles.json` and `roles.lean.json`.
 - Installer GUI layout shifted 24px so the 7th optional rail does not overlap the Install button.
+- `.dockerignore` now excludes `deploy/logs/` and `data/` (see P9).
+- `local-patches/fit-roles-to-8gb.py` replaces anchored patching of `roles.json`: that file is
+  wholly owned locally, and its anchors named the values they were meant to produce, so every
+  snapshot reset made them unmatchable in both directions.

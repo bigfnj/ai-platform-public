@@ -12,3 +12,10 @@
 # ai-voice host-native engine runtimes (venvs/models/GPT-SoVITS ~30 GB) live under the
 # rail but are broker-dispatched native, never needed in any image build context.
 rails/ai-voice/native/
+
+# The broker runs NATIVE on the host and writes here continuously. A file that grows while the
+# context is being tarred fails the entire build with "archive/tar: write too long" -- an error
+# that names neither the file nor the reason, and that only reproduces while the platform is up.
+deploy/logs/
+# Runtime state (SQLite, uploads). Never needed in an image, and it moves under a live gateway.
+data/
