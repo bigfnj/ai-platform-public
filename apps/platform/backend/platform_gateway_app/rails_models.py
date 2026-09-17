@@ -127,6 +127,10 @@ def build_rails_view(roles_view: list[dict[str, Any]], enabled: set[str]) -> lis
                 "model": resolved,
                 "pattern": info.get("pattern"),
                 "installed": installed,
+                # Which broker runs this slot. Defaulted rather than required: a broker too old
+                # to report it knows only its own card, and "local" is exactly what it means —
+                # so the panel keeps rendering instead of showing every slot as unplaced.
+                "upstream": info.get("upstream") or "local",
             })
         rails.append({
             "id": rail_id,

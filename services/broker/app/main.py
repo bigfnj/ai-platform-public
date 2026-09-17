@@ -16,6 +16,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.broker import Broker
+from app.upstream import UpstreamError
 from app.config import BrokerSettings
 from app.schemas import (
     ChatRequest,
@@ -100,8 +101,25 @@ async def status() -> dict[str, Any]:
 
 
 @app.get("/v1/models")
-async def models() -> dict[str, Any]:
-    return {"models": await get_broker().list_models()}
+async def models(upstream: str | None = None) -> dict[str, Any]:
+    """Installed models. `?upstream=<name>` asks a registered remote broker instead of this box.
+
+    The admin picker needs this: once a rail's role is pointed off-site, the choices have to come
+    from the box that will actually run it. Offering this card's inventory there would let an
+    admin pick a model the remote does not have, and the mistake would surface as a red chip on
+    the rail rather than as an error at the moment of choosing.
+    """
+    try:
+        return {"upstream": upstream or "local",
+                "models": await get_broker().models_view(upstream)}
+    except UpstreamError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/upstreams")
+async def upstreams() -> dict[str, Any]:
+    """Every broker a role may be delegated to, `local` first."""
+    return {"upstreams": await get_broker().upstreams_view()}
 
 
 @app.get("/v1/roles")

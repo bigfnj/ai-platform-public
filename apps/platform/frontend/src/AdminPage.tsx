@@ -422,25 +422,129 @@ function ModelsTab() {
 // Rails tab: per-rail model selection.
 // ---------------------------------------------------------------------------
 
+// --- broker (upstream) selection -------------------------------------------------
+// A slot may run on THIS box or on another registered broker. The gateway reports the
+// registered brokers in `upstreams`, a model pool per broker in `models`, and the broker a slot
+// currently uses in the slot's `upstream`. The stored role value is `upstream::model` — a DOUBLE
+// colon, because a single one is already the model/tag separator — but the PUT takes the two
+// apart, so everything below works in BARE model names and lets the gateway recompose.
+
+const LOCAL = 'local'
+const IMAGE_LOCAL_NOTE = "Image backends are this box's media worker, so this slot always runs locally."
+
+interface UpstreamOption {
+  name: string
+  url: string | null
+  reachable: boolean
+  authorized?: boolean // absent when the upstream needs no token (e.g. local)
+}
+// Model pools keyed by upstream name. An older gateway sends a bare array instead; that is the
+// local pool, and normalising it here keeps the panel working rather than emptying every dropdown.
+type ModelsByUpstream = Record<string, ModelOption[]>
+type SlotV2 = RailModelSlot & { upstream?: string | null }
+type RailV2 = Omit<RailModels, 'slots'> & { slots: SlotV2[] }
+interface RailsSettingsV2 extends Omit<RailsSettings, 'rails' | 'models'> {
+  rails: RailV2[]
+  models: ModelOption[] | ModelsByUpstream
+  upstreams?: UpstreamOption[]
+}
+
+function modelsByUpstream(models: ModelOption[] | ModelsByUpstream | undefined): ModelsByUpstream {
+  if (Array.isArray(models)) return { [LOCAL]: models }
+  return models ?? {}
+}
+
+// Split a stored role value into (upstream, bare model ref), mirroring the broker's own rule:
+// an UNKNOWN name before `::` is not a delegation, so the whole string resolves locally.
+function splitRef(value: string, known: Set<string>): { upstream: string; ref: string } {
+  const i = value.indexOf('::')
+  if (i > 0) {
+    const name = value.slice(0, i)
+    if (known.has(name)) return { upstream: name, ref: value.slice(i + 2) }
+  }
+  return { upstream: LOCAL, ref: value }
+}
+
+// The broker + bare model a slot sits on now. The slot's explicit `upstream` wins; a gateway
+// that doesn't send one still parses out of the stored `upstream::model` pattern.
+function slotRef(s: SlotV2, known: Set<string>): { upstream: string; ref: string } {
+  const split = splitRef(s.pattern, known)
+  return { upstream: s.upstream || split.upstream, ref: split.ref }
+}
+
+function upstreamLabel(u: UpstreamOption): string {
+  if (u.name === LOCAL) return 'Local (this box)'
+  if (!u.url) return u.name
+  // Show the host so two remotes are told apart at a glance; fall back to the raw URL.
+  try { return `${u.name} (${new URL(u.url).host})` } catch { return `${u.name} (${u.url})` }
+}
+// Why an upstream can't be picked — '' when it can. Such an upstream is shown disabled, never
+// hidden: an option that vanishes is how an operator concludes the feature is broken.
+function upstreamBlocked(u: UpstreamOption): string {
+  if (!u.reachable) return 'unreachable'
+  if (u.authorized === false) return 'token rejected'
+  return ''
+}
+
+// platformApi.adminSetRailModel() predates the broker selector and sends {model} alone, so the
+// PUT is issued here with {model, upstream}. Same error semantics as web-core's req(): read the
+// body ONCE (a second read throws "body stream already read" and masks the real error), then
+// prefer the API's {detail} so a 400 surfaces inline as the panel already expects.
+async function putRailModel(role: string, model: string, upstream: string): Promise<RailsSettingsV2> {
+  const res = await fetch(`/api/platform/admin/rails/${role}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model, upstream }),
+  })
+  const raw = await res.text().catch(() => '')
+  if (!res.ok) {
+    let detail = raw
+    try {
+      const body = JSON.parse(raw)
+      detail = typeof body?.detail === 'string' ? body.detail : JSON.stringify(body)
+    } catch {
+      /* body wasn't JSON (e.g. a plain-text 500 / proxy HTML) — keep raw text */
+    }
+    throw new Error(detail || `${res.status} ${res.statusText}`)
+  }
+  return (raw ? JSON.parse(raw) : {}) as RailsSettingsV2
+}
+
 function RailsTab() {
-  const [rails, setRails] = useState<RailModels[]>([])
-  const [models, setModels] = useState<ModelOption[]>([])
+  const [rails, setRails] = useState<RailV2[]>([])
+  const [models, setModels] = useState<ModelsByUpstream>({}) // model pool per upstream
   const [media, setMedia] = useState<MediaOption[]>([]) // image backends for image slots
-  const [sel, setSel] = useState<Record<string, string>>({}) // role -> pending selection
+  const [upstreams, setUpstreams] = useState<UpstreamOption[]>([]) // registered brokers
+  const [sel, setSel] = useState<Record<string, string>>({}) // role -> pending model ('' = cleared)
+  const [selUp, setSelUp] = useState<Record<string, string>>({}) // role -> pending upstream
   const [err, setErr] = useState('')
   const [loaded, setLoaded] = useState(false)
   const [busyRole, setBusyRole] = useState<string | null>(null)
   const [savedRole, setSavedRole] = useState<string | null>(null)
 
-  const apply = useCallback((view: RailsSettings) => {
+  const apply = useCallback((view: RailsSettingsV2) => {
+    const ups = view.upstreams ?? []
+    const knownNames = new Set(ups.map((u) => u.name))
     setRails(view.rails)
-    setModels(view.models)
+    setModels(modelsByUpstream(view.models))
     setMedia(view.media)
-    // Reset each slot's pending selection to its now-current pattern.
+    setUpstreams(ups)
+    // Reset each slot's pending selection to its now-current broker + bare model.
     const next: Record<string, string> = {}
-    for (const r of view.rails) for (const s of r.slots) next[s.role] = s.pattern
+    const nextUp: Record<string, string> = {}
+    for (const r of view.rails) for (const s of r.slots) {
+      const cur = slotRef(s, knownNames)
+      next[s.role] = cur.ref
+      nextUp[s.role] = cur.upstream
+    }
     setSel(next)
+    setSelUp(nextUp)
   }, [])
+
+  // Only local registered? Then this is a single-box install and the panel renders exactly as
+  // it did before the selector existed — no extra control, no extra copy.
+  const knownUps = useMemo(() => new Set(upstreams.map((u) => u.name)), [upstreams])
+  const showBroker = useMemo(() => upstreams.some((u) => u.name !== LOCAL), [upstreams])
 
   const load = useCallback(async () => {
     try {
@@ -455,11 +559,11 @@ function RailsTab() {
 
   useEffect(() => { load() }, [load])
 
-  const setRoleModel = async (role: string, model: string) => {
+  const setRoleModel = async (role: string, model: string, upstream: string) => {
     setBusyRole(role)
     setErr('')
     try {
-      apply(await platformApi.adminSetRailModel(role, model))
+      apply(await putRailModel(role, model, upstream))
       setSavedRole(role)
       setTimeout(() => setSavedRole((r) => (r === role ? null : r)), 2200)
     } catch (ex) {
@@ -469,10 +573,23 @@ function RailsTab() {
     }
   }
 
-  const onApply = (slot: RailModelSlot) => {
+  // Switching broker re-points the model dropdown at that box's pool and clears the pick, since
+  // a model on one box almost never exists on the other; keeping it would only earn a 400 from
+  // Apply. Switching back restores the slot's stored model — that one is known-good for that box.
+  const pickUpstream = (slot: SlotV2, name: string) => {
+    const cur = slotRef(slot, knownUps)
+    setSelUp((c) => ({ ...c, [slot.role]: name }))
+    setSel((c) => ({ ...c, [slot.role]: name === cur.upstream ? cur.ref : '' }))
+  }
+
+  const onApply = (slot: SlotV2) => {
     const model = sel[slot.role]
-    if (!model || model === slot.pattern) return
-    void setRoleModel(slot.role, model)
+    const cur = slotRef(slot, knownUps)
+    // Image slots are local by construction — never echo back a stale remote the payload may
+    // still carry for one, or Apply would re-save a delegation the media worker can't honour.
+    const upstream = slot.kind === 'image' ? LOCAL : (selUp[slot.role] ?? cur.upstream)
+    if (!model || (model === cur.ref && upstream === cur.upstream)) return
+    void setRoleModel(slot.role, model, upstream)
   }
 
   if (!loaded) return <div className="card"><div className="empty">Loading…</div></div>
@@ -487,6 +604,10 @@ function RailsTab() {
           The LLM each rail loads for a task. Each rail has its own model role, so changing one
           repoints only that rail — it takes effect on the next request, no restart. Pick a specific
           model to pin it, or “Auto” to always use the newest match.
+          {showBroker && (
+            <> Where more than one broker is registered, each slot also picks the <b>box</b> that
+            runs it; the model list then shows what is installed <i>there</i>.</>
+          )}
         </p>
       </div>
 
@@ -501,17 +622,26 @@ function RailsTab() {
           </h3>
           <div className="rail-slots">
             {rail.slots.map((s) => {
+              // An image slot is pinned to this box: its backends are the local media worker.
+              const imageSlot = s.kind === 'image'
+              const cur = slotRef(s, knownUps) // broker + bare model stored for this slot
+              const curUp = imageSlot ? LOCAL : (selUp[s.role] ?? cur.upstream)
+              const current = sel[s.role] ?? cur.ref
               // Options depend on the slot kind: image slots offer the media backends;
               // a vision slot only offers vision-capable models; chat offers any generative model.
+              // For chat/vision the pool is the one reported for the SELECTED broker.
+              const pool = models[curUp] ?? []
               const opts: { value: string; text: string }[] =
-                s.kind === 'image'
+                imageSlot
                   ? media.map((m) => ({ value: m.name, text: m.note ? `${m.label} — ${m.note}` : m.label }))
-                  : (s.kind === 'vision' ? models.filter((m) => m.vision) : models)
+                  : (s.kind === 'vision' ? pool.filter((m) => m.vision) : pool)
                       .map((m) => ({ value: m.name, text: m.name + (m.parameter_size ? ` · ${m.parameter_size}` : '') }))
-              const isWild = /[*?[\]]/.test(s.pattern)
-              const known = opts.some((o) => o.value === s.pattern)
-              const current = sel[s.role] ?? s.pattern
-              const changed = current !== s.pattern
+              // The stored pattern only describes the box it is stored against, so the synthetic
+              // "Auto:"/"not installed" option is offered only while that box is the one selected.
+              const atSlotUp = curUp === cur.upstream
+              const isWild = /[*?[\]]/.test(cur.ref)
+              const known = opts.some((o) => o.value === cur.ref)
+              const changed = current !== '' && (current !== cur.ref || curUp !== cur.upstream)
               const atDefault = s.pattern === s.default
               const busy = busyRole === s.role
               return (
@@ -523,16 +653,40 @@ function RailsTab() {
                   </div>
                   <p className="rail-slot-desc">{s.description}</p>
                   <div className="rail-slot-ctl">
+                    {showBroker && (
+                      <select
+                        value={curUp}
+                        disabled={busy || imageSlot}
+                        aria-label={`Broker for ${s.label}`}
+                        title={imageSlot ? IMAGE_LOCAL_NOTE : 'Which broker runs this slot'}
+                        style={{ minWidth: 200 }}
+                        onChange={(e) => pickUpstream(s, e.target.value)}
+                      >
+                        {/* A slot pointed at a broker that is no longer registered still has to
+                            show what it is pointed at, or the panel would silently misreport it. */}
+                        {!knownUps.has(curUp) && <option value={curUp}>{curUp} — not registered</option>}
+                        {upstreams.map((u) => {
+                          const blocked = upstreamBlocked(u)
+                          return (
+                            <option key={u.name} value={u.name} disabled={!!blocked}>
+                              {upstreamLabel(u)}{blocked ? ` — ${blocked}` : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    )}
                     <select
                       value={current}
                       disabled={busy}
+                      aria-label={`Model for ${s.label}`}
                       onChange={(e) => setSel((c) => ({ ...c, [s.role]: e.target.value }))}
                     >
-                      {(isWild || !known) && (
-                        <option value={s.pattern}>
+                      {current === '' && <option value="">Select a model…</option>}
+                      {atSlotUp && (isWild || !known) && (
+                        <option value={cur.ref}>
                           {isWild
-                            ? `Auto: ${s.pattern}${s.model ? ` → ${s.model}` : ' (none installed)'}`
-                            : `${s.pattern} (not installed)`}
+                            ? `Auto: ${cur.ref}${s.model ? ` → ${s.model}` : ' (none installed)'}`
+                            : `${cur.ref} (not installed)`}
                         </option>
                       )}
                       {opts.map((o) => (
@@ -548,12 +702,26 @@ function RailsTab() {
                     <span className="muted">Default: <code>{s.default}</code></span>
                     {!atDefault && (
                       <button type="button" className="rail-slot-revert" disabled={busy}
-                              onClick={() => setRoleModel(s.role, s.default)}>
+                              onClick={() => {
+                                // A shipped default may itself delegate (`offsite::model`), so it
+                                // is split the same way rather than posted as one opaque string.
+                                const d = splitRef(s.default, knownUps)
+                                void setRoleModel(s.role, d.ref, d.upstream)
+                              }}>
                         revert to default
                       </button>
                     )}
                   </div>
-                  {s.kind === 'vision' && opts.length === 0 && (
+                  {showBroker && imageSlot && (
+                    <p className="rail-slot-desc" style={{ margin: '8px 0 0' }}>{IMAGE_LOCAL_NOTE}</p>
+                  )}
+                  {!imageSlot && curUp !== LOCAL && opts.length === 0 && (
+                    <p className="rail-slot-warn">
+                      “{curUp}” reported no {s.kind === 'vision' ? 'vision-capable ' : ''}models — it may be
+                      unreachable, or nothing is installed on that box.
+                    </p>
+                  )}
+                  {s.kind === 'vision' && curUp === LOCAL && opts.length === 0 && (
                     <p className="rail-slot-warn">No vision-capable model is installed — install one to change this slot.</p>
                   )}
                   {!s.installed && (

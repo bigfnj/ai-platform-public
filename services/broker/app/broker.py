@@ -20,6 +20,7 @@ from app import gpu, media, voice
 from app.config import BrokerSettings
 from app.ollama import OllamaClient, resolve_ollama_model
 from app.registry import classify
+from app.upstream import UpstreamClient, UpstreamError
 
 # Non-Ollama image backends the media worker can load. A media @role (e.g. @recipe-icon)
 # resolves to one of these via roles.json, expanded WITHOUT Ollama glob resolution.
@@ -181,20 +182,71 @@ class Broker:
         except Exception:  # noqa: BLE001 - a read view must never raise
             tags = []
         installed = {m.get("name", "") for m in tags}
+        # A delegated role resolves against the UPSTREAM's inventory, not this card's. Each
+        # remote is read once here, not once per role, and a remote that is down degrades that
+        # role to resolved=None rather than failing the whole view.
+        remote_tags: dict[str, set[str]] = {}
         out: list[dict[str, Any]] = []
         for role, pattern in sorted(roles.items()):
+            up_name, ref = self.settings.delegate_ref(pattern)
+            if up_name is not None:
+                if up_name not in remote_tags:
+                    try:
+                        remote_tags[up_name] = {
+                            str(m.get("name", "")) for m in await self._upstream(up_name).models()
+                        }
+                    except UpstreamError:
+                        remote_tags[up_name] = set()
+                names = remote_tags[up_name]
+                try:
+                    resolved = resolve_ollama_model(ref, lambda: [{"name": n} for n in names])
+                except ValueError:
+                    resolved = None
+                out.append({
+                    "role": role, "pattern": pattern, "upstream": up_name,
+                    "resolved": resolved,
+                    "installed": bool(resolved) and resolved in names,
+                    "class": self._class(resolved) if resolved else None,
+                })
+                continue
             try:
-                resolved: str | None = resolve_ollama_model(pattern, lambda: tags)
+                resolved: str | None = resolve_ollama_model(ref, lambda: tags)
             except ValueError:
                 resolved = None  # a glob with no installed match
             out.append({
                 "role": role,
                 "pattern": pattern,
+                "upstream": "local",
                 "resolved": resolved,
                 "installed": bool(resolved) and resolved in installed,
                 "class": self._class(resolved) if resolved else None,
             })
         return out
+
+    async def upstreams_view(self) -> list[dict[str, Any]]:
+        """Every broker a role may name, `local` first. Reachability is probed via /healthz,
+        which is token-exempt everywhere — so an unreachable box and one that rejects our token
+        are distinguishable, and the panel can say which."""
+        out: list[dict[str, Any]] = [{"name": "local", "url": None, "reachable": True}]
+        for name, spec in sorted(self.settings.upstreams().items()):
+            client = self._upstream(name)
+            authed = True
+            try:
+                await client.models()
+            except UpstreamError:
+                authed = False
+            out.append({"name": name, "url": spec["url"],
+                        "reachable": await client.healthy(), "authorized": authed})
+        return out
+
+    async def models_view(self, upstream: str | None = None) -> list[dict[str, Any]]:
+        """Installed models on `upstream` (default: this box). Powers the admin picker once a
+        rail has been pointed off-site: the choices have to come from the box that will run it."""
+        if not upstream or upstream == "local":
+            return await self.list_models()
+        if upstream not in self.settings.upstreams():
+            raise UpstreamError(f"unknown upstream {upstream!r}")
+        return await self._upstream(upstream).models()
 
     async def status(self) -> dict[str, Any]:
         reachable = True
@@ -255,16 +307,41 @@ class Broker:
         return evicted
 
     async def _resolve(self, model: str) -> str:
-        """Resolve a model reference to a concrete installed model. A leading '@' is a
-        ROLE/class alias ('@chat', '@reasoning') expanded via the broker's role map; the
-        result (a plain name or a glob) is then glob-resolved. Only the Ollama backend
-        globs (per design); a plain name passes straight through with no tags() round-trip."""
+        """Resolve a model reference to a concrete LOCAL model. A leading '@' is a ROLE/class
+        alias ('@chat', '@reasoning') expanded via the broker's role map; the result (a plain
+        name or a glob) is then glob-resolved. Only the Ollama backend globs (per design); a
+        plain name passes straight through with no tags() round-trip.
+
+        Delegation is NOT handled here — see _split(). Callers that can delegate must use that;
+        this stays the local-only path so the media and voice routes, which have no remote
+        equivalent, keep exactly their previous behaviour."""
         if model.startswith("@"):
             model = self.settings.roles().get(model[1:], model[1:])
         if not any(c in model for c in "*?[]"):
             return model
         tags = await self.ollama.tags()
         return resolve_ollama_model(model, lambda: tags)
+
+    def _upstream(self, name: str) -> UpstreamClient:
+        spec = self.settings.upstreams()[name]
+        return UpstreamClient(name, spec["url"], spec.get("token", ""),
+                              timeout=self.settings.ollama_timeout)
+
+    async def _split(self, model: str) -> tuple[UpstreamClient | None, str]:
+        """Expand a reference and decide WHERE it runs: `(upstream_or_None, model_ref)`.
+
+        A role may name a registered remote broker (`offsite::mistral-small3*:24b`). When it
+        does, the glob is deliberately left UNRESOLVED and handed over as-is: the upstream knows
+        what it has installed and this box does not, so resolving here would match against the
+        wrong inventory — and on a small card would usually match nothing at all, turning a
+        perfectly good delegation into a missing model.
+        """
+        if model.startswith("@"):
+            model = self.settings.roles().get(model[1:], model[1:])
+        name, ref = self.settings.delegate_ref(model)
+        if name is None:
+            return None, await self._resolve(ref)
+        return self._upstream(name), ref
 
     async def audit_roles(self) -> list[str]:
         """Check the whole role map against what is installed and what the card can hold.
@@ -305,6 +382,17 @@ class Broker:
             # by the media worker from the HF cache. Auditing them here would report every
             # correctly configured image role as missing.
             if pattern in MEDIA_IMAGE_BACKENDS:
+                continue
+            # A DELEGATED role runs on another box, so auditing it against this card's tags()
+            # would report every correctly configured off-site role as missing — the exact wall
+            # of false warnings this audit exists to avoid. What IS worth saying is when the
+            # named upstream is gone, because then the role resolves nowhere at all.
+            up_name, _ref = self.settings.delegate_ref(pattern)
+            if up_name is not None:
+                continue
+            if "::" in pattern:
+                out.append(f"@{role} -> '{pattern}' names an upstream that is not registered "
+                           f"in upstreams.json; it will be resolved locally and will not match")
                 continue
             # Only decorates a role that is ALREADY wrong. An inherited default that is
             # installed and fits is the normal case and must stay silent, or the audit turns
@@ -360,8 +448,12 @@ class Broker:
 
     async def load(self, model: str, keep_alive: str | int | None = None) -> dict[str, Any]:
         rail = self._rail_for(model)
-        model = await self._resolve(model)
+        up, model = await self._split(model)
         keep_alive = self.settings.default_load_keep_alive if keep_alive is None else keep_alive
+        if up is not None:
+            # No local gate and no local eviction: warming a model on another box cannot
+            # contend for this card, and holding the single slot for it would stall local work.
+            return {**await up.load(model, keep_alive=keep_alive), "upstream": up.name}
         if self._class(model) == "embed":
             # Embedders load via /api/embed; they don't evict heavy models.
             await self.ollama.embed(model, " ", keep_alive=keep_alive)
@@ -372,6 +464,9 @@ class Broker:
             return {"model": model, "class": "heavy", "evicted": evicted, "keep_alive": keep_alive}
 
     async def unload(self, model: str) -> dict[str, Any]:
+        up, model = await self._split(model)
+        if up is not None:
+            return {**await up.unload(model), "upstream": up.name}
         # `ollama stop` reliably evicts any model (heavy or embedder) from VRAM.
         await self.ollama.stop(model)
         return {"model": model, "unloaded": True}
@@ -391,7 +486,10 @@ class Broker:
         think: bool | None = None,
     ) -> dict[str, Any]:
         rail = self._rail_for(model)
-        model = await self._resolve(model)
+        up, model = await self._split(model)
+        if up is not None:
+            return await up.chat(model, messages, options=options, keep_alive=keep_alive,
+                                 format=format, think=think)
         async with self.gate.hold(model=model, source=rail):
             await self._evict_other_heavy(keep=model)
             return await self.ollama.chat(
@@ -413,7 +511,14 @@ class Broker:
         WebSocket. The GPU gate is held for the whole stream (the job stays 'active' in
         the queue until the last token), exactly like the buffered path."""
         rail = self._rail_for(model)
-        model = await self._resolve(model)
+        up, model = await self._split(model)
+        if up is not None:
+            # Relayed frame-for-frame, and WITHOUT the gate: the queue models this card's single
+            # heavy slot, and a remote generation occupies none of it.
+            async for chunk in up.chat_stream(model, messages, options=options,
+                                              keep_alive=keep_alive, format=format):
+                yield chunk
+            return
         async with self.gate.hold(model=model, source=rail):
             await self._evict_other_heavy(keep=model)
             async for chunk in self.ollama.chat_stream(
@@ -423,7 +528,9 @@ class Broker:
 
     async def embed(self, model: str, text: str | list[str]) -> dict[str, Any]:
         # Embeddings are light and coexist with a heavy model, so no gate.
-        model = await self._resolve(model)
+        up, model = await self._split(model)
+        if up is not None:
+            return await up.embed(model, text)
         return await self.ollama.embed(model, text)
 
     async def embed_image(self, images: list[str], model: str | None = None) -> dict[str, Any]:

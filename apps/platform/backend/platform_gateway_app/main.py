@@ -639,18 +639,62 @@ def admin_delete_user(uid: int, admin: User = Depends(require_admin),
 
 class RailModelBody(BaseModel):
     model: str  # a concrete installed model name, or a glob pattern to keep auto-resolution
+    # Which registered broker runs it. "local" is this box; anything else is composed into the
+    # stored role value as "<upstream>::<model>" — the broker's delegation syntax.
+    upstream: str = "local"
+
+
+async def _upstreams_view() -> list[dict[str, Any]]:
+    """Every broker a rail slot may be pointed at, ``local`` first.
+
+    A broker too old to know ``/v1/upstreams`` reports local only, so the panel still renders and
+    delegation is simply unavailable rather than broken. A broker that is down does not reach
+    here: ``roles()`` is fetched first and its BrokerError still surfaces as the 502 it always did.
+    """
+    try:
+        ups = (await app.state.broker.upstreams()).get("upstreams", [])
+    except BrokerError:
+        ups = []
+    return ups or [{"name": "local", "url": None, "reachable": True}]
+
+
+async def _upstream_models(name: str, disabled: set[str]) -> list[dict[str, Any]]:
+    """One upstream's picker choices. A box that is unreachable, unauthorized or merely slow
+    yields an EMPTY list rather than an exception: one dark remote must not blank out the whole
+    Rails tab, which would take every local slot's picker down with it."""
+    try:
+        raw = await app.state.broker.models(None if name == "local" else name)
+    except BrokerError:
+        return []
+    return model_options(raw.get("models", []), disabled)
 
 
 async def _rails_payload(disabled: set[str] = frozenset()) -> dict[str, Any]:
     """The Rails-tab payload: each installed rail's model slots (resolved model + description)
-    plus the list of installed generative models to choose from. Resolved via the broker.
-    Disabled models are dropped from the pickers."""
+    plus the installed generative models to choose from, PER BROKER. Resolved via the broker.
+    Disabled models are dropped from the pickers.
+
+    ``models`` is keyed by upstream name because a slot's choices depend on where it runs: point
+    one off-site and the dropdown has to offer that box's inventory, not this card's. Every
+    reported upstream gets a key — empty when it cannot be read — so the frontend can always
+    index by the slot's upstream without a missing-key branch.
+    """
     broker = app.state.broker
     roles = (await broker.roles()).get("roles", [])
-    models = (await broker.models()).get("models", [])
+    upstreams = await _upstreams_view()
+    named = [u for u in upstreams if u.get("name")]
+    names = [str(u["name"]) for u in named]
+    # Only a box we believe is up is worth a round-trip; the rest are pre-seeded empty. Fetched
+    # concurrently so N remotes cost one slow box's latency, not the sum of them.
+    live = [str(u["name"]) for u in named
+            if u.get("reachable", True) and u.get("authorized", True)]
+    fetched = await asyncio.gather(*(_upstream_models(n, disabled) for n in live))
+    models: dict[str, list[dict[str, Any]]] = {n: [] for n in names}
+    models.update(dict(zip(live, fetched)))
     enabled = set(app.state.settings.enabled_apps)
     return {"rails": build_rails_view(roles, enabled),
-            "models": model_options(models, disabled),
+            "models": models,
+            "upstreams": upstreams,
             "media": media_options()}
 
 
@@ -889,9 +933,27 @@ async def admin_set_rail_model(role: str, body: RailModelBody,
     model = body.model.strip()
     if not model:
         raise HTTPException(status_code=400, detail="a model is required")
-    # An image slot may only be set to a known media backend (sdxl-turbo / flux-schnell).
-    if role in IMAGE_SLOT_ROLES and not is_valid_image_model(model):
-        raise HTTPException(status_code=400, detail=f"'{model}' is not a valid image backend")
+    upstream = (body.upstream or "local").strip() or "local"
+    # An image slot may only be set to a known media backend (sdxl-turbo / flux-schnell), and
+    # only ever on THIS box: a media backend is loaded by our own media worker, so delegating one
+    # would name a thing the remote broker has no concept of and fail at generation time.
+    if role in IMAGE_SLOT_ROLES:
+        if upstream != "local":
+            raise HTTPException(status_code=400,
+                                detail="an image slot runs on this box's media worker and "
+                                       "cannot be delegated to an upstream")
+        if not is_valid_image_model(model):
+            raise HTTPException(status_code=400, detail=f"'{model}' is not a valid image backend")
+    if upstream != "local":
+        # Checked here as well as in the broker so the panel gets a clean 400 naming the choices,
+        # rather than a relayed error, and so an unregistered name can never reach roles.json —
+        # saved there it would resolve LOCALLY while the panel claimed the slot was off-site.
+        known = {str(u.get("name", "")) for u in await _upstreams_view()}
+        if upstream not in known:
+            raise HTTPException(status_code=400,
+                                detail=f"unknown upstream '{upstream}'; "
+                                       f"registered: {', '.join(sorted(known))}")
+        model = f"{upstream}::{model}"
     try:
         await app.state.broker.set_role(role, model)
         # Filter disabled models from the returned picker too, so a disabled model can't flash

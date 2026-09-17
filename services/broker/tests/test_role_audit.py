@@ -26,7 +26,12 @@ def _broker(roles: dict, monkeypatch, tags: list[dict], total_mib: int | None,
     # provenance existed see no [inherited …] note and keep asserting the same strings.
     b.settings = SimpleNamespace(
         roles=lambda: roles,
-        overlay_roles=lambda: dict(roles if overlay is None else overlay))
+        overlay_roles=lambda: dict(roles if overlay is None else overlay),
+        # No remote brokers registered in these tests, so nothing is delegated and every
+        # assertion below is about the local card exactly as before. Present because the audit
+        # now asks whether a role runs off-box before size-checking it against this GPU.
+        upstreams=dict,
+        delegate_ref=lambda value: (None, value))
     b.ollama = SimpleNamespace(tags=_async(tags))
     monkeypatch.setattr("app.broker.gpu.vram",
                         _async({"total_mib": total_mib} if total_mib else None))

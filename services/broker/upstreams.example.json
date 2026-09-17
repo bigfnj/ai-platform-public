@@ -1,0 +1,9 @@
+{
+  "_comment": "Remote brokers this one may delegate a role to. Copy to upstreams.json (gitignored -- it holds tokens) and edit. Hot-read: adding a box takes effect on the next request, no restart.",
+  "_syntax": "A role then names one with a DOUBLE colon, e.g. \"openmaic\": \"offsite::mistral-small3*:24b\". Doubled because a single colon is already the model/tag separator -- gemma3:4b would otherwise parse as upstream 'gemma3'. The glob is resolved by the UPSTREAM, against its own inventory, not this box's.",
+  "_note": "'local' is implicit and cannot be redefined here. An unregistered name in a role value is NOT silently run locally: it stays whole, matches nothing, and shows as a missing chip -- better than quietly using the wrong box.",
+  "offsite": {
+    "url": "http://192.168.1.11:11500",
+    "token": ""
+  }
+}

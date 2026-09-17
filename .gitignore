@@ -77,3 +77,8 @@ rails/smb-partner-enablement/documents/
 rails/smb-partner-enablement/build/
 rails/gemini-cx/research/
 rails/gemini-cx/documents/
+
+# Named remote brokers a role may be delegated to (broker upstreams registry). Each entry holds
+# that remote's BEARER TOKEN, so this is local configuration and is never committed. The shape is
+# in services/broker/upstreams.example.json. Hot-read, like roles.json.
+services/broker/upstreams.json

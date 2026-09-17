@@ -139,6 +139,10 @@ class BrokerSettings(BaseSettings):
     # LAN host on 0.0.0.0:11500 can't drive the GPU / repoint roles. Empty = open (dev / rollout).
     auth_token: str = ""
 
+    # Named REMOTE brokers this one may delegate a role to (upstreams.json, hot-read like
+    # roles.json). See upstreams() for the file shape and delegate_ref() for the syntax.
+    upstreams_file: str = ""
+
     # Backend GPU model server. Ollama today; swappable later.
     ollama_base_url: str = "http://127.0.0.1:11434"
 
@@ -282,7 +286,7 @@ class BrokerSettings(BaseSettings):
                                      or self.media_python).items()}
         path = Path(self.voice_engines_file) if self.voice_engines_file else _BROKER_DIR / "voice_engines.json"
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
             if isinstance(data, dict):
                 for k, v in data.items():
                     if isinstance(v, dict):
@@ -310,6 +314,60 @@ class BrokerSettings(BaseSettings):
         merged.update(self.overlay_roles())
         return merged
 
+    def upstreams_path(self) -> Path:
+        """The upstreams.json registry (BROKER_UPSTREAMS_FILE or services/broker/upstreams.json)."""
+        return Path(self.upstreams_file) if self.upstreams_file else _BROKER_DIR / "upstreams.json"
+
+    def upstreams(self) -> dict[str, dict[str, str]]:
+        """Named remote brokers this one may delegate to, `{name: {"url":..., "token":...}}`.
+
+        A FILE rather than an env var, for the same two reasons roles.json is one: it is hot-read,
+        so adding a box takes effect on the next request instead of on a restart, and it keeps a
+        remote broker's bearer token out of compose — where the platform-wide BROKER_AUTH_TOKEN
+        already lives and would otherwise be joined by one secret per remote.
+
+        `local` is implicit, always present, and may not be redefined here: it is this broker's own
+        Ollama, and a registry entry claiming that name would make "local" mean two things
+        depending on which code path asked.
+
+        Unreadable or malformed => {} rather than an exception. Delegation is an enhancement; a
+        broken registry must degrade to local-only, not take the GPU layer down with it.
+        """
+        try:
+            data = json.loads(self.upstreams_path().read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out: dict[str, dict[str, str]] = {}
+        for name, spec in data.items():
+            if not _ROLE_NAME.fullmatch(str(name)) or str(name) == "local":
+                continue
+            if not isinstance(spec, dict) or not str(spec.get("url", "")).strip():
+                continue
+            out[str(name)] = {"url": str(spec["url"]).rstrip("/"),
+                              "token": str(spec.get("token", ""))}
+        return out
+
+    def delegate_ref(self, value: str) -> tuple[str | None, str]:
+        """Split a role value into `(upstream_name, model_ref)`.
+
+        The separator is a DOUBLE colon — `offsite::mistral-small3*:24b` — and that is the whole
+        reason this is unambiguous. A single colon is already the model/tag separator, so
+        `gemma3:4b` would make an upstream named `gemma3` and a model named `4b`; worse, it would
+        do so only on the box where somebody happened to name an upstream after a model family.
+        No Ollama model name contains `::`, so the two syntaxes cannot collide by accident.
+
+        An unknown upstream name returns `(None, value)` — the whole string is then resolved
+        locally, fails to match an installed model, and surfaces as a MISSING chip. That is the
+        honest outcome: silently falling back to a local model of the same name would run the
+        wrong box's GPU and report success.
+        """
+        if "::" not in value:
+            return None, value
+        name, _, rest = value.partition("::")
+        return (name, rest) if name in self.upstreams() else (None, value)
+
     def overlay_roles(self) -> dict[str, str]:
         """Only the roles THIS box set, without the DEFAULT_ROLES backstop underneath.
 
@@ -319,8 +377,13 @@ class BrokerSettings(BaseSettings):
         nobody reviewed, and the rail meets it as a model that will not load. Separating the
         two lets the startup audit say which of the two a bad role came from, which is the
         difference between "fix your roles.json" and "you never had one"."""
+        # utf-8-SIG, not utf-8. These are hand-edited files on a Windows box, and PowerShell's
+        # Set-Content / Out-File write a BOM by default. Read as plain utf-8 the BOM makes
+        # json.loads raise, the except below swallows it, and the whole overlay silently
+        # disappears -- every role quietly reverting to the 24 GB DEFAULT_ROLES with nothing said.
+        # Found exactly that way: a roles.json written by PowerShell, reporting the defaults back.
         try:
-            data = json.loads(self.roles_path().read_text(encoding="utf-8"))
+            data = json.loads(self.roles_path().read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError):
             return {}
         if not isinstance(data, dict):
@@ -340,9 +403,17 @@ class BrokerSettings(BaseSettings):
             raise ValueError("model pattern must be 1..128 characters")
         if role not in self.roles():
             raise ValueError(f"unknown role {role!r}")
+        # Refuse a delegation to a box that is not registered. Saved unchecked it would resolve
+        # locally instead (delegate_ref falls back on an unknown name), so the panel would report
+        # the role as pointing off-site while every call ran on this card.
+        if "::" in pattern:
+            name = pattern.partition("::")[0]
+            if name not in self.upstreams():
+                known = sorted(self.upstreams()) or ["(none registered)"]
+                raise ValueError(f"unknown upstream {name!r}; registered: {', '.join(known)}")
         path = self.roles_path()
         try:
-            current = json.loads(path.read_text(encoding="utf-8"))
+            current = json.loads(path.read_text(encoding="utf-8-sig"))
             if not isinstance(current, dict):
                 current = {}
         except (OSError, json.JSONDecodeError):
@@ -361,7 +432,7 @@ class BrokerSettings(BaseSettings):
     def disabled(self) -> set[str]:
         """Admin-disabled model names (hot-read from disabled.json each call). Empty if absent."""
         try:
-            data = json.loads(self.disabled_path().read_text(encoding="utf-8"))
+            data = json.loads(self.disabled_path().read_text(encoding="utf-8-sig"))
             if isinstance(data, list):
                 return {str(n) for n in data}
         except (OSError, json.JSONDecodeError):

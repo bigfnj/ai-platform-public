@@ -70,8 +70,17 @@ class BrokerClient:
     async def status(self) -> dict[str, Any]:
         return await self._request("GET", "/v1/status")
 
-    async def models(self) -> dict[str, Any]:
-        return await self._request("GET", "/v1/models")
+    async def models(self, upstream: str | None = None) -> dict[str, Any]:
+        """Installed models. ``upstream`` names a registered remote broker instead of this box.
+
+        Needed once a role can be delegated: the choices for a slot pointed off-site have to come
+        from the box that will run it, not from whatever happens to be installed here."""
+        params = {"upstream": upstream} if upstream else None
+        return await self._request("GET", "/v1/models", params=params)
+
+    async def upstreams(self) -> dict[str, Any]:
+        """Every broker a role may be delegated to, ``local`` first."""
+        return await self._request("GET", "/v1/upstreams")
 
     async def ps(self) -> dict[str, Any]:
         return await self._request("GET", "/v1/ps")
