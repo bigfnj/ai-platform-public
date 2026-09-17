@@ -142,8 +142,13 @@ class SwapReq(BaseModel):
 
 
 @router.post("/api/planner/propose/swap")
-def swap_plan(req: SwapReq) -> dict:
-    """Re-roll a single proposed slot with a different pick."""
+def swap_plan(req: SwapReq, _: deps.Identity = Depends(deps.identity)) -> dict:
+    """Re-roll a single proposed slot with a different pick.
+
+    Takes plain ``identity`` rather than ``owner_id`` like its siblings: a swap proposes against
+    the shared catalog and writes nothing per-owner, so it needs no owner — but it does drive the
+    broker, and every other route on this router already refused a caller without one.
+    """
     con = db.connect()
     try:
         return planner_ai.swap(con, req.date, req.slot, req.ptype, req.exclude_ids)

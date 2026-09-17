@@ -55,10 +55,19 @@ def client(tmp_path, monkeypatch):
     _reset_run()
 
 
-def test_status_is_open_and_reports_counts(client):
-    j = client.get("/api/icons/status").json()
+def test_status_reports_counts_to_any_identified_caller(client):
+    """Readable by a NON-ADMIN (that is what "open" was protecting — the progress poll has to
+    work for an ordinary viewer), but not by a caller with no identity at all."""
+    j = client.get("/api/icons/status", headers=ALICE).json()
     assert j["total"] == 1 and j["ready"] == 0 and j["pending"] == 1
     assert j["running"] is False
+
+
+def test_status_without_identity_is_401(client):
+    """Inverted deliberately, like test_ungated_caller_is_refused below. This route was written
+    un-gated ("so the admin UI can poll progress") and stayed that way, which also handed a
+    sibling container the corpus size and a live view of GPU render runs."""
+    assert client.get("/api/icons/status").status_code == 401
 
 
 @pytest.mark.parametrize("path", ["/api/icons/generate", "/api/icons/repass"])

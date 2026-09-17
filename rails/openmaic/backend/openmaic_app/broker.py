@@ -96,18 +96,21 @@ def roles() -> list[dict]:
 # --- inference --------------------------------------------------------------------------------
 
 async def chat(model: str, messages: list[dict], *, options: dict | None = None,
-               fmt: str | dict | None = None, keep_alive: str | int = "30m") -> dict:
+               fmt: str | dict | None = None, think: bool | None = None,
+               keep_alive: str | int = "30m") -> dict:
     """Buffered chat. Returns the broker's raw response (Ollama /api/chat shape)."""
     payload: dict = {"model": model, "messages": messages, "keep_alive": keep_alive}
     if options:
         payload["options"] = options
     if fmt is not None:
         payload["format"] = fmt
+    if think is not None:
+        payload["think"] = think
     return await _apost("/v1/chat", payload)
 
 
 async def chat_stream(model: str, messages: list[dict], *, options: dict | None = None,
-                      fmt: str | dict | None = None,
+                      fmt: str | dict | None = None, think: bool | None = None,
                       keep_alive: str | int = "30m") -> AsyncIterator[dict]:
     """Yield the broker's raw NDJSON frames from /v1/chat/stream, one decoded dict per line.
 
@@ -125,6 +128,8 @@ async def chat_stream(model: str, messages: list[dict], *, options: dict | None 
         payload["options"] = options
     if fmt is not None:
         payload["format"] = fmt
+    if think is not None:
+        payload["think"] = think
     try:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
             async with client.stream("POST", BROKER_URL + "/v1/chat/stream",

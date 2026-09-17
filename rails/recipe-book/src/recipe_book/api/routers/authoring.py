@@ -108,8 +108,13 @@ class DraftReq(BaseModel):
 
 
 @router.post("/api/recipes/draft")
-def draft(req: DraftReq) -> dict:
-    """Turn pasted text (AI) or manual fields into an uncommitted structured draft."""
+def draft(req: DraftReq, _: deps.Identity = Depends(deps.identity)) -> dict:
+    """Turn pasted text (AI) or manual fields into an uncommitted structured draft.
+
+    Gated even though a draft is never persisted: the AI path is a broker round-trip, so an
+    un-gated caller could queue work on the shared GPU indefinitely without ever committing
+    anything that would show up as a recipe.
+    """
     if req.mode == "manual":
         d = _normalize(
             {"title": req.title, "meta": req.meta, "ingredients": req.ingredients,
@@ -126,7 +131,7 @@ class RefineReq(BaseModel):
 
 
 @router.post("/api/recipes/draft/refine")
-def refine(req: RefineReq) -> dict:
+def refine(req: RefineReq, _: deps.Identity = Depends(deps.identity)) -> dict:
     """Carry the draft + the user's chat message back through the assistant."""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="empty message")
@@ -279,8 +284,13 @@ class UrlReq(BaseModel):
 
 
 @router.post("/api/recipes/extract/url")
-def extract_url_ep(req: UrlReq) -> dict:
-    """Fetch a recipe URL, strip it to article text, distill to a draft (source = the URL)."""
+def extract_url_ep(req: UrlReq, _: deps.Identity = Depends(deps.identity)) -> dict:
+    """Fetch a recipe URL, strip it to article text, distill to a draft (source = the URL).
+
+    The worst of the un-gated authoring routes: it makes this container fetch an arbitrary
+    caller-supplied URL and then reports what came back, which is a request-forgery primitive
+    pointed at the compose network, not just wasted GPU time.
+    """
     if not req.url.strip():
         raise HTTPException(status_code=400, detail="url required")
     try:
@@ -297,7 +307,8 @@ def extract_url_ep(req: UrlReq) -> dict:
 
 @router.post("/api/recipes/extract/files")
 def extract_files_ep(files: list[UploadFile] = File(...),
-                     kind: str = Form(""), category: str = Form("")) -> dict:
+                     kind: str = Form(""), category: str = Form(""),
+                     _: deps.Identity = Depends(deps.identity)) -> dict:
     """Extract one recipe from one or more uploaded files/photos (multiple images are read
     together as a single recipe). For batch import, the client posts one file per call."""
     texts: list[str] = []
@@ -331,7 +342,7 @@ class DupReq(BaseModel):
 
 
 @router.post("/api/recipes/duplicate_check")
-def duplicate_check(req: DupReq) -> dict:
+def duplicate_check(req: DupReq, _: deps.Identity = Depends(deps.identity)) -> dict:
     """Flag existing recipes that look like near-duplicates of a draft (title similarity
     and/or ingredient overlap), so the user can Replace or Keep both before saving."""
     title = req.title.strip().lower()

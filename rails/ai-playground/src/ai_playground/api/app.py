@@ -82,6 +82,13 @@ def create_api() -> FastAPI:
     app = FastAPI(title="ai-playground", version="0.1.0",
                   docs_url="/api/docs", openapi_url="/api/openapi.json")
 
+    # This rail gates PER ROUTE (RAIL_CONTRACT.md, "Identity: fail closed"), so a new route is
+    # gated only if whoever added it remembered — and the read-only-looking ones were not:
+    # /api/capabilities, /api/demos and /api/nim/probe all answered 200 to a caller with no
+    # X-Platform-User, which on this platform means a sibling container. Capabilities reports
+    # live model state, and nim/probe spends the deployment's NVIDIA credentials on demand.
+    # /api/health below is the ONE deliberate exception — the liveness probe the contract
+    # leaves open for this shape.
     @app.get("/api/health")
     def health() -> dict:
         return {"ok": True, "broker": broker.up(), "nim": nim.available()}
@@ -91,7 +98,7 @@ def create_api() -> FastAPI:
         return {"user": ident.user, "is_admin": ident.is_admin}
 
     @app.get("/api/capabilities")
-    def capabilities() -> dict:
+    def capabilities(_: Identity = Depends(deps.identity)) -> dict:
         """Four-state status for the header chips: the generation model (@ai-playground, the
         role the admin Rails panel repoints) and the retrieval embedder (@embed). Resolved live
         from the broker each call, so the chips reflect the current admin selection + residency."""
@@ -119,13 +126,17 @@ def create_api() -> FastAPI:
                 "label": label, "is_nvidia": is_nvidia, "gpu": gpu or "NVIDIA RTX 4090"}
 
     @app.get("/api/demos")
-    def list_demos() -> dict:
+    def list_demos(_: Identity = Depends(deps.identity)) -> dict:
         return {"demos": demos.DEMOS, "nim": nim.info(), "gen": _gen_info()}
 
     @app.post("/api/nim/probe")
-    async def nim_probe() -> dict:
+    async def nim_probe(_: Identity = Depends(deps.identity)) -> dict:
         """Real auth check for the 'Connect to NVIDIA NIM' toggle: a 1-token completion
-        against the hosted endpoint. Raises 502 with the reason on a bad/absent key."""
+        against the hosted endpoint. Raises 502 with the reason on a bad/absent key.
+
+        Gated: this spends the deployment's NVIDIA credentials against a hosted endpoint on
+        demand, and reports back whether they work — an oracle no un-gated caller should have.
+        """
         try:
             await nim.probe()
         except Exception as exc:  # noqa: BLE001
@@ -195,8 +206,16 @@ def create_api() -> FastAPI:
     async def ws_rag(ws: WebSocket) -> None:
         """Live RAG: sends one `sources` frame, then `token` frames, then `done`. On any
         failure sends an `error` frame. `backend` picks local (broker) or nim generation."""
+        # Identity BEFORE accept(), so an un-gated caller never establishes a socket at all and
+        # cannot probe the rail by reading what comes back. This used to accept() first and then
+        # read the header only to label the run, so a header-less sibling container got a full
+        # streamed generation on the shared GPU.
+        user = deps.ws_user(ws)
+        if user is None:
+            await ws.close(code=4401)
+            return
+        user = user or None
         await ws.accept()
-        user = ws.headers.get("x-platform-user") or None
         try:
             req = await ws.receive_json()
         except Exception:  # noqa: BLE001 — client vanished / bad frame
@@ -486,8 +505,14 @@ def create_api() -> FastAPI:
     async def ws_bench(ws: WebSocket) -> None:
         """Streamed benchmark: a `meta` frame, `progress` frames per config as they start/finish,
         then a `done` frame with the full results. Errors surface as an `error` frame."""
+        # Identity before accept() — see ws_rag. A benchmark run is the most expensive thing this
+        # rail can be asked to do (every selected model, over every query in a set).
+        user = deps.ws_user(ws)
+        if user is None:
+            await ws.close(code=4401)
+            return
+        user = user or None
         await ws.accept()
-        user = ws.headers.get("x-platform-user") or None
         try:
             req = await ws.receive_json()
         except Exception:  # noqa: BLE001

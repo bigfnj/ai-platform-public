@@ -91,7 +91,8 @@ def test_usage_tolerates_a_frame_with_no_counters():
 
 def _collect(frames):
     """Run the SSE generator against a canned broker stream and return the raw events."""
-    async def fake_stream(model, messages, *, options=None, fmt=None, keep_alive="30m"):
+    async def fake_stream(model, messages, *, options=None, fmt=None, think=None,
+                          keep_alive="30m"):
         for f in frames:
             yield f
 
@@ -172,7 +173,8 @@ def test_broker_error_before_any_frame_still_terminates_the_stream():
     """The response is already 200 by then, so the only way to tell the client is in-band."""
     from openmaic_app import broker
 
-    async def boom(model, messages, *, options=None, fmt=None, keep_alive="30m"):
+    async def boom(model, messages, *, options=None, fmt=None, think=None,
+                   keep_alive="30m"):
         raise broker.BrokerError("broker down")
         yield  # pragma: no cover - makes this an async generator
 
@@ -285,8 +287,10 @@ def _collect_with(frames, **kw):
     """Run _sse over canned frames, returning (events, captured_kwargs_sent_to_the_broker)."""
     seen = {}
 
-    async def fake_stream(model, messages, *, options=None, fmt=None, keep_alive="30m"):
-        seen.update({"model": model, "options": options, "fmt": fmt, "keep_alive": keep_alive})
+    async def fake_stream(model, messages, *, options=None, fmt=None, think=None,
+                          keep_alive="30m"):
+        seen.update({"model": model, "options": options, "fmt": fmt, "think": think,
+                     "keep_alive": keep_alive})
         for f in frames:
             yield f
 
@@ -330,3 +334,18 @@ def test_streamed_chunks_report_the_resolved_model_not_the_role():
     events, _ = _collect_with([{"model": "gemma3:4b", "message": {"content": "a"}},
                                {"done": True}])
     assert _payloads(events)[-1]["model"] == "gemma3:4b"
+
+
+def test_thinking_is_disabled_for_structured_output():
+    """A thinking model asked for JSON spends its whole budget reasoning and returns EMPTY
+    content -- measured at ~33% on another rail here. The reasoning slot is admin-repointable and
+    roles.json already ships a thinking model, so this is one panel click away from live."""
+    _, seen = _collect_with([{"done": True}], fmt="json", think=False)
+    assert seen["think"] is False
+
+
+def test_thinking_is_left_alone_for_free_text():
+    """None means the model's own default. Forcing it off everywhere would silently change the
+    behaviour of a model chosen precisely because it reasons."""
+    _, seen = _collect_with([{"done": True}])
+    assert seen["think"] is None

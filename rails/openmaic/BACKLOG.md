@@ -38,27 +38,12 @@ while the gateway still carries `depends_on: - dashboard` and `PLATFORM_APP_EDU_
 Whether edu-suite should be fully stripped or fully restored is a call for the publish pipeline's
 owner. The line-based filter is the real defect either way.
 
-### P3 [platform] — `ai-playground` is in `roles.json` but not in `DEFAULT_ROLES`
-
-So on a box whose `roles.json` is missing or malformed, `@ai-playground` resolves to the literal
-string `"ai-playground"` and is handed to Ollama as a model name — an Ollama 404 wrapped in a 502,
-not a "no such role" error. `openmaic` was deliberately added to **both** to avoid inheriting this.
-
-Related: an unknown `@role` degrades silently in general (`config.py` `roles()` uses
-`.get(name, name)`). A role that does not exist should be a loud error, not a model name.
-
 ### P4 [platform] — `@recipe-icon → flux-schnell` is reported as not installed
 
 `/v1/roles` says `installed: false`. It is a media-worker backend, not an Ollama model, and the
 lean profile runs with media off — so this is arguably correct and permanently red. Either way it
 makes "every role resolves" unusable as a health assertion without an exception list, which is
 what `verify-platform.ps1` had to do.
-
-### P5 [platform] — `gemini-cx/frontend` has no `src/vite-env.d.ts`
-
-Four sibling rails ship it. Without it `tsc` rejects `import './theme.css'` with TS2307. Latent,
-not currently breaking — but it means `npm run build` for that rail depends on nobody adding a CSS
-import.
 
 ### P6 [platform] — `test_config_enabled_apps.py:42` asserts `len(apps) >= 14`
 
@@ -105,23 +90,6 @@ it fronts is an iframe, not a React component this rail controls.
 Consequence today: tokens arrive in one burst rather than progressively, and a generation longer
 than the gateway's 600s client timeout 502s. Fixing it properly means either a streaming path in
 the gateway proxy or a WebSocket relay; neither is a rail-local change.
-
-### P11 — nothing handles thinking models
-
-A thinking model on structured work returns empty content about a third of the time at ~8x
-latency — measured, and documented in the broker's own schema comments. This rail sets no `think`
-parameter and does not strip `<think>` blocks, where terminal-fun has `_strip_reasoning()` for
-exactly this.
-
-Latent: `@openmaic` resolves to a non-thinking model today. But the slot is `admin_panel: true`,
-and `roles.json` already ships `qwen3.6*:27b` — so the first admin who repoints it in the panel
-this rail exists to honour gets `<think>` preambles as course text.
-
-### P12 — `_same()` in the generated `modelstate.py` over-matches
-
-`"latest" in (a + b)` tests the concatenation of both names, then compares only the pre-colon
-part. `_same("gemma3:4b", "gemma3:27b-latest")` is True, so a resident 27b turns the 4b chip
-green. Every rail carries this; the fix belongs in `tools/rail_template.py`, not here.
 
 ### P13 — the installer GUI fix restored the old gap rather than widening it
 
@@ -200,3 +168,7 @@ regression-tested (57 tests, up from 45); P10-P13 above are what was deliberatel
 | Per-call broker sockets closed by the GC, not the code | `aclosing()` now unwinds at the break. A course generation is dozens of these back to back. |
 | Dead: `resolved_model()`, `host`, `port`, `llm_api_key` | `broker_url` was worse than unused — `Settings` read `.env` while `broker.py` read `os.environ`, so a `.env` value was honoured by everything except the module that dials. |
 | No `.dockerignore` for the rail context | Host bytecode from a 3.14 interpreter copied into a 3.11 image. |
+| Thinking models unhandled | A thinking model asked for JSON spends its budget reasoning and returns EMPTY content ~33% of the time. The reasoning slot is admin-repointable and `roles.json` already ships one, so this was a single panel click from live. `think=False` is now set whenever a format is requested, and left at the model's default otherwise. |
+| `_same()` over-matched in the generated `modelstate.py` | `"latest" in (a + b)` asked whether the word appeared anywhere in the two names CONCATENATED, then compared only the part before the colon — so a resident `gemma3:27b-latest` turned a `gemma3:4b` chip green. Fixed in `tools/rail_templates/`, synced to all 7 rails. |
+| `ai-playground` missing from `DEFAULT_ROLES` | Present in `roles.json` only, so a box with no overlay resolved `@ai-playground` to the literal string and got a 404 wrapped in a 502. |
+| `gemini-cx/frontend` had no `src/vite-env.d.ts` | Four sibling rails ship it; without it `tsc` rejects a CSS import. Latent, one CSS import from breaking that rail's build. |

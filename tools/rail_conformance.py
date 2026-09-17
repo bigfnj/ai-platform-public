@@ -1151,6 +1151,117 @@ def rc020(m: Manifest, _all: list[Manifest]) -> list[Finding]:
     return out
 
 
+#: Dependency callables that really perform the platform-identity check — the ones that raise
+#: 401 on a header-less caller, directly or through another of these. A route gated by anything
+#: else (a feature flag, a rate limiter) is not gated at all, so accepting a bare `Depends(...)`
+#: would pass exactly the routes this rule exists to catch. A rail that spells its dependency
+#: some other way belongs in this tuple, not outside the rule.
+_IDENTITY_DEPS = frozenset({"identity", "require_admin", "owner_id"})
+
+#: The decorator methods that register a route on an app or a router.
+_ROUTE_DECORATORS = frozenset({"get", "post", "put", "patch", "delete", "head", "options",
+                               "trace", "route", "api_route", "websocket"})
+
+
+def _callee(node: ast.expr) -> str:
+    """The final name of a callable expression: `identity` and `deps.identity` both -> identity."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return ""
+
+
+def _depends_name(node: ast.expr) -> str:
+    """The dependency inside a `Depends(x)` / `Depends(deps.x)` expression, or ""."""
+    if isinstance(node, ast.Call) and _callee(node.func) == "Depends" and node.args:
+        return _callee(node.args[0])
+    return ""
+
+
+def _gates(keywords: list[ast.keyword]) -> bool:
+    """True when a `dependencies=[Depends(identity), ...]` keyword carries a real identity gate.
+
+    Used for all three places FastAPI accepts one: the `FastAPI(...)` app, an `APIRouter(...)`,
+    and an individual route decorator.
+    """
+    for kw in keywords:
+        if kw.arg != "dependencies":
+            continue
+        elts = kw.value.elts if isinstance(kw.value, (ast.List, ast.Tuple)) else []
+        if any(_depends_name(e) in _IDENTITY_DEPS for e in elts):
+            return True
+    return False
+
+
+def _signature_gated(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True when a handler takes `ident: X = Depends(identity)` (or require_admin / owner_id)."""
+    args = fn.args
+    defaults = [*args.defaults, *[d for d in args.kw_defaults if d is not None]]
+    return any(_depends_name(d) in _IDENTITY_DEPS for d in defaults)
+
+
+def _status_route_gate(m: Manifest, srcs: dict[Path, str]) -> tuple[bool, bool, str]:
+    """Is the manifest's `status_route` actually behind the identity gate?
+
+    Returns (found, gated, where). `found` is False when no handler for that path could be
+    located at all, which is a SILENT SKIP by design: a route registered some way this cannot
+    read (a dynamically built path, a mounted sub-app) is a rail this tool cannot judge, and
+    guessing there would produce the false alarm that gets a checker switched off.
+
+    A route counts as gated when any of the four things FastAPI actually honours is present:
+    an app-wide `FastAPI(dependencies=[Depends(identity)])` in the same module, a gated
+    `APIRouter(dependencies=[...])` it is registered on, a `dependencies=[...]` on its own
+    decorator, or an identity dependency in the handler's signature.
+    """
+    route = str(m.data.get("status_route") or "")
+    found = gated = False
+    where = ""
+    for p, src in srcs.items():
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        # An app-level gate is per MODULE, not per rail: openmaic mounts a second FastAPI() for
+        # its LLM shim, and "some app in this rail is gated" would let an un-gated main app hide
+        # behind it.
+        app_gated = any(isinstance(n, ast.Call) and _callee(n.func) == "FastAPI"
+                        and _gates(n.keywords) for n in ast.walk(tree))
+        prefixes: dict[str, str] = {}
+        gated_routers: set[str] = set()
+        for n in ast.walk(tree):
+            if not (isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+                    and _callee(n.value.func) == "APIRouter"):
+                continue
+            pfx = next((k.value.value for k in n.value.keywords if k.arg == "prefix"
+                        and isinstance(k.value, ast.Constant) and isinstance(k.value.value, str)), "")
+            for t in n.targets:
+                if isinstance(t, ast.Name):
+                    prefixes[t.id] = pfx
+                    if _gates(n.value.keywords):
+                        gated_routers.add(t.id)
+        for n in ast.walk(tree):
+            if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dec in n.decorator_list:
+                if not (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute)
+                        and dec.func.attr in _ROUTE_DECORATORS and dec.args):
+                    continue
+                first = dec.args[0]
+                if not (isinstance(first, ast.Constant) and isinstance(first.value, str)):
+                    continue
+                owner = _callee(dec.func.value)
+                if prefixes.get(owner, "") + first.value != route:
+                    continue
+                found = True
+                if (app_gated or owner in gated_routers or _gates(dec.keywords)
+                        or _signature_gated(n)):
+                    gated = True
+                elif not where:
+                    where = f"{rel(p)}:{n.lineno}"
+    return found, gated, where
+
+
 @rule("RC021", "A rail with an API fails closed on a missing platform identity.")
 def rc021(m: Manifest, _all: list[Manifest]) -> list[Finding]:
     """The gateway authenticates every request and sets X-Platform-User, stripping any client
@@ -1163,12 +1274,30 @@ def rc021(m: Manifest, _all: list[Manifest]) -> list[Finding]:
     no identity code whatsoever. The worst case was workstation, which read the header only to
     label its audit line and then opened an SSH session on the host as Admin.
 
-    Three things are checked, because each catches a different flavour:
-      - a 401 exists for the header-less case
+    Four things are checked, because each catches a different flavour:
+      - identity code exists at all, with a 401 in it, for the header-less case
+      - the rail's OWN status_route is behind that gate, proved against the AST
       - the escape hatch is the platform-wide PLATFORM_STANDALONE, not a per-rail name
       - the inverted predicate is gone, and Header(default="?") with it
 
-    A rail with no FastAPI app is skipped; there is nothing to gate.
+    The second check is the one that had to be added, and the reason is instructive. The first
+    check is a SUBSTRING test over every .py file in the rail concatenated — so "401" appearing
+    anywhere at all, in any route, in a comment, in an unrelated error path, satisfied it for the
+    whole rail. recipe-book and ai-playground both passed it while serving /api/capabilities to
+    a header-less caller with a 200, which a probe from a sibling container confirmed: the rails
+    gate their DATA routes per-route and simply forgot the status route. A rule that asks
+    "does this rail know the number 401" cannot tell the difference between a gate and a hole,
+    so it now asks the question that matters — is THIS route gated — of the parse tree.
+
+    `status_route` is used as the probe because every rail declares one it must serve, the shell
+    polls it every 6s, and it is the route most likely to be treated as harmless metadata. It is
+    not: it reports which models the platform is running.
+
+    Deliberately NOT flagged: `/api/health`. The contract leaves a liveness probe open for the
+    per-route shape (RAIL_CONTRACT.md, "Identity: fail closed"), and a rail is free to keep it so.
+
+    A rail with no FastAPI app is skipped; there is nothing to gate. So is one with no
+    status_route (workstation, meeting-atlas) — there is no route to name.
     """
     srcs = {p: read(p) for p in m.py_sources()}
     if not any("FastAPI(" in s for s in srcs.values()):
@@ -1182,6 +1311,16 @@ def rc021(m: Manifest, _all: list[Manifest]) -> list[Finding]:
     if "401" not in blob or not reads_identity:
         out.append(F("RC021", m, "no 401 for a request with no X-Platform-User — a sibling "
                                  "container can call this rail directly", rel(m.path)))
+
+    route = str(m.data.get("status_route") or "")
+    if route:
+        found, gated, where = _status_route_gate(m, srcs)
+        if found and not gated:
+            out.append(F("RC021", m, f"the declared status_route {route} has no identity "
+                                     f"dependency — a sibling container reads this rail's model "
+                                     f"state with no X-Platform-User at all (gate it per-route "
+                                     f"with Depends(identity), or app-wide via "
+                                     f"FastAPI(dependencies=[Depends(identity)]))", where))
 
     for p, src in srcs.items():
         for i, raw in enumerate(src.splitlines(), 1):

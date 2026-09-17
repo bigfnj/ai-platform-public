@@ -27,9 +27,14 @@ def _status_payload() -> dict:
 
 
 @router.get("/api/icons/status")
-def icons_status() -> dict:
-    """Icon counts (ready/pending/total) + current run state. Read-only, un-gated so the
-    admin UI can poll progress."""
+def icons_status(_: deps.Identity = Depends(deps.identity)) -> dict:
+    """Icon counts (ready/pending/total) + current run state.
+
+    Read-only, and gated with plain ``identity`` rather than ``require_admin`` — the point of
+    "un-gated so the admin UI can poll progress" was that a NON-admin viewer polls it too, not
+    that a caller with no identity at all should. The admin UI reaches this through the gateway,
+    which supplies the header, so polling is unaffected.
+    """
     return _status_payload()
 
 

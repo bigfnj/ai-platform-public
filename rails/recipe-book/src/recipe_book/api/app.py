@@ -46,6 +46,14 @@ def create_api() -> FastAPI:
     app = FastAPI(title="recipe-book", version="0.1.0",
                   docs_url="/api/docs", openapi_url="/api/openapi.json")
 
+    # This rail gates PER ROUTE rather than app-wide (RAIL_CONTRACT.md, "Identity: fail closed"),
+    # which means every new route has to remember `Depends(deps.identity)` — and the ones that
+    # looked like harmless metadata did not. /api/capabilities, /api/search/status, /api/stats,
+    # /api/categories, /api/spirits, /api/models, /api/icons/status and the whole authoring
+    # draft/extract path all answered 200 to a caller with no X-Platform-User, which on this
+    # platform means a sibling container: it could read the corpus and the live model state, and
+    # spend the shared GPU through the draft, extract and swap routes. /api/health below is the
+    # ONE deliberate exception — a liveness probe the contract leaves open for this shape.
     @app.get("/api/health")
     def health() -> dict:
         return {"ok": True, "broker": broker.up(), **state.catalog().stats()}
@@ -65,7 +73,7 @@ def create_api() -> FastAPI:
             con.close()
 
     @app.get("/api/capabilities")
-    def capabilities() -> dict:
+    def capabilities(_: deps.Identity = Depends(deps.identity)) -> dict:
         """Four-state status for the header chips: the two Ollama-backed roles this rail uses —
         the culinary assistant (@recipe) and the vision model (@recipe-vision). Resolved live from
         the broker each call, so the chips track the admin Rails selection + VRAM residency. The
@@ -95,7 +103,7 @@ def create_api() -> FastAPI:
         return stats
 
     @app.get("/api/search/status")
-    def search_status() -> dict:
+    def search_status(_: deps.Identity = Depends(deps.identity)) -> dict:
         return semantic.status()
 
     @app.post("/api/search/reindex")

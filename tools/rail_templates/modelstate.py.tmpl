@@ -43,13 +43,24 @@ LOADED = "loaded"
 _GLOB_CHARS = "*?["
 
 
+def _strip_latest(name: str) -> str:
+    """Drop an explicit ``:latest`` TAG. Only the tag — not any tag containing the word."""
+    return name[: -len(":latest")] if name.endswith(":latest") else name
+
+
 def _same(a: str, b: str) -> bool:
-    """Compare model names tolerating Ollama's implicit ``:latest``."""
+    """Compare model names tolerating Ollama's implicit ``:latest``.
+
+    The tolerance is narrow on purpose. The old test was ``"latest" in (a + b)``, which asks
+    whether the word appears anywhere in the two names CONCATENATED, and then compared only the
+    part before the colon. So ``gemma3:4b`` and ``gemma3:27b-latest`` were "the same" — a
+    resident 27b turned a 4b chip green, which is the precise failure the four-state contract
+    exists to prevent. Matching on the stripped tag keeps the real case (``bge-m3`` vs
+    ``bge-m3:latest``) and drops the accident.
+    """
     if not a or not b:
         return False
-    if a == b:
-        return True
-    return a.split(":")[0] == b.split(":")[0] if "latest" in (a + b) else False
+    return _strip_latest(a) == _strip_latest(b)
 
 
 def _resolve_ref(ref: str, roles: list[dict], installed: list[str]) -> str:

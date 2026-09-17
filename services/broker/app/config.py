@@ -71,6 +71,10 @@ DEFAULT_ROLES: dict[str, str] = {
     # as edu and co-worker-synthesis, so it gets the same model. Unlike the RAG rails it has no
     # embedder to co-reside with during generation; retrieval happens earlier, against @embed.
     "openmaic": "mistral-small3*:24b",
+    # Present in roles.json but NOT here until now: on a box whose overlay is missing or
+    # malformed, @ai-playground fell through to the literal string "ai-playground" and
+    # reached Ollama as a model name -- a 404 wrapped in a 502, not a "no such role".
+    "ai-playground": "nemotron-3-nano:4b",
     # Media (image) role — resolves to a media worker backend, NOT an Ollama model.
     "recipe-icon": "flux-schnell",             # recipe-book per-recipe icon image generator
     # ai-voice rail: text normalization before TTS runs on the default chat model.

@@ -41,3 +41,22 @@ def require_admin(ident: Identity = Depends(identity)) -> Identity:
     if not ident.is_admin or (ident.user is None and not config.STANDALONE):
         raise HTTPException(status_code=403, detail="admin only")
     return ident
+
+
+def ws_user(ws) -> str | None:
+    """The identity behind a WebSocket handshake, or None to reject it.
+
+    A dependency cannot answer a handshake with a 401 body, so the socket has to be refused with
+    a close code instead — and the decision belongs in one place rather than re-derived at each
+    socket, which is how ``/ws/rag`` and ``/ws/bench`` both ended up reading the header purely to
+    label the run and then proceeding with ``user=None``. That was not a null OWNER, which is a
+    legitimate shared-corpus scope; it was a null CALLER, i.e. a sibling container driving the
+    shared GPU through a benchmark or a RAG generation.
+
+    Returns "" (not None) in standalone dev, matching identity()'s null-owner path: the caller is
+    allowed, it simply has no owner to scope to.
+    """
+    user = ws.headers.get("x-platform-user")
+    if user:
+        return user
+    return "" if config.STANDALONE else None

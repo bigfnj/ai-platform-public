@@ -257,10 +257,17 @@ async def chat_completions(request: Request) -> Any:
         raise HTTPException(status_code=400, detail="messages must not be empty")
     options, keep_alive = _options(body), settings.llm_keep_alive
     fmt = _response_format(body)
+    # A thinking model asked for structured output spends its whole budget reasoning and returns
+    # EMPTY content — measured at a ~33% empty-JSON rate and ~8x latency on another rail here. So
+    # thinking is turned OFF whenever a format is requested, and left at the model's own default
+    # otherwise. This matters because the reasoning slot is admin-repointable and roles.json
+    # already ships a thinking model: the first admin to use the panel this rail exists to honour
+    # would otherwise get <think> preambles as course text.
+    think = False if fmt is not None else None
 
     if not body.get("stream"):
         try:
-            resp = await broker.chat(model, messages, options=options, fmt=fmt,
+            resp = await broker.chat(model, messages, options=options, fmt=fmt, think=think,
                                      keep_alive=keep_alive)
         except broker.BrokerError as exc:
             raise HTTPException(status_code=502,
@@ -276,7 +283,8 @@ async def chat_completions(request: Request) -> Any:
 
     want_usage = bool((body.get("stream_options") or {}).get("include_usage"))
     return StreamingResponse(
-        _sse(model, messages, options, keep_alive, fmt=fmt, want_usage=want_usage),
+        _sse(model, messages, options, keep_alive, fmt=fmt, think=think,
+             want_usage=want_usage),
         media_type="text/event-stream",
         # SSE through a reverse proxy buffers into uselessness without these; the whole point
         # of streaming is that slides appear as they are written.
@@ -291,7 +299,8 @@ def _err_event(message: str) -> str:
 
 
 async def _sse(model: str, messages: list[dict], options: dict, keep_alive: str, *,
-               fmt: str | dict | None = None, want_usage: bool = False) -> AsyncIterator[str]:
+               fmt: str | dict | None = None, think: bool | None = None,
+               want_usage: bool = False) -> AsyncIterator[str]:
     """Broker NDJSON -> OpenAI SSE chunks.
 
     The broker reports a mid-stream failure as a final frame carrying ``error`` with HTTP 200
@@ -318,7 +327,7 @@ async def _sse(model: str, messages: list[dict], options: dict, keep_alive: str,
         return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
     yield chunk({"role": "assistant", "content": ""})
-    stream = broker.chat_stream(model, messages, options=options, fmt=fmt,
+    stream = broker.chat_stream(model, messages, options=options, fmt=fmt, think=think,
                                 keep_alive=keep_alive)
     try:
         # aclosing() so the generator's `async with` blocks unwind HERE, at the break, rather

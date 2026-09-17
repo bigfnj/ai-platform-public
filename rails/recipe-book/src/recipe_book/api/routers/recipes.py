@@ -88,17 +88,17 @@ def _dietary_filters(q: str) -> tuple[set[str], set[str], str]:
 
 
 @router.get("/api/stats")
-def stats() -> dict:
+def stats(_: deps.Identity = Depends(deps.identity)) -> dict:
     return state.catalog().stats()
 
 
 @router.get("/api/categories")
-def categories() -> dict:
+def categories(_: deps.Identity = Depends(deps.identity)) -> dict:
     return {"categories": state.catalog().categories}
 
 
 @router.get("/api/spirits")
-def spirits() -> dict:
+def spirits(_: deps.Identity = Depends(deps.identity)) -> dict:
     return {"spirits": state.catalog().spirits}
 
 
@@ -255,9 +255,15 @@ def set_attributes(recipe_id: str, req: AttributesReq,
 
 
 @router.get("/api/icon/{recipe_id}")
-def icon(recipe_id: str):
+def icon(recipe_id: str, _: deps.Identity = Depends(deps.identity)):
     """Serve the generated SDXL clipart for a recipe, if it exists (else 404 →
-    the frontend falls back to a category glyph)."""
+    the frontend falls back to a category glyph).
+
+    Gated like every other route even though it only returns a picture: the browser reaches it
+    through the gateway (which injects the identity header on an <img> request just as it does
+    on a fetch), so the gate costs the UI nothing and closes the last un-authenticated read of
+    corpus-derived content.
+    """
     if not re.fullmatch(r"[A-Za-z0-9_-]+", recipe_id):  # confine to ICONS_DIR (no traversal)
         return Response(status_code=404)
     p = config.ICONS_DIR / f"{recipe_id}.png"

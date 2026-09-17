@@ -2,10 +2,11 @@
 specific recipe. Modes: ask · substitute · scale · menu · pairing."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from recipe_book import broker, state
+from recipe_book.api import deps
 
 router = APIRouter()
 
@@ -62,7 +63,7 @@ def _task(req: AssistReq) -> str:
 
 
 @router.post("/api/assistant")
-def assistant(req: AssistReq) -> dict:
+def assistant(req: AssistReq, _: deps.Identity = Depends(deps.identity)) -> dict:
     ctx = _recipe_context(req.recipe_id)
     task = _task(req)
     extra = f"\n\nUser note: {req.prompt}" if (req.prompt and req.mode != "ask") else ""
@@ -78,5 +79,5 @@ def assistant(req: AssistReq) -> dict:
 
 
 @router.get("/api/models")
-def models() -> dict:
+def models(_: deps.Identity = Depends(deps.identity)) -> dict:
     return broker.picker_models()
