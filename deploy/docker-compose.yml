@@ -354,8 +354,15 @@ services:
     image: ${OPENMAIC_APP_IMAGE:-openmaic-app:latest}
     environment:
       # The rail's shim, NOT Ollama — every token this app generates goes through the broker.
-      OLLAMA_BASE_URL: http://openmaic:8900/api/llm/v1
-      OLLAMA_API_KEY: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      # The rail's shim by default. OPENMAIC_LLM_BASE_URL redirects generation to an
+      # external OpenAI-compatible endpoint instead (a larger-VRAM host on the LAN, a
+      # hosted provider). It has to be substituted HERE: the rail reads the same variable
+      # only to label its chip, so setting it without this line changed what the header
+      # claimed and nothing about where a single token was generated.
+      OLLAMA_BASE_URL: ${OPENMAIC_LLM_BASE_URL:-http://openmaic:8900/api/llm/v1}
+      # Falls through to the shim token, because the shim is the default endpoint. An
+      # external endpoint needs its own credential: set OPENMAIC_LLM_API_KEY with it.
+      OLLAMA_API_KEY: ${OPENMAIC_LLM_API_KEY:-${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}}
       OLLAMA_MODELS: "@openmaic"
       # MANDATORY: OpenMAIC has no hardcoded model fallback, so generation fails outright when
       # this is unset rather than degrading to a default. The `ollama:` provider prefix is just

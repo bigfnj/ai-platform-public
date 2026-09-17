@@ -25,8 +25,6 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "openmaic"
-    host: str = "0.0.0.0"
-    port: int = 8900
 
     # The OpenMAIC Next.js container on the compose network. The rail reverse-proxies it under
     # /openmaic/api/app/ so the iframe is same-origin and the gateway's identity gate stays in
@@ -56,8 +54,10 @@ class Settings(BaseSettings):
     # hosted provider) to use INSTEAD of the local broker shim. When set, OpenMAIC is pointed
     # straight at it and the reasoning chip reports the override rather than broker residency,
     # because the broker is not serving that slot and claiming otherwise would be a lie.
+    # Consumed by COMPOSE, which hands it to openmaic-app as OLLAMA_BASE_URL, and read here
+    # only so the chip can say the slot is served elsewhere. Setting it without also setting
+    # OPENMAIC_LLM_API_KEY sends an unauthenticated request to the far side.
     llm_base_url: str = ""
-    llm_api_key: str = ""
 
     # Sampling defaults for the shim. OpenMAIC sends its own values per request; these only
     # fill the gaps. keep_alive holds the model resident between the many small calls a single

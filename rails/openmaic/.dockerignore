@@ -1,0 +1,11 @@
+# The build context is this rail, not the repo root, so the root .dockerignore does not apply.
+# Without this, local bytecode from whatever Python the host runs is copied into a 3.11 image:
+# harmless, wrong version, and pure weight.
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+.venv
+frontend/node_modules
+frontend/dist
+tests
+docs

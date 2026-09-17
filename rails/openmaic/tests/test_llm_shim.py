@@ -91,7 +91,7 @@ def test_usage_tolerates_a_frame_with_no_counters():
 
 def _collect(frames):
     """Run the SSE generator against a canned broker stream and return the raw events."""
-    async def fake_stream(model, messages, *, options=None, keep_alive="30m"):
+    async def fake_stream(model, messages, *, options=None, fmt=None, keep_alive="30m"):
         for f in frames:
             yield f
 
@@ -172,7 +172,7 @@ def test_broker_error_before_any_frame_still_terminates_the_stream():
     """The response is already 200 by then, so the only way to tell the client is in-band."""
     from openmaic_app import broker
 
-    async def boom(model, messages, *, options=None, keep_alive="30m"):
+    async def boom(model, messages, *, options=None, fmt=None, keep_alive="30m"):
         raise broker.BrokerError("broker down")
         yield  # pragma: no cover - makes this an async generator
 
@@ -222,3 +222,111 @@ def test_model_list_survives_an_unreachable_broker(monkeypatch):
 
     monkeypatch.setattr(broker, "roles", boom)
     assert llm.list_models() == {"object": "list", "data": []}
+
+
+# --- regressions found by audit, 2026-09-16 ---------------------------------------------------
+
+def test_response_format_json_object_maps_to_ollama_json():
+    assert llm._response_format({"response_format": {"type": "json_object"}}) == "json"
+
+
+def test_response_format_json_schema_is_honoured():
+    """The current OpenAI spelling. Matching only json_object let a structured-output request
+    degrade to free text with a 200 — the model was never put in JSON mode."""
+    schema = {"type": "object", "properties": {"title": {"type": "string"}}}
+    body = {"response_format": {"type": "json_schema", "json_schema": {"schema": schema}}}
+    assert llm._response_format(body) == schema
+
+
+def test_response_format_json_schema_without_a_schema_still_asks_for_json():
+    assert llm._response_format({"response_format": {"type": "json_schema"}}) == "json"
+
+
+def test_response_format_tolerates_a_non_dict():
+    """A bare string here used to raise AttributeError inside the route and escape the OpenAI
+    error envelope as a 500."""
+    assert llm._response_format({"response_format": "json"}) is None
+    assert llm._response_format({}) is None
+
+
+def test_images_are_extracted_not_dropped():
+    """Dropping them is the same class of bug as not flattening text: the model answers from the
+    surrounding prompt alone, confidently, with a 200, and nothing in the reply says it never saw
+    the picture."""
+    body = {"messages": [{"role": "user", "content": [
+        {"type": "text", "text": "what is this?"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+    ]}]}
+    msg = llm._messages(body)[0]
+    assert msg["content"] == "what is this?"
+    assert msg["images"] == ["QUJD"]
+
+
+def test_remote_image_urls_are_not_forwarded_as_if_they_were_bytes():
+    """Ollama wants bytes. Passing a URL through would be silently answered from the prompt."""
+    body = {"messages": [{"role": "user", "content": [
+        {"type": "image_url", "image_url": {"url": "https://example.com/x.png"}}]}]}
+    assert "images" not in llm._messages(body)[0]
+
+
+def test_text_only_messages_carry_no_images_key():
+    assert "images" not in llm._messages({"messages": [{"role": "user", "content": "hi"}]})[0]
+
+
+def test_finish_reason_reports_truncation():
+    """A reply cut off at num_predict reports done_reason 'length'. Calling that 'stop' tells the
+    client a truncated slide body is a finished one."""
+    assert llm._finish_reason({"done_reason": "length"}) == "length"
+    assert llm._finish_reason({"done_reason": "stop"}) == "stop"
+    assert llm._finish_reason({}) == "stop"
+
+
+def _collect_with(frames, **kw):
+    """Run _sse over canned frames, returning (events, captured_kwargs_sent_to_the_broker)."""
+    seen = {}
+
+    async def fake_stream(model, messages, *, options=None, fmt=None, keep_alive="30m"):
+        seen.update({"model": model, "options": options, "fmt": fmt, "keep_alive": keep_alive})
+        for f in frames:
+            yield f
+
+    async def run():
+        from openmaic_app import broker
+
+        original = broker.chat_stream
+        broker.chat_stream = fake_stream
+        try:
+            return [e async for e in llm._sse("m", [], {}, "30m", **kw)]
+        finally:
+            broker.chat_stream = original
+
+    return asyncio.run(run()), seen
+
+
+def test_streaming_passes_the_response_format_through():
+    """The bug this replaces: fmt was computed, used on the buffered branch, and silently not
+    forwarded on the streaming one — so a streamed JSON request got prose and the identical
+    non-streamed request worked."""
+    _, seen = _collect_with([{"done": True}], fmt="json")
+    assert seen["fmt"] == "json"
+
+
+def test_streamed_finish_reason_comes_from_the_done_frame():
+    events, _ = _collect_with([{"message": {"content": "x"}},
+                               {"done": True, "done_reason": "length"}])
+    assert _payloads(events)[-1]["choices"][0]["finish_reason"] == "length"
+
+
+def test_streamed_usage_is_emitted_only_when_asked_for():
+    frames = [{"done": True, "prompt_eval_count": 5, "eval_count": 7}]
+    with_usage, _ = _collect_with(frames, want_usage=True)
+    assert _payloads(with_usage)[-1]["usage"]["total_tokens"] == 12
+    without, _ = _collect_with(frames)
+    assert "usage" not in _payloads(without)[-1]
+
+
+def test_streamed_chunks_report_the_resolved_model_not_the_role():
+    """Otherwise the same request answers '@openmaic' streamed and 'mistral-small3.2:24b' not."""
+    events, _ = _collect_with([{"model": "gemma3:4b", "message": {"content": "a"}},
+                               {"done": True}])
+    assert _payloads(events)[-1]["model"] == "gemma3:4b"

@@ -27,6 +27,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI
+from starlette.concurrency import run_in_threadpool
 
 from .. import broker, modelstate
 from ..config import settings
@@ -62,8 +63,9 @@ app.mount("/api/llm", shim)
 async def healthz() -> dict[str, Any]:
     """Liveness. Note this route IS gated: a 401 from it still proves the process is up, which
     is all a container healthcheck needs."""
+    up = await run_in_threadpool(broker.up)
     return {"ok": True, "app": settings.app_name,
-            "broker": broker.up(), "openmaic_app": await app_reachable()}
+            "broker": up, "openmaic_app": await app_reachable()}
 
 
 @app.get("/api/capabilities")
@@ -78,7 +80,11 @@ async def capabilities(_ident: Identity = Depends(identity)) -> dict[str, Any]:
     specs = [] if override else [("reasoning", "LLM", settings.llm_model)]
     specs.append(("embed", "Retrieval", settings.embed_model))
 
-    state = modelstate.resolve(specs)
+    # modelstate.resolve() makes three SYNCHRONOUS broker calls. Called straight from an async
+    # route it parks the event loop for as long as they take, and this container runs one worker
+    # by design — so a broker that black-holes would stall the reverse proxy and any in-flight
+    # generation too, making the rail look dead when only the GPU layer is sick.
+    state = await run_in_threadpool(modelstate.resolve, specs)
     if override:
         # 'cold' rather than 'loaded': the endpoint is configured and presumed reachable, but
         # this rail has no visibility into whether a model is resident on the far side.

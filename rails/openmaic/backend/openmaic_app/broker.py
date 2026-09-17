@@ -24,13 +24,19 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-BROKER_URL = os.environ.get("OPENMAIC_BROKER_URL", "http://127.0.0.1:11500").rstrip("/")
+from .config import settings
+
+# Read through Settings, not os.environ. Reading the environment directly here while config.py
+# also declared a broker_url made two sources of truth for one value: Settings loads a .env file
+# and this module did not, so OPENMAIC_BROKER_URL set in .env was honoured by everything that
+# printed it and ignored by the module that actually dials.
+BROKER_URL = settings.broker_url.rstrip("/")
 # Broker control-plane token (one platform-wide shared secret). Unprefixed on purpose: a rail
 # that accepted only its own prefixed spelling would work under whichever compose file was bent
 # to match it and be silently tokenless under the other. Empty => no header (broker not enforcing).
 _TOK = os.environ.get("BROKER_AUTH_TOKEN", "").strip()
 _AUTH = {"Authorization": f"Bearer {_TOK}"} if _TOK else {}
-DEFAULT_TIMEOUT = float(os.environ.get("OPENMAIC_BROKER_TIMEOUT", "300"))
+DEFAULT_TIMEOUT = settings.broker_timeout
 
 
 class BrokerError(RuntimeError):
@@ -89,24 +95,6 @@ def roles() -> list[dict]:
 
 # --- inference --------------------------------------------------------------------------------
 
-def resolved_model(name: str) -> str:
-    """Resolve a leading-@ role to its concrete model name; pass a concrete name through.
-
-    Uses the read-only role table rather than an inference call, so asking "what would this
-    slot use?" never costs a model load.
-    """
-    if not name or not name.startswith("@"):
-        return name
-    role = name[1:]
-    try:
-        for r in roles():
-            if r.get("role") == role and r.get("resolved"):
-                return str(r["resolved"])
-    except BrokerError:
-        pass
-    return name
-
-
 async def chat(model: str, messages: list[dict], *, options: dict | None = None,
                fmt: str | dict | None = None, keep_alive: str | int = "30m") -> dict:
     """Buffered chat. Returns the broker's raw response (Ollama /api/chat shape)."""
@@ -119,6 +107,7 @@ async def chat(model: str, messages: list[dict], *, options: dict | None = None,
 
 
 async def chat_stream(model: str, messages: list[dict], *, options: dict | None = None,
+                      fmt: str | dict | None = None,
                       keep_alive: str | int = "30m") -> AsyncIterator[dict]:
     """Yield the broker's raw NDJSON frames from /v1/chat/stream, one decoded dict per line.
 
@@ -126,10 +115,16 @@ async def chat_stream(model: str, messages: list[dict], *, options: dict | None 
     ``error`` key itself: an error that happens AFTER streaming starts arrives as a final frame
     with HTTP 200 already sent, so a caller that only checks the status code reports a truncated
     answer as a complete one.
+
+    ``fmt`` mirrors the buffered path and is not optional in practice. Without it a streamed
+    request for JSON gets prose back — a 200 full of "Here's the JSON:" that fails to parse — and
+    the byte-identical non-streamed request works, which makes it look like a model problem.
     """
     payload: dict = {"model": model, "messages": messages, "keep_alive": keep_alive}
     if options:
         payload["options"] = options
+    if fmt is not None:
+        payload["format"] = fmt
     try:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
             async with client.stream("POST", BROKER_URL + "/v1/chat/stream",

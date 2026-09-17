@@ -94,6 +94,42 @@ up — i.e. exactly when you would be rebuilding. `data/` had the same exposure 
 live gateway). Both are now excluded on this branch; worth carrying upstream rather than
 rediscovering.
 
+### P10 — streaming cannot reach the browser incrementally
+
+The shim streams SSE and sets `X-Accel-Buffering: no`, but the gateway's proxy buffers whole
+responses (`main.py`: `await request.body()`, non-streaming `.request()`, `Response(content=...)`).
+The broker's own docstring names this trap and says rails consume `/v1/chat/stream` directly and
+relay over the gateway's **WebSocket** proxy — which this rail has no surface for, since the app
+it fronts is an iframe, not a React component this rail controls.
+
+Consequence today: tokens arrive in one burst rather than progressively, and a generation longer
+than the gateway's 600s client timeout 502s. Fixing it properly means either a streaming path in
+the gateway proxy or a WebSocket relay; neither is a rail-local change.
+
+### P11 — nothing handles thinking models
+
+A thinking model on structured work returns empty content about a third of the time at ~8x
+latency — measured, and documented in the broker's own schema comments. This rail sets no `think`
+parameter and does not strip `<think>` blocks, where terminal-fun has `_strip_reasoning()` for
+exactly this.
+
+Latent: `@openmaic` resolves to a non-thinking model today. But the slot is `admin_panel: true`,
+and `roles.json` already ships `qwen3.6*:27b` — so the first admin who repoints it in the panel
+this rail exists to honour gets `<think>` preambles as course text.
+
+### P12 — `_same()` in the generated `modelstate.py` over-matches
+
+`"latest" in (a + b)` tests the concatenation of both names, then compares only the pre-colon
+part. `_same("gemma3:4b", "gemma3:27b-latest")` is True, so a resident 27b turns the 4b chip
+green. Every rail carries this; the fix belongs in `tools/rail_template.py`, not here.
+
+### P13 — the installer GUI fix restored the old gap rather than widening it
+
+Rows sit at `y = 258 + floor(i/2)*24`, so the 7th tile opens a row at y=330 and `$btnInstall` is
+now at y=340 — a 10px gap, exactly what it was before. An AutoSize CheckBox at 9pt/96 DPI is
+~17px, so it still overlaps by ~7px and draws on top. Worth eyeballing rather than trusting the
+arithmetic; an 8th rail definitely needs a real layout pass.
+
 ---
 
 ## Environment findings (this workstation, not the code)
@@ -143,3 +179,24 @@ different major that then fails to self-manage down to the pinned one.
 - `local-patches/fit-roles-to-8gb.py` replaces anchored patching of `roles.json`: that file is
   wholly owned locally, and its anchors named the values they were meant to produce, so every
   snapshot reset made them unmatchable in both directions.
+
+## Fixed in the audit pass (2026-09-16)
+
+A code audit after deployment found 21 items. The ones that changed behaviour are fixed and
+regression-tested (57 tests, up from 45); P10-P13 above are what was deliberately left.
+
+| Was | Why it mattered |
+|---|---|
+| `response_format` dropped on **streamed** completions only | A streamed JSON request got prose back and failed to parse, while the byte-identical non-streamed one worked — so it read as a model problem, not a shim bug. |
+| Blocking broker HTTP inside `async` routes | Three sequential sync GETs on the event loop of a single-worker container. A sick broker stalled the reverse proxy and any in-flight generation with it, making the rail look dead. |
+| `finish_reason` hardcoded `"stop"` | A reply cut off at `num_predict` reports `done_reason: "length"`; calling that a clean stop tells the client a truncated slide is a finished one. |
+| Duplicate response headers comma-joined | httpx joins repeated keys. Two `Set-Cookie` headers became one corrupt value — and Next.js sets session + CSRF together as a matter of course. |
+| `json_schema` unhandled; non-dict `response_format` raised | Structured output degraded to free text with a 200; a bare string raised `AttributeError` and escaped the OpenAI error envelope as a 500. |
+| Images silently discarded | Upload a scanned page, ask for a class about it, and the model answered from the prompt alone — confidently, with a 200. |
+| `OPENMAIC_LLM_BASE_URL` changed only the chip | Documented in five places as redirecting generation. It redirected nothing: the app's `OLLAMA_BASE_URL` was hardcoded. The chip became precisely the lie the four-state contract exists to prevent. |
+| Repeated query parameters collapsed | Starlette dedupes on `.items()`, which httpx consumes: `?tag=a&tag=b` reached the app as `?tag=b`. |
+| Streamed replies had no `usage`, and named the `@role` not the model | The `done` frame carrying both was discarded one line before it was read. |
+| Admin → Rails showed `gemma3:4b` as the revert target | The lean value, not `roles.json`'s. Reverting "to default" quietly downgraded by 6x the parameters. |
+| Per-call broker sockets closed by the GC, not the code | `aclosing()` now unwinds at the break. A course generation is dozens of these back to back. |
+| Dead: `resolved_model()`, `host`, `port`, `llm_api_key` | `broker_url` was worse than unused — `Settings` read `.env` while `broker.py` read `os.environ`, so a `.env` value was honoured by everything except the module that dials. |
+| No `.dockerignore` for the rail context | Host bytecode from a 3.14 interpreter copied into a 3.11 image. |

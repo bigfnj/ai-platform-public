@@ -118,7 +118,10 @@ async def proxy(request: Request, path: str = "",
     req = get_client().build_request(
         request.method,
         upstream_path(path),
-        params=request.query_params,
+        # The RAW query string, not request.query_params. Starlette's multidict deduplicates on
+        # .items(), which is what httpx consumes — so `?tag=math&tag=physics` would reach the app
+        # as `?tag=physics`, losing every repeat of a repeated key.
+        params=request.url.query or None,
         headers=headers,
         content=request.stream(),
     )
@@ -136,9 +139,19 @@ async def proxy(request: Request, path: str = "",
         finally:
             await resp.aclose()
 
-    return StreamingResponse(
+    out = StreamingResponse(
         body(),
         status_code=resp.status_code,
-        headers={k: v for k, v in resp.headers.items() if k.lower() not in _HOP_BY_HOP},
         media_type=resp.headers.get("content-type"),
     )
+    # raw_headers from multi_items(), NOT a dict from .items(). httpx joins repeated keys into
+    # one comma-separated value, and Set-Cookie is the one header where that is destructive: two
+    # cookies become `sid=..; Expires=Wed, 21 Oct..., csrf=..`, the browser parses one of them,
+    # and the comma inside Expires corrupts even that. Next.js sets session and CSRF cookies
+    # together as a matter of course, so this is the normal path, not an edge case.
+    out.raw_headers = [
+        (k.encode("latin-1"), v.encode("latin-1"))
+        for k, v in resp.headers.multi_items()
+        if k.lower() not in _HOP_BY_HOP
+    ]
+    return out

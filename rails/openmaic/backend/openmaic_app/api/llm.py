@@ -31,6 +31,7 @@ import os
 import secrets
 import time
 import uuid
+from contextlib import aclosing
 from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -102,21 +103,73 @@ def _options(body: dict) -> dict:
     return opts
 
 
-def _messages(body: dict) -> list[dict]:
-    """Normalise message content to plain text.
+def _data_url_payload(url: str) -> str | None:
+    """The base64 payload of a `data:` URL, which is how OpenAI clients inline an image.
 
-    OpenAI allows content to be a list of typed parts. Ollama wants a string, and an unhandled
-    list arrives at the model as the repr of a Python list — which looks like a working call and
-    produces quietly terrible output, so flatten the text parts explicitly.
+    A remote http(s) image URL returns None: Ollama wants bytes, not a link, and silently
+    answering from the prompt alone would be the same failure this function exists to stop.
+    """
+    if not isinstance(url, str) or not url.startswith("data:"):
+        return None
+    _, _, payload = url.partition(",")
+    return payload or None
+
+
+def _messages(body: dict) -> list[dict]:
+    """Normalise OpenAI message content into the Ollama shape.
+
+    OpenAI allows content to be a list of typed parts. Ollama wants a string plus a separate
+    ``images`` list, and an unhandled list arrives at the model as the repr of a Python list —
+    which looks like a working call and produces quietly terrible output.
+
+    Images are extracted rather than discarded. Dropping them is the SAME class of bug one part
+    type over: upload a scanned page, ask for a class about it, and the model answers from the
+    surrounding prompt alone — confidently, with a 200, and no way to tell from the response that
+    it never saw the picture.
     """
     out: list[dict] = []
     for m in body.get("messages") or []:
-        content = m.get("content")
+        content, images = m.get("content"), []
         if isinstance(content, list):
-            content = "".join(p.get("text", "") for p in content
-                              if isinstance(p, dict) and p.get("type") == "text")
-        out.append({"role": m.get("role") or "user", "content": content or ""})
+            text_parts = []
+            for p in content:
+                if not isinstance(p, dict):
+                    continue
+                if p.get("type") == "text":
+                    text_parts.append(p.get("text", ""))
+                elif p.get("type") == "image_url":
+                    payload = _data_url_payload((p.get("image_url") or {}).get("url", ""))
+                    if payload:
+                        images.append(payload)
+            content = "".join(text_parts)
+        msg: dict[str, Any] = {"role": m.get("role") or "user", "content": content or ""}
+        if images:
+            msg["images"] = images
+        out.append(msg)
     return out
+
+
+def _response_format(body: dict) -> str | dict | None:
+    """OpenAI ``response_format`` -> Ollama ``format``.
+
+    Both spellings are handled: ``json_object`` is the older one OpenMAIC sends, ``json_schema``
+    is current, and the broker takes a dict schema straight through. Matching only the first
+    means a structured-output request degrades to free text with a 200 — the model was never put
+    in JSON mode, so the caller's parse fails on prose.
+
+    The defensive isinstance is not paranoia: a client sending a bare string here used to raise
+    AttributeError inside the route and escape the OpenAI error envelope as a bare 500.
+    """
+    rf = body.get("response_format")
+    if not isinstance(rf, dict):
+        return None
+    kind = rf.get("type")
+    if kind == "json_object":
+        return "json"
+    if kind == "json_schema":
+        schema = (rf.get("json_schema") or {}).get("schema")
+        return schema if isinstance(schema, dict) else "json"
+    return None
 
 
 def _model(body: dict) -> str:
@@ -179,12 +232,31 @@ async def embeddings(request: Request) -> dict:
     }
 
 
+def _finish_reason(frame: dict) -> str:
+    """Ollama's ``done_reason`` -> the OpenAI ``finish_reason``.
+
+    Hardcoding "stop" was the bug this replaces: a reply cut off at ``num_predict`` reports
+    ``done_reason: "length"``, and calling that a clean stop tells the client a truncated slide
+    body is a finished one. Same class of lie as swallowing a mid-stream error.
+    """
+    return "length" if frame.get("done_reason") == "length" else "stop"
+
+
 @shim.post("/v1/chat/completions")
 async def chat_completions(request: Request) -> Any:
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001 - any malformed body is the same 400
+        raise HTTPException(status_code=400, detail="request body is not valid JSON") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="request body must be a JSON object")
     model, messages = _model(body), _messages(body)
+    if not messages:
+        # The broker enforces min_length=1 and 422s, which this shim would relabel as
+        # "broker chat failed" — blaming the GPU layer for a malformed client request.
+        raise HTTPException(status_code=400, detail="messages must not be empty")
     options, keep_alive = _options(body), settings.llm_keep_alive
-    fmt = "json" if (body.get("response_format") or {}).get("type") == "json_object" else None
+    fmt = _response_format(body)
 
     if not body.get("stream"):
         try:
@@ -198,12 +270,13 @@ async def chat_completions(request: Request) -> Any:
             "id": "chatcmpl-" + uuid.uuid4().hex, "object": "chat.completion",
             "created": int(time.time()), "model": resp.get("model") or model,
             "choices": [{"index": 0, "message": {"role": "assistant", "content": content},
-                         "finish_reason": "stop"}],
+                         "finish_reason": _finish_reason(resp)}],
             "usage": _usage(resp),
         }
 
+    want_usage = bool((body.get("stream_options") or {}).get("include_usage"))
     return StreamingResponse(
-        _sse(model, messages, options, keep_alive),
+        _sse(model, messages, options, keep_alive, fmt=fmt, want_usage=want_usage),
         media_type="text/event-stream",
         # SSE through a reverse proxy buffers into uselessness without these; the whole point
         # of streaming is that slides appear as they are written.
@@ -217,42 +290,63 @@ def _err_event(message: str) -> str:
     return "data: " + json.dumps({"error": {"message": message, "type": "broker_error"}}) + "\n\n"
 
 
-async def _sse(model: str, messages: list[dict], options: dict,
-               keep_alive: str) -> AsyncIterator[str]:
+async def _sse(model: str, messages: list[dict], options: dict, keep_alive: str, *,
+               fmt: str | dict | None = None, want_usage: bool = False) -> AsyncIterator[str]:
     """Broker NDJSON -> OpenAI SSE chunks.
 
     The broker reports a mid-stream failure as a final frame carrying ``error`` with HTTP 200
     long since sent, so every frame is inspected rather than just the status code. A caller
     that trusted the status alone would render a truncated lecture as a finished one.
+
+    The final ``done`` frame is kept rather than discarded at the break: it is the only place the
+    real ``done_reason`` and the token counters appear, and both used to be thrown away one line
+    before they were needed.
     """
     cid, created = "chatcmpl-" + uuid.uuid4().hex, int(time.time())
+    # Report the model the broker actually ran, not the @role that was asked for. Otherwise the
+    # same request answers "@openmaic" when streamed and "mistral-small3.2:24b" when not.
+    state = {"model": model, "done": {}}
 
-    def chunk(delta: dict, finish: str | None = None) -> str:
-        payload = {"id": cid, "object": "chat.completion.chunk", "created": created,
-                   "model": model,
-                   "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}
+    def chunk(delta: dict, finish: str | None = None, usage: dict | None = None) -> str:
+        payload: dict[str, Any] = {
+            "id": cid, "object": "chat.completion.chunk", "created": created,
+            "model": state["model"],
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }
+        if usage is not None:
+            payload["usage"] = usage
         return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
     yield chunk({"role": "assistant", "content": ""})
+    stream = broker.chat_stream(model, messages, options=options, fmt=fmt,
+                                keep_alive=keep_alive)
     try:
-        async for frame in broker.chat_stream(model, messages, options=options,
-                                              keep_alive=keep_alive):
-            if frame.get("error"):
-                _log.error("broker stream error mid-response: %s", frame["error"])
-                yield _err_event(str(frame["error"]))
-                yield "data: [DONE]\n\n"
-                return
-            piece = (frame.get("message") or {}).get("content") or ""
-            if piece:
-                yield chunk({"content": piece})
-            if frame.get("done"):
-                break
+        # aclosing() so the generator's `async with` blocks unwind HERE, at the break, rather
+        # than whenever the GC gets to the suspended generator. Without it the broker socket and
+        # its pool outlive the response, and a course generation is dozens of these back to back.
+        async with aclosing(stream):
+            async for frame in stream:
+                if frame.get("error"):
+                    _log.error("broker stream error mid-response: %s", frame["error"])
+                    yield _err_event(str(frame["error"]))
+                    yield "data: [DONE]\n\n"
+                    return
+                if frame.get("model"):
+                    state["model"] = frame["model"]
+                piece = (frame.get("message") or {}).get("content") or ""
+                if piece:
+                    yield chunk({"content": piece})
+                if frame.get("done"):
+                    state["done"] = frame
+                    break
     except broker.BrokerError as exc:
         _log.error("broker stream failed: %s", exc)
         yield _err_event(str(exc))
         yield "data: [DONE]\n\n"
         return
-    yield chunk({}, finish="stop")
+    done = state["done"]
+    yield chunk({}, finish=_finish_reason(done),
+                usage=_usage(done) if want_usage else None)
     yield "data: [DONE]\n\n"
 
 
