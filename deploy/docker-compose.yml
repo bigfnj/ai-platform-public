@@ -330,7 +330,13 @@ services:
       dockerfile: deploy/Dockerfile
     image: openmaic-backend:latest
     environment:
-      OPENMAIC_BROKER_URL: http://host.docker.internal:11500
+      # Overridable so this rail can use a DIFFERENT broker from the rest of the platform.
+      # The wrapped app is the heaviest generator here -- a whole course is dozens of calls --
+      # so on a small card it is the one rail worth pointing at a bigger box. Note the broker
+      # token is platform-wide by contract (RC005/RC014): repointing this at a broker that
+      # ENFORCES a token means every container gets that token, since there is no sanctioned
+      # per-rail spelling.
+      OPENMAIC_BROKER_URL: ${OPENMAIC_BROKER_URL:-http://host.docker.internal:11500}
       BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}   # broker control-plane token (deploy/.env)
       OPENMAIC_LLM_MODEL: ${OPENMAIC_LLM_MODEL:-@openmaic}
       OPENMAIC_EMBED_MODEL: ${OPENMAIC_EMBED_MODEL:-@embed}
