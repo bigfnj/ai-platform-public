@@ -7,22 +7,6 @@ rail; they were found on the way past and belong to whoever owns that area.
 
 ## Open
 
-### P1 [platform] — two rails answer `/api/capabilities` un-gated, and RC021 passes anyway
-
-`recipe-book:8830` and `ai-playground:8850` return **200 with no `X-Platform-User`**, probed from
-a sibling container. `terminal-fun`, `gemini-cx` and `smb-partner-enablement` correctly 401.
-
-RC021 does not catch it because its first check is
-`if "401" not in blob or not reads_identity` — a bare substring over *all* of a rail's Python. A
-rail with a 401 anywhere passes, no matter which routes are actually gated. The rule's own
-docstring says it checks "a 401 exists for the header-less case"; what it checks is that the
-characters `401` exist.
-
-Two things to fix, separately: the two rails, and the rule. A checker that reports green over a
-live violation is the worse of the two — it is why nobody looked.
-
-Reproduce: `local-patches/verify-platform.ps1` in the deployment tree.
-
 ### P2 [platform] — the published `deploy/docker-compose.yml` is not valid YAML
 
 The publish step deletes every *line* containing `edu-suite`, which takes out structural lines
@@ -171,4 +155,37 @@ regression-tested (57 tests, up from 45); P10-P13 above are what was deliberatel
 | Thinking models unhandled | A thinking model asked for JSON spends its budget reasoning and returns EMPTY content ~33% of the time. The reasoning slot is admin-repointable and `roles.json` already ships one, so this was a single panel click from live. `think=False` is now set whenever a format is requested, and left at the model's default otherwise. |
 | `_same()` over-matched in the generated `modelstate.py` | `"latest" in (a + b)` asked whether the word appeared anywhere in the two names CONCATENATED, then compared only the part before the colon — so a resident `gemma3:27b-latest` turned a `gemma3:4b` chip green. Fixed in `tools/rail_templates/`, synced to all 7 rails. |
 | `ai-playground` missing from `DEFAULT_ROLES` | Present in `roles.json` only, so a box with no overlay resolved `@ai-playground` to the literal string and got a 404 wrapped in a 502. |
+| **P1: two rails answered `/api/capabilities` un-gated while RC021 reported green** | The rule's first check was `"401" not in blob` — a substring over ALL of a rail's Python. Any rail containing those three characters anywhere passed, whatever its routes actually did. RC021 now also locates the manifest's `status_route` handler by AST and verifies a real gate on it (app-wide, router-level, decorator, or signature). recipe-book and ai-playground are gated across ~15 routes; both websockets in ai-playground now refuse *before* `accept()`. |
 | `gemini-cx/frontend` had no `src/vite-env.d.ts` | Four sibling rails ship it; without it `tsc` rejects a CSS import. Latent, one CSS import from breaking that rail's build. |
+
+---
+
+## Surfaced while fixing P1 — not yet actioned
+
+### P14 [platform] — `/docs` and `/openapi.json` are open on four rails
+
+recipe-book, ai-playground, gemini-cx and smb-partner-enablement all gate per route. FastAPI adds
+its documentation routes itself, and a per-route dependency never reaches them — so the full route
+inventory of each rail is readable with no identity. terminal-fun and openmaic are unaffected:
+both gate app-wide and set `docs_url`/`redoc_url`/`openapi_url` to `None`.
+
+It wants one consistent answer across four rails plus a line in the contract, which is why it was
+not folded into the fail-closed fix.
+
+### P15 [platform] — recipe-book's URL extractor is a request-forgery primitive
+
+`POST /api/recipes/extract/url` made the rail fetch a caller-supplied URL and report the result,
+reachable with no identity. Now gated, so it is no longer anonymous — but a *named* caller can
+still aim it at the compose network. It wants an egress allowlist, not just a gate.
+
+### P16 [platform] — `POST /api/nim/probe` spent credentials on demand
+
+ai-playground's probe called the deployment's NVIDIA endpoint and reported whether the key worked.
+Now gated. Worth a rate limit regardless.
+
+### P17 [platform] — the repo venv drifts from the rails' own manifests
+
+`python-multipart`, `cryptography`, `numpy` and `openai` are declared in rails' `pyproject.toml`
+but were absent from `.venv`, so five recipe-book test files and all four ai-playground ones
+errored during collection — at HEAD, before any change. `run-tests.ps1` reported those rails as
+failures rather than as an environment problem, which is how it stayed unnoticed.
