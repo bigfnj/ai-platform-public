@@ -1107,19 +1107,27 @@ def _mount_root_assets() -> None:
     maps these onto whatever it fronts; openmaic's backend re-prefixes them for the Next.js app
     it proxies, and a future rail can do something else entirely.
     """
+    def _make_handler(owner: str):
+        """Bind the owning rail in a CLOSURE, not a default argument.
+
+        `async def handler(request, _owner: str = app_id)` is the obvious way to capture a loop
+        variable and it is wrong here: FastAPI reads the signature and treats a defaulted scalar
+        as a QUERY PARAMETER, so `/logo-horizontal.png?_owner=recipe-book` would have re-pointed
+        the request at another rail — past the entitlement gate, which already ran on the path.
+        """
+        async def handler(request: Request) -> Response:
+            base = app.state.backends.get(owner)
+            if base is None:
+                raise HTTPException(status_code=404, detail=f"unknown app '{owner}'")
+            return await _forward(f"{base}{request.url.path}", owner, request)
+        return handler
+
     settings = GatewaySettings()
     for prefix, app_id in settings.root_asset_routes().items():
         route = f"{prefix}{{path:path}}" if prefix.endswith("/") else prefix
-
-        async def handler(request: Request, _app_id: str = app_id) -> Response:
-            base = app.state.backends.get(_app_id)
-            if base is None:
-                raise HTTPException(status_code=404, detail=f"unknown app '{_app_id}'")
-            return await _forward(f"{base}{request.url.path}", _app_id, request)
-
         # GET/HEAD only: these are static assets, and a rail claiming the root should not thereby
         # acquire a writable surface outside its own namespace.
-        app.add_api_route(route, handler, methods=["GET", "HEAD"],
+        app.add_api_route(route, _make_handler(app_id), methods=["GET", "HEAD"],
                           name=f"root-assets:{app_id}:{prefix}", include_in_schema=False)
 
 

@@ -79,3 +79,45 @@ def test_the_shipped_mirror_only_claims_paths_it_should():
         for p in prefixes:
             assert p.startswith("/"), (app_id, p)
             assert not p.startswith(f"/{app_id}/"), (app_id, p)
+
+
+def test_root_asset_routes_expose_no_query_parameters():
+    """The owning rail is bound in a closure, and that is load-bearing.
+
+    Capturing the loop variable as a default argument -- `async def handler(request, _owner: str
+    = app_id)` -- is the obvious way to write this, and FastAPI then reads the signature and
+    treats the defaulted scalar as a QUERY PARAMETER. `/logo-horizontal.png?_owner=recipe-book`
+    would have re-pointed the request at a different rail, AFTER the entitlement gate had already
+    decided the path belonged to openmaic.
+    """
+    from fastapi.routing import APIRoute
+
+    from platform_gateway_app.main import app
+
+    routes = [r for r in app.routes
+              if isinstance(r, APIRoute) and (r.name or "").startswith("root-assets:")]
+    assert routes, "no root-asset routes registered"
+    for r in routes:
+        assert not r.dependant.query_params, (
+            f"{r.path} exposes query params {[q.name for q in r.dependant.query_params]} — "
+            "a caller could re-point the owning rail")
+
+
+def test_root_asset_routes_are_registered_for_every_declared_prefix():
+    from fastapi.routing import APIRoute
+
+    from platform_gateway_app.main import app
+
+    names = {r.name for r in app.routes if isinstance(r, APIRoute) and (r.name or "").startswith("root-assets:")}
+    for prefix in ROOT_ASSETS["openmaic"]:
+        assert f"root-assets:openmaic:{prefix}" in names, prefix
+
+
+def test_root_asset_routes_are_read_only():
+    from fastapi.routing import APIRoute
+
+    from platform_gateway_app.main import app
+
+    for r in app.routes:
+        if isinstance(r, APIRoute) and (r.name or "").startswith("root-assets:"):
+            assert set(r.methods) <= {"GET", "HEAD"}, (r.path, r.methods)
