@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # production — but NOT standalone, where there is no gateway deciding what arrives, and the
     # rail would forward its own /openapi.json and /docs to the app it fronts instead of 404ing.
     # Comma-separated so it stays a single env override. Trailing slash = directory prefix.
-    root_assets: str = "/logos/,/avatars/,/logo-horizontal.png,/openmaic-mark.png"
+    root_assets: str = "/logos/,/avatars/,/vendor/,/logo-horizontal.png,/openmaic-mark.png"
 
     def root_asset_prefixes(self) -> tuple[str, ...]:
         return tuple(p.strip() for p in self.root_assets.split(",") if p.strip())

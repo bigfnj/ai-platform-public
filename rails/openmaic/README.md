@@ -58,6 +58,30 @@ podman build -t openmaic-app:latest --build-arg NEXT_BASE_PATH=/openmaic/api/app
 `platform-basepath.py` is idempotent and has a `--check` dry run. It makes `basePath`/`assetPrefix`
 env-driven, so the same tree still builds standalone when `NEXT_BASE_PATH` is unset.
 
+## Root-origin assets
+
+OpenMAIC's source carries ~124 hand-written absolute asset paths (`<img src="/logos/openai.svg">`).
+Next's `basePath` does **not** rewrite those — it only touches URLs Next itself generates — so the
+browser resolves them against the origin root and they leave this rail's namespace. `rail.json`
+declares the prefixes, the gateway routes them here, and RC028 checks nobody else claims them.
+
+**Deriving the set — do not do it by eye.** It was got wrong the first time: `/vendor/` was
+missed, and it is the one that matters most, because `lib/import/use-import-pptx.ts` loads
+`/vendor/maic-importer/index.js` at runtime — so PPTX import breaks, not a logo. From an OpenMAIC
+checkout:
+
+```bash
+grep -rohE "['\"\`]/[A-Za-z0-9._-]+(/[^'\"\`]*)?" app lib components --include=*.ts --include=*.tsx | sort -u
+```
+
+Cross-check the result against `ls public/`: every top-level entry there that the source
+references absolutely needs a prefix. Two traps in the output — bare SVG names like
+`/openai.svg` appear only inside doc comments (the real files are under `/logos/`), and a
+`.json` hit can be a regex artefact rather than a reference. Confirm each with `grep -F`.
+
+After changing the set, update **three** places or RC028 fails: `rail.json`, the gateway's
+`ROOT_ASSETS` mirror, and `OPENMAIC_ROOT_ASSETS` in this rail's config.
+
 ## Configuration
 
 | Variable | Default | Notes |

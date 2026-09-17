@@ -43,7 +43,8 @@ RAILS = REPO_ROOT / "rails"
 #
 # A trailing slash means "this directory prefix"; anything else is an exact path.
 ROOT_ASSETS: dict[str, tuple[str, ...]] = {
-    "openmaic": ("/logos/", "/avatars/", "/logo-horizontal.png", "/openmaic-mark.png"),
+    "openmaic": ("/logos/", "/avatars/", "/vendor/", "/logo-horizontal.png",
+                 "/openmaic-mark.png"),
 }
 
 # Paths the platform itself owns; a rail may never claim these. RC028 rejects them at check

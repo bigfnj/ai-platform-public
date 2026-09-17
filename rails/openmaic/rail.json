@@ -17,6 +17,7 @@
   "root_assets": [
     "/logos/",
     "/avatars/",
+    "/vendor/",
     "/logo-horizontal.png",
     "/openmaic-mark.png"
   ],
