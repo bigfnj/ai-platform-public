@@ -58,3 +58,81 @@ def test_hop_by_hop_set_is_lowercase():
     """Lookups are done on `k.lower()`; a capitalised entry here would never match and the header
     would be relayed while the test suite still looked green."""
     assert all(h == h.lower() for h in proxy._HOP_BY_HOP)
+
+
+# --- root-origin assets (rail.json `root_assets`) ----------------------------------------------
+
+import pytest
+from fastapi.testclient import TestClient
+
+from openmaic_app.api.app import app
+
+HDR = {"X-Platform-User": "bigfnj"}
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    from openmaic_app import broker
+
+    monkeypatch.setattr(broker, "roles", lambda: [])
+    monkeypatch.setattr(broker, "models", lambda: [])
+    monkeypatch.setattr(broker, "status", lambda: {"loaded": [], "jobs": []})
+    monkeypatch.setattr(broker, "up", lambda: False)
+    monkeypatch.delenv("PLATFORM_STANDALONE", raising=False)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.mark.parametrize("path", ["/logos/openai.svg", "/avatars/teacher.png",
+                                  "/logo-horizontal.png"])
+def test_root_assets_are_gated_like_any_other_rail_content(client, path):
+    """They are the rail's content and carry the rail's entitlement. The gateway gates them too,
+    but a rail that relies on that alone is one routing change from serving them to anyone."""
+    assert client.get(path).status_code == 401
+
+
+def test_root_assets_reach_the_proxy(client):
+    """502 is the PASS here: the app container is unreachable from a unit test, so a 502 proves
+    the request was routed to the upstream proxy rather than 404'd or swallowed by a catch-all."""
+    assert client.get("/logos/openai.svg", headers=HDR).status_code == 502
+
+
+def test_the_catch_all_does_not_shadow_the_rails_own_api(client):
+    """The root-asset route is a /{path:path} catch-all registered last. Registered any earlier
+    it would swallow the status route, and the rail would serve its own chips payload as a 404
+    from the app it fronts."""
+    assert client.get("/api/capabilities", headers=HDR).status_code == 200
+    assert client.get("/api/healthz", headers=HDR).status_code == 200
+
+
+@pytest.mark.parametrize("path", ["/api/no-such-route", "/openapi.json", "/docs",
+                                  "/not-declared.png", "/logosX/x.svg"])
+def test_undeclared_paths_404_rather_than_being_proxied(client, path):
+    """The catch-all serves ONLY what rail.json declares.
+
+    Trusting the gateway to filter would behave identically in production and wrongly in
+    standalone, where nothing is in front: the rail would forward its own /openapi.json and /docs
+    to the app it fronts. `/logosX/` is here because a prefix match must respect the boundary —
+    `/logos/` must not match a longer directory name that merely starts with it.
+    """
+    r = client.get(path, headers=HDR)
+    assert r.status_code == 404
+    assert "no such endpoint" in r.json().get("detail", "")
+
+
+def test_declared_prefixes_come_from_config(monkeypatch):
+    """One env override moves the whole set, so a rail whose wrapped app changes its asset roots
+    does not need a code change."""
+    from openmaic_app.config import settings
+
+    monkeypatch.setattr(settings, "root_assets", "/brand/,/x.png")
+    assert settings.root_asset_prefixes() == ("/brand/", "/x.png")
+    assert settings.is_root_asset("brand/a/b.svg")
+    assert settings.is_root_asset("/x.png")
+    assert not settings.is_root_asset("/logos/openai.svg")
+
+
+@pytest.mark.parametrize("method", ["post", "put", "delete", "patch"])
+def test_root_assets_are_read_only(client, method):
+    """Claiming the origin root must not hand this rail a writable surface outside its own
+    namespace. Only GET/HEAD are registered, so anything else is 405."""
+    assert getattr(client, method)("/logos/openai.svg", headers=HDR).status_code == 405

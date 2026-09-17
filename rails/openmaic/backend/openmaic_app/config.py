@@ -39,6 +39,22 @@ class Settings(BaseSettings):
     # than a mismatched prefix.
     public_prefix: str = "/openmaic/api/app"
 
+    # The origin-ROOT paths this rail serves, mirroring rail.json's `root_assets`. The gateway
+    # only forwards these, so a catch-all that proxied everything would behave identically in
+    # production — but NOT standalone, where there is no gateway deciding what arrives, and the
+    # rail would forward its own /openapi.json and /docs to the app it fronts instead of 404ing.
+    # Comma-separated so it stays a single env override. Trailing slash = directory prefix.
+    root_assets: str = "/logos/,/avatars/,/logo-horizontal.png,/openmaic-mark.png"
+
+    def root_asset_prefixes(self) -> tuple[str, ...]:
+        return tuple(p.strip() for p in self.root_assets.split(",") if p.strip())
+
+    def is_root_asset(self, path: str) -> bool:
+        """Whether a root-origin request path is one this rail declared."""
+        p = "/" + path.lstrip("/")
+        return any(p == pre or (pre.endswith("/") and p.startswith(pre))
+                   for pre in self.root_asset_prefixes())
+
     # The broker is native on the Windows host; from a container reach it via
     # host.docker.internal (compose supplies the extra_hosts entry that makes that resolve).
     broker_url: str = "http://127.0.0.1:11500"

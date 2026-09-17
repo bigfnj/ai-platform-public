@@ -263,6 +263,35 @@ def gateway_catalog() -> list[dict[str, Any]] | None:
     return _literal_assign(GATEWAY / "catalog.py", "_ENTRIES")
 
 
+def gateway_root_assets() -> dict[str, list[str]] | None:
+    """The gateway's ROOT_ASSETS mirror, or None when it cannot be read.
+
+    Mirrored rather than read from the manifests for the same reason APP_CATALOG mirrors
+    `description`: the gateway CONTAINER cannot see rails/ at all — compose mounts only each
+    rail's built dist. This rule is the price of that mirroring.
+    """
+    v = _literal_assign(GATEWAY / "config.py", "ROOT_ASSETS")
+    if v is None:
+        return None
+    return {k: list(x) for k, x in v.items()}
+
+
+def _root_prefix_overlaps(a: str, b: str) -> bool:
+    """Whether two declared root paths can ever match the same request.
+
+    A trailing slash is a directory prefix, so `/logos/` swallows `/logos/x.svg`; anything
+    else is an exact path. Equality counts, and so does containment in either direction —
+    checking only equality would let one rail declare `/avatars/` while another declares
+    `/avatars/teacher.png` and call that no collision, when in fact the second rail never
+    sees a request.
+    """
+    if a == b:
+        return True
+    if a.endswith("/") and b.startswith(a):
+        return True
+    return b.endswith("/") and a.startswith(b)
+
+
 def gateway_rail_slots() -> dict[str, list[dict[str, str]]]:
     return _literal_assign(GATEWAY / "rails_models.py", "RAIL_MODEL_SLOTS") or {}
 
@@ -1647,6 +1676,69 @@ def rc027(m: Manifest, _all: list[Manifest]) -> list[Finding]:
 
 
 # --- runner ----------------------------------------------------------------
+
+
+
+@rule("RC028", "Root-origin asset claims agree with the gateway, collide with nobody, and avoid reserved paths.")
+def rc028(m: Manifest, allm: list[Manifest]) -> list[Finding]:
+    """`root_assets` lets a rail serve paths OUTSIDE its own /<id>/ namespace.
+
+    Only a rail that wraps a third-party app needs it: openmaic fronts an upstream Next.js app
+    whose source carries absolute `<img src="/logos/...">` literals, and Next's basePath does not
+    rewrite a string literal in JSX, so the browser resolves it against the origin root.
+
+    Three things are checked, because each fails differently and none of them loudly:
+
+      * The gateway's ROOT_ASSETS mirror must match the manifest. The gateway container cannot
+        see rails/, so the list is necessarily duplicated; a drifted copy means the rail declares
+        a path nothing routes, or the gateway routes a path the rail no longer serves.
+      * No two rails may claim overlapping paths. The origin root is an exhaustible shared
+        resource and a collision is SILENT — one rail simply serves the other's images. This is
+        the same failure RC002 exists for, one namespace over.
+      * Nothing may claim a platform-reserved prefix, or a rail could shadow the shell's own
+        /assets/ bundle or the /api/ surface for every user at once.
+    """
+    mine = list(m.data.get("root_assets") or [])
+    mirror = gateway_root_assets()
+    out: list[Finding] = []
+    where = rel(GATEWAY / "config.py")
+
+    if mirror is None:
+        if mine:
+            out.append(F("RC028", m, "could not read the gateway's ROOT_ASSETS literal, so "
+                                     "nothing here is verified — a checker/gateway mismatch, "
+                                     "not a rail defect", where, level="warn"))
+        return out
+
+    declared = mirror.get(m.id, [])
+    if sorted(declared) != sorted(mine):
+        out.append(F("RC028", m, f"gateway ROOT_ASSETS has {sorted(declared)!r} for this rail "
+                                 f"but the manifest declares {sorted(mine)!r}", where))
+
+    for prefix in mine:
+        for reserved in ("/api/", "/assets/", "/ws/"):
+            if prefix == reserved.rstrip("/") or prefix.startswith(reserved):
+                out.append(F("RC028", m, f"{prefix!r} claims the platform-reserved {reserved!r}",
+                             rel(m.path)))
+        # A rail's own /<id>/ is already its namespace; claiming it at the root is a mistake
+        # that would shadow its own federated bundle.
+        for other in allm:
+            if prefix.startswith(f"/{other.id}/") or prefix == f"/{other.id}":
+                out.append(F("RC028", m, f"{prefix!r} is inside a rail namespace "
+                                         f"(/{other.id}/), which the gateway already routes",
+                             rel(m.path)))
+
+    # Collisions, checked against every OTHER rail's manifest.
+    for other in allm:
+        if other.id == m.id:
+            continue
+        for a in mine:
+            for b in (other.data.get("root_assets") or []):
+                if _root_prefix_overlaps(a, b):
+                    out.append(F("RC028", m, f"root path {a!r} overlaps {b!r} claimed by "
+                                             f"'{other.id}' — one rail would silently serve the "
+                                             f"other's assets", rel(m.path)))
+    return out
 
 
 def load_manifests() -> tuple[list[Manifest], list[Finding]]:

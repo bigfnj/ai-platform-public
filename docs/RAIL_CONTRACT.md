@@ -172,6 +172,57 @@ contract, and report green while doing it.
 | ai-playground | 8850 | 5250 |
 | ai-voice | 8860 | 5260 |
 
+### Root-origin assets — RC028
+
+A rail normally lives entirely under `/<id>/` and this section does not apply to it. A rail that
+**wraps a third-party app** is the exception, and `openmaic` is the shipped case.
+
+Next.js `basePath` only rewrites URLs Next itself generates — `next/link`, `next/image`, the
+metadata API. A hand-written `<img src="/logos/openai.svg">` is a string literal in JSX and is
+passed through untouched, so the browser resolves it against the **origin root** and it leaves
+the rail's namespace entirely. The upstream app openmaic fronts carries ~124 of those.
+
+It did not even 404. The shell's client-side-routing catch-all matches everything and returns
+`index.html`, so `/logos/openai.svg` came back as **HTML with status 200** — a broken-image glyph
+in the page and a success in the network tab. That catch-all already had a guard for `api/` paths
+added for exactly this reason; this is the same defect one namespace over.
+
+So a rail may declare the root paths it serves:
+
+```json
+"root_assets": ["/logos/", "/avatars/", "/logo-horizontal.png", "/openmaic-mark.png"]
+```
+
+A trailing slash is a directory prefix; anything else is an exact path. The gateway forwards a
+matching request to the declaring rail **path unchanged** — it deliberately learns nothing about
+how that rail maps the path onto whatever it fronts, so a future rail can do something entirely
+different with it.
+
+**Why declared rather than a proxy rule.** Four lines in a Caddyfile would have worked and been
+invisible. The origin root is an exhaustible shared resource with a silent failure mode: two
+rails claiming `/avatars/` would not error, one would simply serve the other's images. That is
+the same failure as two rails claiming a vite dev port — the one this document opens with — so it
+gets the same treatment. RC028 checks three things, each of which fails quietly on its own:
+
+- the gateway's `ROOT_ASSETS` mirror agrees with the manifest (mirrored because the gateway
+  container cannot see `rails/` at all — compose mounts only each rail's built dist, the same
+  reason `APP_CATALOG` mirrors `description`);
+- no two rails claim overlapping paths, checked in both directions so `/avatars/` and
+  `/avatars/teacher.png` count as the collision they are;
+- nothing claims `/api/`, `/assets/`, `/ws/`, or another rail's `/<id>/`.
+
+Two properties are deliberate rather than incidental. These paths are **entitlement-gated as the
+declaring rail's content** — they do not start with an app id, which is the whole point of them,
+so without an explicit hook they would miss the gate entirely and be served to anyone. And they
+are **GET/HEAD only**: claiming the root must not hand a rail a writable surface outside its own
+namespace.
+
+The rail declares the same list to itself (openmaic reads `OPENMAIC_ROOT_ASSETS`) rather than
+proxying whatever arrives. In production that is redundant, because the gateway forwards only
+what was declared — but standalone has no gateway in front, and a blanket proxy there forwards
+the rail's own `/openapi.json` and `/docs` to the app it fronts. A route that behaves differently
+depending on what sits in front of it is not one you can test.
+
 ### Federation — RC010
 
 `federation_name` is the JS identifier the shell imports as `<name>/module`; `base` is `/<id>/`,

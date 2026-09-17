@@ -33,7 +33,7 @@ from .. import broker, modelstate
 from ..config import settings
 from .identity import Identity, identity
 from .llm import shim
-from .proxy import app_reachable, close_client, router as proxy_router
+from .proxy import app_reachable, close_client, mount_root_assets, router as proxy_router
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 _log = logging.getLogger("openmaic")
@@ -101,3 +101,10 @@ def _host_of(url: str) -> str:
     carry a key in the query string on some providers."""
     rest = url.split("://", 1)[-1]
     return rest.split("/", 1)[0] or url
+
+
+# LAST, deliberately. This registers a /{path:path} catch-all for the root-origin assets the
+# gateway forwards here, and a catch-all registered any earlier would shadow /api/capabilities
+# and /api/healthz — which is how a rail ends up serving its own status route as a 404 from the
+# app it fronts.
+mount_root_assets(app)

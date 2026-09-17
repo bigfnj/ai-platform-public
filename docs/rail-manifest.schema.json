@@ -190,6 +190,14 @@
         }
       }
     },
+    "root_assets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^/[A-Za-z0-9._-]+(/|(/[A-Za-z0-9._-]+)*\\.[A-Za-z0-9]+)?$"
+      },
+      "description": "OPTIONAL. Origin-ROOT paths this rail serves, outside its own /<id>/ namespace. A trailing slash means a directory prefix; anything else is an exact path.\n\nA rail written for this platform never needs this — it lives entirely under /<id>/. A rail that WRAPS a third-party app does. The shipped case is openmaic, which fronts an upstream Next.js app carrying ~124 hand-written absolute asset literals such as \"/logos/openai.svg\": Next's basePath only rewrites URLs Next itself generates (next/link, next/image, the metadata API), so a string literal in JSX passes through untouched and the browser resolves it against the ORIGIN root, leaving the rail's namespace entirely. It does not even 404 — the shell's client-side-routing catch-all answers index.html with status 200, so the browser shows a broken image and the network tab shows success.\n\nDeclared rather than hard-coded in a proxy rule because the origin root is an EXHAUSTIBLE SHARED RESOURCE with a silent failure mode: two rails claiming /avatars/ would not error, one would simply serve the other's images. That is the same class of bug as two rails claiming a vite dev port, which RC002 guards, so it gets the same treatment. RC028 checks that the gateway's ROOT_ASSETS mirror agrees, that no two rails collide, and that nothing claims a platform-reserved prefix.\n\nThese paths are entitlement-gated as the declaring rail's content, and served GET/HEAD only: claiming the root must not hand a rail a writable surface outside its own namespace."
+    },
     "status_route": {
       "type": [
         "string",

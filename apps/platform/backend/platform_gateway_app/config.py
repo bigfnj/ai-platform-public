@@ -22,6 +22,34 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = APP_ROOT.parents[1]
 RAILS = REPO_ROOT / "rails"
 
+# Root-origin asset prefixes a rail owns, mirrored from each rail.json's `root_assets`.
+#
+# WHY A RAIL WOULD CLAIM THE ROOT AT ALL. A rail written for this platform lives entirely under
+# /<id>/ and never needs this. A rail that WRAPS a third-party app does: openmaic fronts an
+# upstream Next.js app whose source carries ~124 hand-written `<img src="/logos/...">` literals.
+# Next's basePath only rewrites URLs Next itself generates (next/link, next/image, the metadata
+# API) — a string literal in JSX is passed through untouched, so the browser resolves it against
+# the ORIGIN root and it leaves the rail's namespace entirely.
+#
+# WHY IT IS MIRRORED HERE RATHER THAN READ. The gateway container cannot see the manifests:
+# compose mounts only each rail's built dist, so /app has no rails/ tree. Same reason
+# APP_CATALOG mirrors `description`. RC028 is what keeps the copy honest.
+#
+# WHY IT IS DECLARED AT ALL RATHER THAN HARD-CODED IN A PROXY RULE. The origin root is an
+# exhaustible shared resource with a silent failure mode — two rails claiming /avatars/ would
+# not error, one would just serve the other's images. That is the same class of bug as two rails
+# claiming a vite port, which RC002 already guards, so it gets the same treatment: declared once,
+# checked for collisions across every rail in the tree.
+#
+# A trailing slash means "this directory prefix"; anything else is an exact path.
+ROOT_ASSETS: dict[str, tuple[str, ...]] = {
+    "openmaic": ("/logos/", "/avatars/", "/logo-horizontal.png", "/openmaic-mark.png"),
+}
+
+# Paths the platform itself owns; a rail may never claim these. RC028 rejects them at check
+# time, and `root_asset_routes()` drops them at runtime so a bad mirror cannot shadow the shell.
+RESERVED_ROOT_PREFIXES = ("/api/", "/assets/", "/ws/")
+
 
 class GatewaySettings(PlatformSettings):
     app_name: str = "platform-gateway"
@@ -133,6 +161,36 @@ class GatewaySettings(PlatformSettings):
             "openmaic": self.app_openmaic_url.rstrip("/"),
         }
         return {name: urls[name] for name in self.enabled_apps if name in urls}
+
+    def root_asset_routes(self) -> dict[str, str]:
+        """Root-origin prefix -> owning app id, for ENABLED apps only.
+
+        A disabled rail's prefixes are dropped rather than 404'd, so turning a rail off also
+        releases its claim on the root instead of leaving a dead reservation behind.
+        """
+        out: dict[str, str] = {}
+        for app_id in self.enabled_apps:
+            for prefix in ROOT_ASSETS.get(app_id, ()):
+                if not prefix.startswith("/"):
+                    continue
+                if any(prefix.startswith(r) for r in RESERVED_ROOT_PREFIXES):
+                    continue
+                # First declaration wins, deterministically by enabled order. RC028 makes a
+                # collision a build-time failure; this is only so a bad mirror degrades to one
+                # rail winning rather than to whichever route happened to register last.
+                out.setdefault(prefix, app_id)
+        return out
+
+    def root_asset_owner(self, path: str) -> str | None:
+        """The app id owning a root-origin request path, or None.
+
+        Longest prefix first, so an exact file always beats a directory prefix that contains it.
+        """
+        routes = self.root_asset_routes()
+        for prefix in sorted(routes, key=len, reverse=True):
+            if path == prefix or (prefix.endswith("/") and path.startswith(prefix)):
+                return routes[prefix]
+        return None
 
     def resolved_frontend_dist(self) -> Path | None:
         p = Path(self.frontend_dist) if self.frontend_dist else APP_ROOT / "frontend" / "dist"

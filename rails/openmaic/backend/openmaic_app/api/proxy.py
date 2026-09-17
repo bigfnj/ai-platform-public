@@ -21,7 +21,7 @@ This is a ROUTE, not a mount, so the app-level ``Depends(identity)`` gate does a
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -139,16 +139,47 @@ async def proxy(request: Request, path: str = "",
         finally:
             await resp.aclose()
 
+    return _relay(resp, body())
+
+
+def mount_root_assets(fastapi_app) -> None:
+    """Serve the root-origin assets the gateway forwards here (rail.json `root_assets`).
+
+    The gateway relays those paths UNCHANGED and tells us nothing about which prefix matched, so
+    this is a catch-all that maps a DECLARED root path onto the app's basePath and 404s anything
+    else.
+
+    Checking the declaration here rather than trusting the gateway is what keeps standalone
+    honest. In production the gateway forwards only what this rail declared, so a blanket proxy
+    would behave identically — but standalone has no gateway in front, and a blanket proxy there
+    forwards the rail's own /openapi.json and /docs to the app it fronts instead of 404ing. A
+    route that behaves differently depending on what is in front of it is not one you can test.
+
+    Registered after every other route, so it cannot shadow /api/capabilities or /api/healthz.
+    """
+
+    @fastapi_app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def root_asset(path: str, request: Request,
+                         ident: Identity = Depends(identity)) -> Any:
+        if not settings.is_root_asset(path):
+            raise HTTPException(status_code=404, detail=f"no such endpoint: /{path}")
+        return await proxy(request, path=path, ident=ident)
+
+
+def _relay(resp: httpx.Response, stream: AsyncIterator[bytes]) -> StreamingResponse:
+    """Wrap an upstream response, preserving REPEATED headers.
+
+    raw_headers from multi_items(), NOT a dict from .items(). httpx joins repeated keys into one
+    comma-separated value, and Set-Cookie is the one header where that is destructive: two
+    cookies become `sid=..; Expires=Wed, 21 Oct..., csrf=..`, the browser parses one of them, and
+    the comma inside Expires corrupts even that. Next.js sets session and CSRF cookies together
+    as a matter of course, so this is the normal path, not an edge case.
+    """
     out = StreamingResponse(
-        body(),
+        stream,
         status_code=resp.status_code,
         media_type=resp.headers.get("content-type"),
     )
-    # raw_headers from multi_items(), NOT a dict from .items(). httpx joins repeated keys into
-    # one comma-separated value, and Set-Cookie is the one header where that is destructive: two
-    # cookies become `sid=..; Expires=Wed, 21 Oct..., csrf=..`, the browser parses one of them,
-    # and the comma inside Expires corrupts even that. Next.js sets session and CSRF cookies
-    # together as a matter of course, so this is the normal path, not an edge case.
     out.raw_headers = [
         (k.encode("latin-1"), v.encode("latin-1"))
         for k, v in resp.headers.multi_items()

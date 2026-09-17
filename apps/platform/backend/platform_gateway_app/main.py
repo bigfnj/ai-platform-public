@@ -211,10 +211,17 @@ def require_admin(user: User = Depends(require_user)) -> User:
 @app.middleware("http")
 async def app_access_gate(request: Request, call_next):
     """Guards BOTH an app's API proxy and its static bundle: any path whose first
-    segment is a known app id requires a logged-in user entitled to that app."""
+    segment is a known app id requires a logged-in user entitled to that app.
+
+    Also guards a rail's declared ROOT-origin assets (config.ROOT_ASSETS). Those paths do not
+    start with an app id — that is the whole point of them — so without this they would miss the
+    gate entirely and be served to anyone. They are the rail's content and carry the rail's
+    entitlement, exactly as if they had been requested under /<id>/."""
     parts = request.url.path.split("/")
     seg = parts[1] if len(parts) > 1 else ""  # first path segment, e.g. "edu-suite"
-    if seg in APP_IDS:
+    owner = seg if seg in APP_IDS else app.state.settings.root_asset_owner(request.url.path)
+    if owner:
+        seg = owner
         token = request.cookies.get(app.state.settings.session_cookie)
         with app.state.db.session_ctx() as db:
             user = user_for_token(db, token)
@@ -941,7 +948,15 @@ async def proxy(app_name: str, path: str, request: Request) -> Response:
     base = app.state.backends.get(app_name)
     if base is None:
         raise HTTPException(status_code=404, detail=f"unknown app '{app_name}'")
-    url = f"{base}/api/{path}"
+    return await _forward(f"{base}/api/{path}", app_name, request)
+
+
+async def _forward(url: str, app_name: str, request: Request) -> Response:
+    """Relay one request to a rail backend and return its response.
+
+    Shared by the /<app>/api/* proxy and the root-asset routes so both inject identity and strip
+    headers identically — a second copy of this is how one of the two ends up forwarding a
+    client-supplied x-platform-user."""
     body = await request.body()
     # Drop hop-by-hop headers AND any client-supplied x-platform-* (anti-spoof): identity is
     # set only by us, below, from the session the access gate already verified.
@@ -1080,6 +1095,34 @@ async def ws_proxy(ws: WebSocket, app_name: str, path: str) -> None:
 # --- serve the unified shell SPA (mounted last so /api + proxy win) ---------
 
 
+def _mount_root_assets() -> None:
+    """Serve each enabled rail's declared root-origin assets (config.ROOT_ASSETS).
+
+    Registered BEFORE the SPA catch-all, which is the whole reason this is needed: that catch-all
+    matches literally everything and returns index.html, so an unrouted /logos/openai.svg came
+    back as HTML with status 200. The browser then shows a broken-image glyph and the network tab
+    shows a success — the same failure the catch-all's own `api/` guard was added for.
+
+    The path is forwarded UNCHANGED. The gateway deliberately learns nothing about how a rail
+    maps these onto whatever it fronts; openmaic's backend re-prefixes them for the Next.js app
+    it proxies, and a future rail can do something else entirely.
+    """
+    settings = GatewaySettings()
+    for prefix, app_id in settings.root_asset_routes().items():
+        route = f"{prefix}{{path:path}}" if prefix.endswith("/") else prefix
+
+        async def handler(request: Request, _app_id: str = app_id) -> Response:
+            base = app.state.backends.get(_app_id)
+            if base is None:
+                raise HTTPException(status_code=404, detail=f"unknown app '{_app_id}'")
+            return await _forward(f"{base}{request.url.path}", _app_id, request)
+
+        # GET/HEAD only: these are static assets, and a rail claiming the root should not thereby
+        # acquire a writable surface outside its own namespace.
+        app.add_api_route(route, handler, methods=["GET", "HEAD"],
+                          name=f"root-assets:{app_id}:{prefix}", include_in_schema=False)
+
+
 def _mount_app_remotes() -> None:
     """Serve each enabled app's built federation remote at /<app>/ (same origin as
     the shell, so no CORS). The app_access_gate middleware still authorizes these
@@ -1108,5 +1151,6 @@ def _mount_spa() -> None:
         return FileResponse(str(index))
 
 
+_mount_root_assets()
 _mount_app_remotes()
 _mount_spa()
