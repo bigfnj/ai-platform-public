@@ -108,6 +108,26 @@ does the same job without elevation; the npm global bin is already on PATH and i
 home. The repo pins `pnpm@10.28.0` via `packageManager`, and a plain `npm i -g pnpm` installs a
 different major that then fails to self-manage down to the pinned one.
 
+### E5 — `127.0.0.1:1111` is not a Caddy site, and the failure is an empty 200
+
+`deploy/Caddyfile` matches `localhost`, `platform.localhost` and the public name. A bare
+`127.0.0.1` matches **no site block**, and Caddy then answers **200 with an empty body** for every
+path — which the Caddyfile's own comment calls out as "the worst possible failure mode".
+
+It cost real time twice. Probing `127.0.0.1` made every gated path look like a 200, which read as
+"the SPA catch-all is winning" when the gateway was in fact returning a correct
+`401 application/json` the whole time. Always probe `http://localhost:1111`.
+
+And it made a check in `verify-platform.ps1` **vacuous for the entire session**: against an empty
+body, `$r.Content -notmatch 'assets/index-'` evaluates an EMPTY ARRAY, PowerShell treats that as
+false, the `throw` never runs, and "gateway serves the shell bundle" reported green while
+verifying nothing. Fixed by probing a matched hostname, casting `[string]` before `-notmatch`,
+asserting a non-zero body length, and giving the root-asset check a known-gated control so a
+broken probe fails loudly instead of passing.
+
+The general lesson is the one this repo already keeps learning: a check that cannot fail is worse
+than no check. It applies to the gate as much as to the code the gate covers.
+
 ---
 
 ## Done
@@ -149,6 +169,36 @@ regression-tested (57 tests, up from 45); P10-P13 above are what was deliberatel
 | `gemini-cx/frontend` had no `src/vite-env.d.ts` | Four sibling rails ship it; without it `tsc` rejects a CSS import. Latent, one CSS import from breaking that rail's build. |
 
 ---
+
+## Root-origin assets (2026-09-17)
+
+Spotted from a screenshot: one broken image on the OpenMAIC landing page. It was systemic.
+
+Next's `basePath` only rewrites URLs Next itself generates, so ~124 hand-written absolute asset
+literals in the wrapped app resolved against the ORIGIN root and left the rail's namespace. They
+did not 404 — the shell's client-side-routing catch-all answered `index.html` with status **200**,
+so the browser showed a broken-image glyph while the network tab showed success.
+
+Fixed by adding `root_assets` to the rail contract rather than four Caddy rules, because the
+origin root is an exhaustible shared resource with a silent failure mode: two rails claiming
+`/avatars/` would not error, one would simply serve the other's images — the same failure RC002
+guards for ports. RC028 now checks the gateway mirror agrees, that no two rails overlap, and that
+nothing claims a reserved prefix. Verified non-vacuous against all three.
+
+Three things worth remembering:
+
+- **The declared set must be derived, not eyeballed.** The first pass missed `/vendor/`, which is
+  the only entry that was not cosmetic: `use-import-pptx.ts` loads `/vendor/maic-importer/index.js`
+  at runtime, so PPTX import and video export were broken, not a logo. The README now carries the
+  grep and the two traps in its output.
+- **Capturing a loop variable as a default argument is a security bug in FastAPI.** Registering
+  one route per prefix with `async def handler(request, _app_id: str = app_id)` makes `_app_id` a
+  QUERY PARAMETER, so `?_app_id=other-rail` re-pointed the request after the entitlement gate had
+  already authorised it on the path. Bound in a closure; three tests assert the routes expose no
+  query params, exist per prefix, and are GET/HEAD only.
+- **Root paths do not start with an app id**, which is the whole point of them — so they missed
+  `app_access_gate` entirely and would have been served to anyone. The gate now resolves them to
+  their owning rail first.
 
 ## Surfaced while fixing P1 — not yet actioned
 
