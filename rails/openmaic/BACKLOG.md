@@ -43,25 +43,15 @@ first, and nothing says so until the rail loads and the iframe reports the app u
 Options: vendor a thin build context, publish the image to a registry, or have the installer
 detect the missing image and say so plainly. The third is cheapest and the most honest.
 
-### P8 — no end-to-end generation test
+### P8 — the end-to-end check lives outside the repo
 
-`test_llm_shim.py` covers translation against canned frames. Nothing exercises
-OpenMAIC → shim → broker → Ollama with a real model. That path has already proved to hold
-surprises (see the `max_tokens`/`num_predict` and list-content cases, both of which fail silently
-rather than raising).
+`verify-platform.ps1 -Live` in the deployment tree now drives one real completion through
+shim → broker → Ollama and asserts non-empty content, and checks that the shim refuses an
+un-credentialed caller. That covers the path, but it is local tooling: a clean clone has no such
+test, and `run-tests.ps1` still only reaches the canned-frame unit tests.
 
-### P9 [platform] — the gateway image cannot be rebuilt while the platform is running
-
-`.dockerignore` excluded `.venv`, `node_modules` and `dist` but not `deploy/logs/`. The broker
-runs natively and writes there continuously, so the log grows while the build context is being
-tarred and the whole build dies with:
-
-    archive/tar: write too long
-
-That error names neither the file nor the reason, and it only reproduces while the platform is
-up — i.e. exactly when you would be rebuilding. `data/` had the same exposure (SQLite under a
-live gateway). Both are now excluded on this branch; worth carrying upstream rather than
-rediscovering.
+Wants a `LiveTests`-marked pytest in `rails/openmaic/tests/` so the deselect machinery
+`run-tests.ps1` already has (`-k 'not LiveTests'`) picks it up like every other rail's.
 
 ### P10 — streaming cannot reach the browser incrementally
 
