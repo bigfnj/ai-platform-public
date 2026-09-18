@@ -186,6 +186,7 @@ class Broker:
         # remote is read once here, not once per role, and a remote that is down degrades that
         # role to resolved=None rather than failing the whole view.
         remote_tags: dict[str, set[str]] = {}
+        remote_loaded: dict[str, set[str]] = {}
         out: list[dict[str, Any]] = []
         for role, pattern in sorted(roles.items()):
             up_name, ref = self.settings.delegate_ref(pattern)
@@ -197,6 +198,16 @@ class Broker:
                         }
                     except UpstreamError:
                         remote_tags[up_name] = set()
+                if up_name not in remote_loaded:
+                    try:
+                        st = await self._upstream(up_name).status()
+                        remote_loaded[up_name] = {
+                            str(m.get("name") or m.get("model") or "")
+                            for m in (st.get("loaded") or [])
+                            if isinstance(m, dict)
+                        } | {m for m in (st.get("loaded") or []) if isinstance(m, str)}
+                    except UpstreamError:
+                        remote_loaded[up_name] = set()
                 names = remote_tags[up_name]
                 try:
                     resolved = resolve_ollama_model(ref, lambda: [{"name": n} for n in names])
@@ -206,6 +217,11 @@ class Broker:
                     "role": role, "pattern": pattern, "upstream": up_name,
                     "resolved": resolved,
                     "installed": bool(resolved) and resolved in names,
+                    # Residency on the REMOTE card. Without it a rail's chip resolver, which
+                    # compares against THIS box's loaded list, calls a perfectly resident remote
+                    # model 'missing' — a red dot on a working rail, which is the same class of
+                    # lie the four-state contract exists to prevent, just inverted.
+                    "loaded": bool(resolved) and resolved in remote_loaded[up_name],
                     "class": self._class(resolved) if resolved else None,
                 })
                 continue

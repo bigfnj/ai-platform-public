@@ -63,6 +63,24 @@ def _same(a: str, b: str) -> bool:
     return _strip_latest(a) == _strip_latest(b)
 
 
+def _role_entry(ref: str, roles: list[dict]) -> dict:
+    """The broker's row for an ``@role``, or {} for a concrete model name."""
+    if not ref.startswith("@"):
+        return {}
+    name = ref[1:]
+    for r in roles:
+        if r.get("role") == name:
+            return r
+    return {}
+
+
+def _is_delegated(entry: dict) -> bool:
+    """Whether this role runs on another broker. Absent or 'local' means this box — an older
+    broker omits the key entirely, and must keep behaving exactly as before."""
+    up = entry.get("upstream")
+    return bool(up) and up != "local"
+
+
 def _resolve_ref(ref: str, roles: list[dict], installed: list[str]) -> str:
     """Expand ``@role``, then resolve a size-scoped glob against what is installed."""
     if ref.startswith("@"):
@@ -104,7 +122,20 @@ def resolve(specs: list[tuple[str, str, str]]) -> dict[str, Any]:
     out: list[dict[str, Any]] = []
     for slot, label, ref in specs:
         model = _resolve_ref(ref, roles, installed)
-        if not any(_same(model, n) for n in installed):
+        entry = _role_entry(ref, roles)
+        if _is_delegated(entry):
+            # A role may be DELEGATED to another broker, and then none of the three local reads
+            # above describe it: the model is installed and resident on a different card. Judging
+            # it against this box's inventory calls a perfectly healthy remote model 'missing' —
+            # a red dot on a working rail, the four-state contract's own failure mode inverted.
+            # The broker has already asked that box on our behalf; trust what it reports.
+            if not entry.get("installed"):
+                state = MISSING
+            elif entry.get("loaded"):
+                state = LOADED
+            else:
+                state = COLD
+        elif not any(_same(model, n) for n in installed):
             state = MISSING
         elif any(_same(model, n) for n in loaded):
             state = LOADED
