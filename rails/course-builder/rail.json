@@ -1,0 +1,41 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "course-builder",
+  "label": "Course Builder",
+  "icon": "📚",
+  "description": "Turn any local markdown knowledge repository into an OpenMAIC course-source document. Point it at a directory, index it once with the local embed model, then generate a grounded .md from a prompt — ready to upload into OpenMAIC.",
+  "package": "course_builder_app",
+  "federation_name": "courseBuilder",
+  "css_wrapper": "course-builder",
+  "layout": "backend",
+  "env_prefix": "CB_",
+  "ports": {
+    "backend": 8901,
+    "dev": 5351
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "embed",
+      "label": "Index",
+      "env": "CB_EMBED_ROLE",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false
+    },
+    {
+      "slot": "condense",
+      "label": "Condense",
+      "env": "CB_CONDENSE_ROLE",
+      "role": "openmaic",
+      "kind": "chat",
+      "admin_panel": true
+    }
+  ],
+  "notes": [
+    "This rail owns its own React UI (not an iframe). The backend runs the full RAG pipeline: chunking, embedding via the broker's @embed role, cosine retrieval, and optional LLM condensation. No companion container.",
+    "The index is a DuckDB file kept on the host, outside OneDrive (CB_INDEX_PATH, default ~/.course-builder-index.duckdb). It is large and churning — not a repo artifact.",
+    "Blueprints (exam domain outlines) come from a CSV pointed at by CB_BLUEPRINT_CSV. Point this at ai-notes/research/blueprint-domains.csv or any CSV with credential_code/domain_name/weight_percent/sub_skill columns.",
+    "Indexing and building run in a ThreadPoolExecutor because DuckDB and numpy are synchronous. Progress streams to the browser via SSE."
+  ]
+}
