@@ -75,6 +75,9 @@ class GatewaySettings(PlatformSettings):
     app_smb_partner_enablement_url: str = "http://127.0.0.1:8870"
     app_gemini_cx_url: str = "http://127.0.0.1:8880"
     app_openmaic_url: str = "http://127.0.0.1:8900"
+    # Native backend (not containerised) — reads arbitrary host paths directly.
+    # In the full Docker stack override with PLATFORM_APP_COURSE_BUILDER_URL=http://host.docker.internal:8901
+    app_course_builder_url: str = "http://127.0.0.1:8901"
 
     # Direct Ollama endpoint — used ONLY by the admin model-pool "Delete" action (ollama rm),
     # which the broker has no verb for. All inference still goes through the broker. Container
@@ -92,7 +95,7 @@ class GatewaySettings(PlatformSettings):
     # install.ps1's `$enabled -join ','`) — so the lean installer's gateway died at import, before
     # uvicorn could serve, and even a single bare value failed since it is not valid JSON either.
     # The full stack never hit it only because deploy/.env sets no such line. Accept both forms.
-    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("recipe-book", "workstation", "terminal-fun", "ai-playground", "co-worker", "smb-partner-enablement", "gemini-cx", "meeting-atlas", "openmaic")
+    enabled_apps: Annotated[tuple[str, ...], NoDecode] = ("recipe-book", "workstation", "terminal-fun", "ai-playground", "co-worker", "smb-partner-enablement", "gemini-cx", "meeting-atlas", "openmaic", "course-builder")
 
     @field_validator("enabled_apps", mode="before")
     @classmethod
@@ -123,6 +126,7 @@ class GatewaySettings(PlatformSettings):
     smb_partner_enablement_dist: str = str(RAILS / "smb-partner-enablement" / "frontend" / "dist")
     gemini_cx_dist: str = str(RAILS / "gemini-cx" / "frontend" / "dist")
     openmaic_dist: str = str(RAILS / "openmaic" / "frontend" / "dist")
+    course_builder_dist: str = str(RAILS / "course-builder" / "frontend" / "dist")
 
     # --- auth / multi-tenant (PLATFORM_ env prefix) -------------------------
     # SQLite on a mounted volume in the container; the seam is a SQLAlchemy URL so
@@ -160,6 +164,7 @@ class GatewaySettings(PlatformSettings):
             "gemini-cx": self.app_gemini_cx_url.rstrip("/"),
             "meeting-atlas": self.app_meeting_atlas_url.rstrip("/"),
             "openmaic": self.app_openmaic_url.rstrip("/"),
+            "course-builder": self.app_course_builder_url.rstrip("/"),
         }
         return {name: urls[name] for name in self.enabled_apps if name in urls}
 
@@ -206,7 +211,8 @@ class GatewaySettings(PlatformSettings):
                "smb-partner-enablement": self.smb_partner_enablement_dist,
                "gemini-cx": self.gemini_cx_dist,
                "meeting-atlas": self.meeting_atlas_dist,
-               "openmaic": self.openmaic_dist}
+               "openmaic": self.openmaic_dist,
+               "course-builder": self.course_builder_dist}
         out: dict[str, Path] = {}
         for name in self.enabled_apps:
             p = Path(raw.get(name, ""))

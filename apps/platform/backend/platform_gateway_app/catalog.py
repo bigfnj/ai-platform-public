@@ -99,6 +99,14 @@ _ENTRIES: list[dict[str, Any]] = [
                     "and simulations delivered by an AI teacher with narration and a live whiteboard. Runs the "
                     "open-source OpenMAIC courseware engine against this platform's own models."
     },
+    # Course Builder — native backend (no container) that indexes any local markdown corpus
+    # via the broker's @embed model and generates grounded course-source .md files from a
+    # prompt + exam blueprint. Output is uploaded to OpenMAIC. See rails/course-builder/.
+    {"id": "course-builder", "label": "Course Builder", "icon": "📚", "status": "ready",
+     "description": "Turn any local markdown knowledge repository into an OpenMAIC course-source document. "
+                    "Point it at a directory, index it once, then generate a grounded .md from a prompt and "
+                    "an exam blueprint — ready to upload into OpenMAIC."
+    },
 ]
 
 # 'ready' before 'soon'; anything unrecognised sorts last rather than crashing.
