@@ -22,7 +22,10 @@
 #
 # Skip the Ollama service (if it already auto-starts) with:  -InstallOllama:$false
 
-param([bool]$InstallOllama = $true)
+param(
+    [bool]$InstallOllama       = $true,
+    [bool]$InstallCourseBuilder = $true
+)
 
 #Requires -RunAsAdministrator
 $ErrorActionPreference = 'Stop'
@@ -140,7 +143,40 @@ Install-Svc 'platform-broker' $BrokerPy `
     $PlatformRoot `
     $BrokerEnv
 
-# --- 4. ollama (point at your models) ---------------------------------------
+# --- 4. course-builder (native rail — reads arbitrary host paths, no container) ----------
+# Installs the package into the platform venv, then registers as a Windows service so it
+# auto-starts with the platform. The gateway proxies /course-builder/api/* to port 8901.
+if ($InstallCourseBuilder) {
+    Write-Host 'Installing course-builder package into platform venv...' -ForegroundColor Cyan
+    & $BrokerPy -m pip install -q -e "$PlatformRoot\rails\course-builder\backend"
+
+    # Read CB_BLUEPRINT_CSV and CB_INDEX_PATH from deploy/.env if present.
+    $CbBlueprintCsv = ''
+    $CbIndexPath    = ''
+    if (Test-Path $EnvFile) {
+        $m = Select-String -Path $EnvFile -Pattern '^\s*CB_BLUEPRINT_CSV\s*=\s*(.+)$' | Select-Object -First 1
+        if ($m) { $CbBlueprintCsv = $m.Matches[0].Groups[1].Value.Trim() }
+        $m = Select-String -Path $EnvFile -Pattern '^\s*CB_INDEX_PATH\s*=\s*(.+)$' | Select-Object -First 1
+        if ($m) { $CbIndexPath = $m.Matches[0].Groups[1].Value.Trim() }
+    }
+    if (-not $CbIndexPath) { $CbIndexPath = "$UserProfile\.course-builder-index.duckdb" }
+
+    $CbEnv = @(
+        "CB_BROKER_URL=http://127.0.0.1:11500",
+        "CB_INDEX_PATH=$CbIndexPath",
+        "CB_BLUEPRINT_CSV=$CbBlueprintCsv",
+        "CB_EMBED_ROLE=@embed",
+        "CB_CONDENSE_ROLE=@openmaic"
+    )
+    if ($BrokerToken) { $CbEnv += "BROKER_AUTH_TOKEN=$BrokerToken" }
+
+    Install-Svc 'platform-course-builder' $BrokerPy `
+        '-m uvicorn course_builder_app.api.app:app --host 127.0.0.1 --port 8901' `
+        "$PlatformRoot\rails\course-builder\backend" `
+        $CbEnv
+}
+
+# --- 5. ollama (point at your models) ---------------------------------------
 # NOTE: if Ollama already starts on boot (its app adds itself to startup), disable
 # that (Task Manager -> Startup apps -> Ollama -> Disable) or run with
 # -InstallOllama:$false, or two servers fight over port 11434.
@@ -150,10 +186,13 @@ if ($InstallOllama) {
 }
 
 # --- 5. start + report ------------------------------------------------------
-if ($InstallOllama) { Invoke-Nssm start ollama | Out-Null; Start-Sleep 4 }
+if ($InstallOllama)        { Invoke-Nssm start ollama                  | Out-Null; Start-Sleep 4 }
 Invoke-Nssm start platform-broker | Out-Null
+if ($InstallCourseBuilder) { Invoke-Nssm start platform-course-builder | Out-Null }
 Start-Sleep 4
-$svcNames = @('platform-broker'); if ($InstallOllama) { $svcNames += 'ollama' }
+$svcNames = @('platform-broker')
+if ($InstallOllama)        { $svcNames += 'ollama' }
+if ($InstallCourseBuilder) { $svcNames += 'platform-course-builder' }
 Get-Service -Name $svcNames -ErrorAction SilentlyContinue |
     Select-Object Name, Status, StartType | Format-Table -AutoSize
 Write-Host ''

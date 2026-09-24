@@ -412,6 +412,9 @@ services:
       PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
       PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
       PLATFORM_APP_OPENMAIC_URL: http://openmaic:8900
+      # course-builder backend is NATIVE (not a container) — reachable via host.docker.internal.
+      PLATFORM_APP_COURSE_BUILDER_URL: http://host.docker.internal:8901
+      PLATFORM_COURSE_BUILDER_DIST: /app/course-builder-dist
       PLATFORM_FRONTEND_DIST: /app/shell-dist
       PLATFORM_RECIPE_BOOK_DIST: /app/recipe-book-dist
       PLATFORM_WORKSTATION_DIST: /app/workstation-dist
@@ -442,6 +445,7 @@ services:
       - ../rails/gemini-cx/frontend/dist:/app/gemini-cx-dist:ro
       - ../rails/meeting-atlas/frontend/dist:/app/meeting-atlas-dist:ro
       - ../rails/openmaic/frontend/dist:/app/openmaic-dist:ro
+      - ../rails/course-builder/frontend/dist:/app/course-builder-dist:ro
       - gateway_data:/data       # auth DB (users/sessions/entitlements), persisted
     expose:
       - "8700"
