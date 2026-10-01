@@ -1,0 +1,503 @@
+/*
+ * Local tokens derived from the platform theme (see web/THEMING.md) — never hardcoded colours,
+ * so this rail follows the user's palette and light/dark mode like every other rail.
+ *
+ * The original prototype was Microsoft-branded dark with a blue accent. That reads here as the
+ * platform's accent rather than a pinned #0078D4, so the rail stays coherent inside the shell.
+ */
+.smbp {
+  --ink: var(--text-primary, #e8eaed);
+  /* Local ALIASES, not redefinitions of the shared tokens (THEMING.md rules 1 and 2).
+     --muted and --accent are platform names: redefining them under this wrapper broke
+     inheritance for anything nested, and `--accent: var(--accent, ...)` was worse than a
+     style nit — a custom property referencing itself is a dependency cycle, which the CSS
+     Variables spec makes invalid at computed-value time, so --accent was unreliable
+     throughout this rail rather than merely unpalettable. */
+  --mut: var(--text-secondary, #9aa4b2);
+  --s1: var(--surface-1, #12161c);
+  --s2: var(--surface-2, #1a1f27);
+  --bd: var(--border, rgba(255, 255, 255, 0.09));
+  --ac: var(--accent, #3b82f6);
+
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.smbp .muted { color: var(--mut); }
+.smbp .center { text-align: center; }
+
+/* --- tabs --------------------------------------------------------------- */
+.smbp .tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--bd);
+  flex-wrap: wrap;
+}
+.smbp .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--mut);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.smbp .tab[aria-selected='true'] {
+  color: var(--ink);
+  border-bottom-color: var(--ac);
+}
+
+/* --- cards -------------------------------------------------------------- */
+.smbp .card {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  padding: 16px;
+}
+.smbp .grid {
+  display: grid;
+  gap: 12px;
+  /* auto-FIT, not auto-fill: on a wide viewport auto-fill leaves empty tracks and the cards
+     bunch up against the left edge. Capped and centred so the picker stays balanced. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  justify-content: center;
+  margin-inline: auto;
+  max-width: 1100px;
+  width: 100%;
+}
+.smbp .card h4 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ac);
+}
+.smbp .card p { margin: 0; font-size: 14px; line-height: 1.55; }
+
+/* Scenario cards are clickable cards, so they need a focus ring and a hover affordance. */
+.smbp .scenario {
+  text-align: center;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 120ms ease;
+}
+.smbp .scenario:hover,
+.smbp .scenario:focus-visible { border-color: var(--ac); }
+.smbp .scenario .icon { font-size: 26px; }
+.smbp .scenario .title { font-weight: 600; margin: 8px 0 2px; }
+.smbp .scenario .fit { color: var(--ac); font-size: 13px; margin-bottom: 8px; }
+
+/* --- ask / answer ------------------------------------------------------- */
+.smbp .askrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.smbp .askrow input {
+  flex: 1 1 260px;
+  min-width: 0;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  color: var(--ink);
+  padding: 10px 12px;
+  font: inherit;
+}
+.smbp button.go {
+  background: var(--ac);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font: inherit;
+}
+.smbp button.go:disabled { opacity: 0.5; cursor: default; }
+.smbp button.ghost {
+  background: none;
+  border: 1px solid var(--bd);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.smbp .answer { white-space: pre-wrap; line-height: 1.6; font-size: 14px; }
+.smbp .cites { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.smbp .cite {
+  font-size: 12px;
+  color: var(--mut);
+  border-left: 2px solid var(--bd);
+  padding-left: 8px;
+}
+
+/* An ungrounded answer is a correctness signal, not a style choice — it must be visible. */
+.smbp .ungrounded {
+  border-left: 2px solid var(--ac);
+  padding-left: 10px;
+  font-size: 13px;
+  color: var(--mut);
+}
+
+/* --- voice indicator ---------------------------------------------------- */
+/* The four model-state dots moved to the shared @web-core <ModelChips> (.rail-chip-dot in the
+   global stylesheet). What stays here is the binary Voice dot, which this rail still draws
+   inline in the header's chips trailing slot. */
+.smbp .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.smbp .dot.on { background: var(--good, #22c55e); }
+.smbp .dot.off { background: var(--mut); }
+
+/* --- mobile preview ----------------------------------------------------- */
+.smbp .mobile-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font: inherit;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.smbp .mobile-fab:hover { border-color: var(--ac); }
+
+.smbp .mpreview {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+/* Phone body — iPhone 15 Pro-style dark titanium frame */
+.smbp .mphone {
+  position: relative;
+  width: 412px;  /* body width inc. bezels */
+  height: 892px;
+  max-height: 84vh;
+  /* Titanium gradient */
+  background: linear-gradient(160deg, #3a3a3c 0%, #2c2c2e 40%, #1c1c1e 70%, #2c2c2e 100%);
+  border-radius: 54px;
+  /* bezel inset around screen */
+  padding: 18px 11px 32px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.14),   /* outer rim highlight */
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 32px 80px rgba(0, 0, 0, 0.85),
+    0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+/* Left side buttons: silent toggle + vol up + vol down */
+.smbp .mphone::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 132px;
+  width: 4px;
+  height: 30px;
+  background: #3a3a3c;
+  border-radius: 3px 0 0 3px;
+  box-shadow:
+    0 46px 0 0 #3a3a3c,   /* vol up */
+    0 88px 0 0 #3a3a3c;   /* vol down */
+}
+
+/* Right side: power/lock button */
+.smbp .mphone::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 158px;
+  width: 4px;
+  height: 76px;
+  background: #3a3a3c;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Screen glass — rounded, inset from phone body */
+.smbp .mscreen {
+  width: 100%;
+  height: 100%;
+  border-radius: 42px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
+}
+
+.smbp .mscreen iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* Dynamic Island pill */
+.smbp .mnotch {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 124px;
+  height: 36px;
+  background: #000;
+  border-radius: 20px;
+  z-index: 10;
+}
+/* Camera dot inside the island */
+.smbp .mnotch::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  background: #0d0d0d;
+  border-radius: 50%;
+  border: 1.5px solid #1c1c1e;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* Home indicator bar */
+.smbp .mhome {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.26);
+  border-radius: 3px;
+  z-index: 10;
+}
+
+/* The rail header itself is now the shared @web-core <RailHeader> (.rail-head* in the global
+   stylesheet), so the old bespoke .smbp-head / .smbp-logo / .smbp-titles / .smbp-sub / .smbp-spacer
+   rules are gone. The audio pickers below sit in the header's actions slot. */
+
+/* --- audio device pickers (inside SMB rail header, not fixed) ------------ */
+/* Recording is user-terminated, so the button has to read as armed, not merely active. */
+.smbp button.recording {
+  border-color: #dc2626;
+  color: #fca5a5;
+  animation: smbp-rec 1.4s ease-in-out infinite;
+}
+@keyframes smbp-rec {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+}
+
+.smbp .audio-pickers { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+.smbp .audio-picker-wrap { position: relative; }
+.smbp .icon-btn { font-size: 18px; padding: 4px 6px; line-height: 1; }
+.smbp .audio-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  min-width: 230px;
+  padding: 6px 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+.smbp .audio-menu-label {
+  padding: 6px 14px 4px;
+  font-size: 10px;
+  opacity: 0.45;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.smbp .audio-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none;
+  padding: 9px 14px; cursor: pointer;
+  font: inherit; font-size: 13px;
+  color: var(--ink);
+}
+.smbp .audio-item:hover { background: var(--s1); }
+.smbp .audio-item.active { background: var(--s1); color: var(--ink); }
+.smbp .audio-check {
+  display: inline-block;
+  width: 18px;
+  font-size: 12px;
+  color: var(--ac);
+  flex-shrink: 0;
+}
+
+.smbp .mpreview kbd {
+  border: 1px solid var(--bd);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+@media (max-width: 520px) {
+  .smbp .askrow { flex-direction: column; }
+  .smbp .askrow button { width: 100%; }
+  .smbp .mobile-fab { display: none; }
+}
+
+/* --- scenario builder: diagnostic --------------------------------------- */
+.smbp .qhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.smbp .qbar {
+  height: 3px;
+  background: var(--bd);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 10px 0 16px;
+}
+.smbp .qbar > span {
+  display: block;
+  height: 100%;
+  background: var(--ac);
+  transition: width 180ms ease;
+}
+/* "Why this matters" is the coaching, so it reads as an aside rather than body copy. */
+.smbp .why {
+  border-left: 2px solid var(--ac);
+  padding: 6px 0 6px 12px;
+  margin: 0 0 16px;
+  color: var(--mut);
+  font-size: 13px;
+}
+.smbp .opts {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+.smbp .opt {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 14px;
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.smbp .opt:hover,
+.smbp .opt:focus-visible {
+  border-color: var(--ac);
+  background: var(--s1);
+}
+
+/* --- scenario builder: generation checklist ----------------------------- */
+.smbp .checklist { list-style: none; margin: 12px 0; padding: 0; }
+.smbp .ck {
+  align-items: baseline;
+  color: var(--mut);
+  display: flex;
+  font-size: 14px;
+  gap: 10px;
+  padding: 6px 0;
+}
+.smbp .ck .ckmark { width: 1em; flex: none; }
+.smbp .ck.active { color: var(--ink); }
+.smbp .ck.active .ckmark { color: var(--ac); }
+.smbp .ck.done .ckmark { color: var(--ac); }
+.smbp .ck.error { color: #f87171; }
+
+/* --- scenario builder: the package -------------------------------------- */
+/* The directional close is the payload — the original prototype's whole point was that it
+   ends with an action, not a link list. So it is visually the loudest thing on the page. */
+.smbp .nextmove {
+  background: var(--s2);
+  border: 1px solid var(--ac);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+}
+.smbp .nextmove .md p:first-child { margin-top: 0; }
+.smbp .nextmove .md p:last-child { margin-bottom: 8px; }
+.smbp .tab:disabled { opacity: 0.4; cursor: not-allowed; }
+.smbp .md h4 { font-size: 14px; margin: 16px 0 6px; }
+.smbp .md h5 { color: var(--mut); font-size: 13px; margin: 12px 0 4px; }
+.smbp .md p { line-height: 1.55; margin: 0 0 10px; }
+.smbp .md ul { margin: 0 0 10px; padding-left: 20px; }
+.smbp .md li { line-height: 1.55; margin-bottom: 6px; }
+/* The honest out — visually subordinate to the real answers, not a fifth peer option. */
+.smbp .opt.unsure {
+  background: none;
+  border-style: dashed;
+  color: var(--mut);
+  font-size: 13px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  width: 100%;
+}
+
+/* --- live reasoning trace ----------------------------------------------- */
+/* Beside the checklist on a wide viewport, below it on a narrow one — the phone surface gets
+   the same trace, just stacked. */
+.smbp .runsplit {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.3fr);
+}
+@media (max-width: 860px) {
+  .smbp .runsplit { grid-template-columns: 1fr; }
+}
+.smbp .trace {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  font-size: 12px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 12px;
+}
+.smbp .tracehead {
+  color: var(--mut);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.smbp .tblock { margin-bottom: 12px; }
+.smbp .tkey {
+  color: var(--ac);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.smbp .tline {
+  color: var(--mut);
+  line-height: 1.5;
+  padding: 1px 0;
+}
+.smbp .tline.rule { color: var(--ink); }
+.smbp .tline.open { font-style: italic; }
+.smbp .tscore {
+  color: var(--ac);
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  margin-right: 8px;
+  opacity: 0.85;
+}
+.smbp .tsrc { margin-left: 8px; opacity: 0.55; }
+/* The model's own output as it arrives. Monospace so the streaming is legible as *generation*
+   rather than mistaken for finished copy. */
+.smbp .tstream {
+  border-left: 2px solid var(--bd);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 6px;
+  opacity: 0.75;
+  padding-left: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

@@ -1,0 +1,33 @@
+#!/bin/sh
+# Put one PTY/game process onto the low-privileged game uid, then get out of the way.
+#
+# Invoked by terminal_fun_app/pty_session.py, and ONLY when that process has detected it
+# holds CAP_SETUID/CAP_SETGID — see split_uid_active() there, and the uid-split note in
+# deploy/Dockerfile for why the split exists at all (a roguelike shell escape reading the
+# platform broker token out of /proc/1/environ).
+#
+# WHY A SCRIPT AND NOT A BARE setpriv ARGV. Two things have to happen before the exec and
+# only one of them is a setpriv flag:
+#
+#   umask 002  The session HOME is 02770 and shared with the backend through the funshare
+#              group, because the backend has to seed the save before the game starts and
+#              capture it plus delete the HOME afterwards. With the default 022 the game's
+#              own subdirectories (crawl's ~/.crawl) come out group-read-only, the backend
+#              can no longer unlink what is inside them, and every saved-game session leaks
+#              a tmpfs directory. setpriv has no --umask.
+#
+#   setpriv    --init-groups so the game picks up funshare from the passwd/group db rather
+#              than inheriting the backend's groups; --inh-caps/--ambient-caps cleared so
+#              nothing survives into the game. The clearing is belt and braces — execve
+#              recomputes the permitted set from the file's caps (none) plus ambient (now
+#              empty), so a non-setuid binary comes out with nothing either way — but an
+#              ambient CAP_SETUID reaching the game would let it setuid straight BACK to the
+#              backend's uid, which is the whole split undone. Cheap insurance, stated
+#              explicitly so nobody removes it as redundant.
+#
+# `exec` twice over: this script must not linger as a process. pty_session sets the child up
+# in its own session/pgroup and kills the group on teardown, which works because exec keeps
+# the pid.
+umask 002
+exec setpriv --reuid=gameuser --regid=gameuser --init-groups \
+     --inh-caps=-all --ambient-caps=-all -- "$@"

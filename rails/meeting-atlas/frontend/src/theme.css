@@ -1,0 +1,402 @@
+/* Meeting Atlas — scoped entirely under .ma (the manifest's css_wrapper).
+ *
+ * Follows web/THEMING.md: local tokens are DERIVED from the shared platform tokens
+ * with a standalone-dev fallback, and --accent / --muted / --good are deliberately
+ * absent here so they inherit the chosen palette (rule 2).
+ */
+
+.ma {
+  --ink: var(--text-primary, #1f2733);
+  --ink-2: var(--text-secondary, #68738a);
+  --s1: var(--surface-1, #ffffff);
+  --s2: var(--surface-2, #f2f1ec);
+  --bd: var(--border, #e2e8f0);
+  --rad: var(--radius, 10px);
+
+  /* Data-viz keeps its OWN stable scale rather than tracking the palette
+   * (THEMING.md rule 4): a chart re-hued per palette stops being comparable
+   * between two people looking at the same meeting. One series hue, plus a
+   * six-step sequential ramp for magnitude. Both validated for CVD separation
+   * and lightness spacing before being written down.
+   */
+  --ma-series: #2a78d6;
+  --ma-track: #cde2fb;
+  --ma-q1: #cde2fb;
+  --ma-q2: #9ec5f4;
+  --ma-q3: #6da7ec;
+  --ma-q4: #3987e5;
+  --ma-q5: #256abf;
+  --ma-q6: #0d366b;
+  --ma-wash: rgba(42, 120, 214, 0.08);
+
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The sequential ramp is the one thing that MUST invert with the mode: on a dark
+ * surface "near zero" has to recede toward the surface, so the low step becomes the
+ * dark one. This is not a second palette (rule 2) — the surface and accent tokens
+ * still inherit; only the magnitude ramp re-steps.
+ */
+:root[data-theme='dark'] .ma,
+:root[data-theme='night'] .ma {
+  --ma-series: #3987e5;
+  --ma-track: #184f95;
+  --ma-q1: #0d366b;
+  --ma-q2: #184f95;
+  --ma-q3: #256abf;
+  --ma-q4: #3987e5;
+  --ma-q5: #6da7ec;
+  --ma-q6: #9ec5f4;
+  --ma-wash: rgba(57, 135, 229, 0.14);
+}
+
+/* ---------------------------------------------------------------- layout */
+.ma * { box-sizing: border-box; }
+.ma .head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 18px;
+}
+.ma .head h2 {
+  margin: 0;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.ma .head .sub { color: var(--ink-2); font-size: 12px; }
+.ma .spacer { flex: 1; }
+
+.ma .tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.ma .tab {
+  padding: 7px 13px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 34px;
+}
+.ma .tab:hover { background: var(--ma-wash); color: var(--ink); }
+/* Action surfaces use the palette gradient (rule 3). */
+.ma .tab.on {
+  background: var(--grad-accent, var(--accent));
+  color: #fff;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.ma .bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.ma .scope { display: flex; align-items: center; gap: 2px; }
+.ma button.nav {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: var(--s1);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+}
+.ma button.nav:hover:not(:disabled) { background: var(--ma-wash); color: var(--ink); }
+.ma button.nav:disabled { opacity: 0.35; cursor: default; }
+.ma .scope .lbl {
+  padding: 0 12px;
+  min-width: 180px;
+  font-weight: 600;
+  font-size: 15px;
+}
+.ma .scope .lbl small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; }
+
+.ma button.pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  background: var(--s1);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 32px;
+}
+.ma button.pill:hover { background: var(--ma-wash); color: var(--ink); }
+
+/* Style the ELEMENT, not just the wrapper (rule 5) — a bare `.ma input` would
+ * leave the browser default gray on an input that has its own class. */
+.ma input.ma-input,
+.ma input[type='search'] {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: var(--s1);
+  color: var(--ink);
+  font: inherit;
+  min-height: 34px;
+  width: 100%;
+}
+.ma input.ma-input:focus,
+.ma input[type='search']:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.ma .searchwrap { flex: 1; min-width: 190px; max-width: 360px; }
+
+/* ---------------------------------------------------------------- cards */
+.ma .card {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  padding: 18px;
+  box-shadow: var(--shadow, none);
+}
+.ma .card + .card { margin-top: 14px; }
+.ma .card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.ma .card-head h3 { margin: 0; font-size: 14px; }
+.ma .card-head p { margin: 0; color: var(--muted); font-size: 12px; }
+.ma .grid { display: grid; gap: 14px; }
+.ma .cols-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ma .cols-32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+@media (max-width: 980px) {
+  .ma .cols-2, .ma .cols-32 { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ma .hero { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.ma .hero .fig {
+  font-size: 52px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.ma .hero .sub { color: var(--ink-2); padding-bottom: 6px; }
+.ma .hero .sub small { display: block; color: var(--muted); font-size: 12px; }
+
+.ma .tiles {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+  margin-top: 14px;
+}
+.ma .tile {
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  padding: 14px 16px;
+}
+.ma .tile .lbl { color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+.ma .tile .val { font-size: 25px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
+.ma .tile .val span { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 3px; }
+.ma .tile .note { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+/* Meter: fill plus a lighter step of the same ramp as the track. */
+.ma .meter { height: 6px; border-radius: 3px; background: var(--ma-track); overflow: hidden; margin-top: 9px; }
+.ma .meter i { display: block; height: 100%; background: var(--ma-series); border-radius: 3px; }
+
+/* ---------------------------------------------------------------- bits */
+.ma .kw { display: flex; flex-wrap: wrap; gap: 6px; }
+.ma .kw span {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  color: var(--ink-2);
+}
+.ma .kw span b { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.ma .empty { color: var(--muted); padding: 20px 2px; font-size: 13px; }
+.ma .empty strong { color: var(--ink-2); }
+
+.ma table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ma table.tbl th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+}
+.ma table.tbl td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--bd); vertical-align: top; }
+.ma table.tbl td.num, .ma table.tbl th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ma table.tbl tr:last-child td { border-bottom: 0; }
+.ma .tblwrap { max-height: 340px; overflow: auto; margin-top: 14px; }
+
+/* Verification badges. Status wears the SEMANTIC tokens (rule 4) and always pairs
+ * the colour with an icon and a label, so meaning never rests on hue alone. */
+.ma .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--ink-2);
+  border: 1px solid var(--bd);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+  background: none;
+  font-family: inherit;
+}
+.ma .badge svg { flex: none; }
+.ma .badge.ok svg { color: var(--good); }
+.ma .badge.warn svg { color: var(--warning); }
+.ma .badge.bad svg { color: var(--critical); }
+.ma button.badge { cursor: pointer; }
+.ma button.badge:hover { background: var(--ma-wash); color: var(--ink); }
+
+/* ---------------------------------------------------------------- meeting list */
+.ma .mlist { display: grid; gap: 10px; }
+.ma button.mrow {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 124px;
+  gap: 14px;
+  align-items: center;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  padding: 13px 16px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+}
+.ma button.mrow:hover { border-color: var(--accent); background: var(--ma-wash); }
+.ma .mrow .when { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 13px; }
+.ma .mrow .when small { display: block; color: var(--muted); font-size: 11px; }
+.ma .mrow .ttl { font-weight: 600; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ma .mrow .meta { color: var(--muted); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+.ma .mrow .spark { justify-self: end; }
+@media (max-width: 760px) {
+  .ma button.mrow { grid-template-columns: 62px minmax(0, 1fr); }
+  .ma .mrow .spark { display: none; }
+}
+
+/* ---------------------------------------------------------------- charts */
+.ma .chart svg { display: block; overflow: visible; max-width: 100%; }
+.ma .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.ma .axis-line { stroke: var(--bd); stroke-width: 1; }
+.ma .grid-line { stroke: var(--bd); stroke-width: 1; opacity: 0.6; }
+.ma .bar { fill: var(--ma-series); }
+.ma .hit { fill: transparent; cursor: pointer; }
+.ma .dlabel { font-size: 11px; fill: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ma .rb-block { fill: var(--ma-series); cursor: pointer; }
+.ma .rb-block:hover { fill: var(--ma-q5); }
+.ma .now-line { stroke: var(--critical); stroke-width: 2; }
+
+/* Heatmap + calendar as CSS grid: real 2px surface gaps and real hover targets. */
+.ma .hm { display: grid; gap: 2px; }
+.ma .hm .cell { border-radius: 3px; min-height: 26px; border: 0; padding: 0; }
+.ma .hm .cell.z { background: transparent; box-shadow: inset 0 0 0 1px var(--bd); }
+.ma button.cell { cursor: pointer; }
+.ma button.cell:hover { box-shadow: inset 0 0 0 2px var(--ink); }
+.ma .hm .hlbl, .ma .hm .vlbl {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.ma .hm .vlbl { justify-content: flex-end; padding-right: 8px; }
+.ma .hm .hlbl { justify-content: center; }
+.ma .scale { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; margin-top: 12px; flex-wrap: wrap; }
+.ma .scale i { width: 24px; height: 9px; border-radius: 2px; display: block; }
+
+.ma .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.ma .cal .dow { font-size: 11px; color: var(--muted); text-align: center; padding-bottom: 4px; }
+.ma .cal .day {
+  aspect-ratio: 1 / 0.8;
+  border-radius: 5px;
+  padding: 6px 7px;
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--bd);
+  border: 0;
+  text-align: left;
+  font: inherit;
+}
+.ma .cal button.day { cursor: pointer; box-shadow: none; }
+.ma .cal button.day:hover { box-shadow: inset 0 0 0 2px var(--ink); }
+.ma .cal .day.out { opacity: 0.28; }
+.ma .cal .day .n { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.ma .cal .day .c { position: absolute; bottom: 6px; left: 7px; font-size: 11px; font-weight: 600; color: var(--ink-2); }
+.ma .cal .day.dark .n, .ma .cal .day.dark .c { color: #fff; }
+.ma .cal .day.today { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------------------------------------------------------------- detail */
+.ma .dhead { margin-bottom: 16px; }
+.ma .dhead h1 { margin: 0 0 6px; font-size: 23px; line-height: 1.25; letter-spacing: -0.02em; }
+.ma .dhead .sub { color: var(--ink-2); display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.ma .crumb { background: none; border: 0; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; padding: 0 0 4px; }
+.ma .crumb:hover { color: var(--ink); text-decoration: underline; }
+
+.ma .section + .section { margin-top: 22px; }
+.ma .section h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 0 0 9px;
+  font-weight: 600;
+}
+.ma .bullets { margin: 0; padding-left: 18px; }
+.ma .bullets li { margin-bottom: 7px; }
+.ma .hl { margin-bottom: 12px; }
+.ma .hl b { display: block; margin-bottom: 2px; }
+.ma .hl span { color: var(--ink-2); }
+.ma .act { border-top: 1px solid var(--bd); padding: 11px 0; }
+.ma .act:first-of-type { border-top: 0; padding-top: 0; }
+.ma .act .task { margin-bottom: 6px; }
+.ma .act .row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+.ma .act .owner { font-weight: 600; }
+.ma .overview p { margin: 0 0 9px; color: var(--ink-2); }
+
+.ma audio { width: 100%; margin-bottom: 10px; height: 36px; }
+.ma .tx { max-height: min(62vh, 700px); overflow: auto; border-top: 1px solid var(--bd); }
+.ma .seg { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; padding: 6px 4px; border-radius: 6px; }
+.ma .seg:hover { background: var(--ma-wash); }
+.ma .seg.on { background: var(--ma-wash); box-shadow: inset 2px 0 0 var(--accent); }
+.ma .seg button.ts {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  cursor: pointer;
+  padding: 0;
+  min-height: 24px;
+}
+.ma .seg button.ts:hover { color: var(--accent); text-decoration: underline; }
+.ma .seg .who { font-weight: 600; margin-right: 6px; }
+.ma .seg mark { background: var(--ma-track); color: var(--ink); border-radius: 2px; padding: 0 1px; }
+.ma .gap { color: var(--muted); font-size: 11px; padding: 3px 0 3px 68px; font-style: italic; }
+
+.ma .tip {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 12px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.16);
+  max-width: 280px;
+}
+.ma .tip .t { font-weight: 600; margin-bottom: 3px; }
+.ma .tip .r { color: var(--ink-2); display: flex; justify-content: space-between; gap: 14px; }
+.ma .tip .r b { font-variant-numeric: tabular-nums; color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ma * { transition: none !important; animation: none !important; }
+}

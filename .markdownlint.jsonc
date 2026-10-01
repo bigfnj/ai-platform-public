@@ -1,0 +1,30 @@
+{
+  // Tuned markdownlint config for the platform repo.
+  //
+  // Philosophy: keep the rules that affect how Markdown actually RENDERS
+  // (on GitHub / strict CommonMark), and silence the purely cosmetic ones
+  // that just add editor squiggles to internal notes, build logs, and the
+  // design docs in docs/.
+  //
+  // Start from all rules on, then switch off the noise.
+  "default": true,
+
+  // --- Kept ON (left at default; these can genuinely break output) ---
+  // MD031 blanks-around-fences  — a code fence with no surrounding blank
+  //                               lines can render as body text.
+  // MD032 blanks-around-lists   — a list jammed against a paragraph may not
+  //                               render as a list on strict renderers.
+  // (Not listed = default = enabled.)
+
+  // --- Turned OFF (cosmetic only, no rendering impact) ---
+  "MD004": false, // ul-style          — allow -, +, or * for bullets
+  "MD013": false, // line-length       — notes/build logs run long by design
+  "MD024": false, // no-duplicate-heading — build logs reuse section names
+  "MD029": false, // ol-prefix         — don't force 1/2/3 ordered numbering
+  "MD033": false, // no-inline-html     — allow the occasional inline HTML
+  "MD034": false, // no-bare-urls       — GitHub autolinks bare URLs fine
+  "MD036": false, // no-emphasis-as-heading — allow **bold** lead-ins in notes
+  "MD040": false, // fenced-code-language  — allow plain ``` blocks
+  "MD041": false, // first-line-heading — allow files that open with a blockquote/frontmatter
+  "MD060": false  // table-column-style — don't nag on table pipe spacing
+}

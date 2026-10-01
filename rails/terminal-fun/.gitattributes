@@ -1,0 +1,8 @@
+# This repo builds a Linux container. Shell scripts, the Dockerfile, and Python must
+# stay LF — CRLF would break them ("bad interpreter: /bin/sh^M") inside the image.
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

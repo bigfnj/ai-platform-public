@@ -1,0 +1,20 @@
+[project]
+name = "gemini-cx"
+version = "0.1.0"
+description = "Gemini Enterprise CX rail — grounded RAG over a GECX subject-matter corpus, with a curated question deck"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "pydantic>=2.7",
+    "websockets>=13",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

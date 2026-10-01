@@ -1,0 +1,6 @@
+bin/
+logs/
+.env
+.env.bak-*
+data/
+.env.bak

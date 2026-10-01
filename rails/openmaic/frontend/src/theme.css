@@ -1,0 +1,119 @@
+/* OpenMAIC rail — palette-aware styling.
+ *
+ * Follows web/THEMING.md: local tokens are DERIVED from the shared platform tokens with a
+ * fallback so standalone dev still renders, and --accent / --muted / --good are NOT redefined
+ * here so they inherit whichever palette the user picked. Status colours stay semantic
+ * (--critical / --warning / --good / --info) rather than literal hexes, because "the app is
+ * down" has to read as bad on all of them.
+ *
+ * There is very little here on purpose. This rail is a wrapper around an iframe: the course UI
+ * inside the frame is the upstream OpenMAIC Next.js app with its own stylesheet, which this
+ * cannot reach and should not try to. What is styled here is the surround — the header, the
+ * frame itself, and the message shown when there is no app to frame.
+ */
+
+.openmaic {
+  --ink: var(--text-primary, #e8ecf4);
+  --muted-c: var(--text-secondary, #94a0b8);
+  --s1: var(--surface-1, #14181f);
+  --s2: var(--surface-2, #1b212b);
+  --bd: var(--border, #2a323f);
+  --rad: var(--radius, 10px);
+
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  /* The iframe has no content of its own to size against, so the column needs a real height for
+     `flex:1` below to mean anything — a percentage height would resolve against an auto-height
+     parent and collapse to zero. 132px is the shell's chrome allowance; the RailHeader is INSIDE
+     this wrapper, so (unlike workstation) nothing extra is subtracted for it. The floor keeps a
+     class readable on a short window at the cost of scrolling. */
+  height: calc(100vh - 132px);
+  min-height: 520px;
+}
+
+/* --- the app frame ------------------------------------------------------ */
+
+/* The whole rail, visually. min-height:0 is load-bearing: a flex item's default
+   min-height:auto refuses to shrink below its content, and an iframe reports a 150px intrinsic
+   height, so without this the frame overflows the column instead of filling it. */
+.openmaic .appframe {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: block;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  overflow: hidden;
+}
+
+/* --- header controls ---------------------------------------------------- */
+
+/* Styled as `button.om-reload`, not `.om-reload`, per THEMING.md rule 5 — a class on a
+   <button> that is only ever matched through an ancestor selector still falls back to the
+   browser's grey chrome for font and background. */
+.openmaic button.om-reload {
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.openmaic button.om-reload:hover {
+  border-color: var(--accent);
+}
+
+/* --- app-unreachable notice --------------------------------------------- */
+
+/* Shown INSTEAD of the frame. An iframe pointed at a dead upstream renders a blank white box
+   with the browser's own error inside it, which reads as "this rail is broken" rather than
+   "the courseware container is down" — so the frame is not mounted at all in that state. */
+.openmaic .om-down {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--s1);
+  border: 1px solid var(--bd);
+  border-left: 3px solid var(--critical, #f85149);
+  border-radius: var(--rad);
+  padding: 22px 24px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.openmaic .om-down h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.openmaic .om-down p {
+  margin: 0 0 10px;
+  max-width: 78ch;
+  color: var(--muted-c);
+}
+
+.openmaic .om-down p:last-child {
+  margin-bottom: 0;
+}
+
+.openmaic .om-down code {
+  background: var(--s2);
+  border: 1px solid var(--bd);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 0.9em;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+/* The re-check is automatic, so the note about it is informational rather than an alarm. */
+.openmaic .om-down .om-retry {
+  color: var(--info, #58a6ff);
+}

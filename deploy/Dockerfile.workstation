@@ -1,0 +1,32 @@
+# Workstation terminal backend — slim image. A WebSocket ⇆ PTY-over-SSH bridge;
+# it never touches the GPU. asyncssh (+ cryptography) is the SSH client.
+#
+# Build from the platform repo root:  docker build -f deploy/Dockerfile.workstation .
+FROM python:3.11-slim
+
+RUN pip install --no-cache-dir \
+        "fastapi>=0.111" "uvicorn[standard]>=0.30" "asyncssh>=2.14" \
+        "pydantic>=2.7" "pydantic-settings>=2.2" \
+        "httpx>=0.27"   # transitively required: platform_core/__init__ imports the broker client
+
+# Non-root runtime user (P1.4 hardening). Nothing here needs root: the app binds a high
+# port (8720) and is an outbound SSH client. /audit is created owned by the user so a
+# fresh named volume mounted there inherits that ownership (a writable audit log).
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /audit && chown appuser:appuser /audit
+
+WORKDIR /app
+COPY packages/platform_core/platform_core /app/packages/platform_core/platform_core
+COPY rails/workstation/backend /app/apps/workstation/backend
+
+# PYTHONDONTWRITEBYTECODE: the rootfs is mounted read-only in compose, so don't try to
+# write .pyc files into /app at runtime.
+ENV PYTHONPATH=/app/apps/workstation/backend:/app/packages/platform_core \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER appuser
+
+EXPOSE 8720
+CMD ["uvicorn", "workstation_app.main:app", "--app-dir", "apps/workstation/backend", \
+     "--host", "0.0.0.0", "--port", "8720"]

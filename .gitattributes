@@ -1,0 +1,14 @@
+# Shell scripts must always have LF line endings (CRLF breaks bash on Windows-mounted WSL paths,
+# and this repo's .sh files are checked out CRLF without this rule).
+*.sh text eol=lf
+
+# Container rootfs overlays: scripts COPY'd straight into a Linux image, deliberately with no
+# extension because that is the name they are exec'd by. `* text=auto` plus core.autocrlf=true
+# (the Git-for-Windows default, and what this box has) rewrites them to CRLF on checkout, and a
+# `#!/bin/sh\r` shebang fails inside the container with "no such file or directory" naming an
+# interpreter that plainly exists. They are LF in the working tree today, so this rule is what
+# stops the next clone from being the one that breaks.
+rails/*/deploy/rootfs/**/bin/* text eol=lf
+
+# Everything else: let git use the platform default
+* text=auto

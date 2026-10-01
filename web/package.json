@@ -1,0 +1,26 @@
+{
+  "name": "@platform/web-core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared platform web-core: design system + unified shell chrome + model widget.",
+  "license": "UNLICENSED",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css",
+    "./package.json": "./package.json",
+    "./*": "./src/*"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

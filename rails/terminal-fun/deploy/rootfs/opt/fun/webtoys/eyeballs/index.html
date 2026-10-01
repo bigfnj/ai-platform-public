@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buzzed Eyes — Terminal Fun web toy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at center, #1a1a2e 0%, #0f0f1a 100%);
+      overflow: hidden;
+      cursor: none;
+    }
+    .eyes-container {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: flex;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+
+
+    .ball {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg at 30% 30%, #fff 0%, #e8f0ff 5%, #c4d8ff 15%, #8b5cf6 40%, #6366f1 60%, #8b5cf6 80%, #c4d8ff 95%, #fff 100%);
+      box-shadow: 
+        0 0 40px rgba(139, 92, 246, 0.9),
+        0 0 80px rgba(99, 102, 241, 0.6),
+        0 0 120px rgba(139, 92, 246, 0.4),
+        inset 0 0 25px rgba(255, 255, 255, 1),
+        inset -15px -15px 40px rgba(30, 10, 60, 0.5),
+        inset 15px -10px 20px rgba(255, 255, 255, 0.3),
+        inset -5px 15px 15px rgba(99, 102, 241, 0.4);
+      pointer-events: none;
+      animation: colorShift 4s ease-in-out infinite;
+      position: relative;
+      overflow: visible;
+    }
+    .shine {
+      position: absolute;
+      top: 12%;
+      left: 18%;
+      width: 30%;
+      height: 18%;
+      background: radial-gradient(ellipse, rgba(255,255,255,1) 0%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0) 70%);
+      border-radius: 50%;
+      transform: rotate(-30deg);
+      z-index: 3;
+    }
+    .eye {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 40%, #fff 0%, #f0f0f0 30%, #ccc 60%, #999 100%);
+      z-index: 1;
+      overflow: visible;
+    }
+    .eye::before, .eye::after {
+      content: '';
+      position: absolute;
+      background: rgba(200, 30, 30, 0.6);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    .eye::before {
+      width: 35px;
+      height: 1.5px;
+      top: 12px;
+      left: 8px;
+      transform: rotate(-25deg);
+      filter: blur(0.5px);
+    }
+    .eye::after {
+      width: 28px;
+      height: 1px;
+      bottom: 14px;
+      right: 10px;
+      transform: rotate(15deg);
+      filter: blur(0.5px);
+    }
+    .bloodshot {
+      position: absolute;
+      background: rgba(180, 20, 20, 0.5);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .iris {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #6b4ce6 0%, #4a2ce0 40%, #2a1ca0 70%, #1a0f60 100%);
+      z-index: 2;
+    }
+    .pupil {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #333 0%, #000 100%);
+      z-index: 3;
+    }
+    .glint {
+      position: absolute;
+      top: 35%;
+      left: 35%;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      z-index: 4;
+    }
+    @keyframes colorShift {
+      0%, 100% { filter: hue-rotate(0deg); }
+      50% { filter: hue-rotate(-40deg); }
+    }
+    .leaf-trail {
+      position: absolute;
+      pointer-events: none;
+      transform-origin: center center;
+      animation: leafFall var(--leaf-duration) ease-in forwards;
+    }
+    @keyframes leafFall {
+      0%   { opacity: 0.9; transform: translate(-50%, -50%) rotate(var(--leaf-rot-start)) scale(var(--leaf-scale)); }
+      30%  { opacity: 0.75; }
+      70%  { opacity: 0.5; transform: translate(calc(-50% + var(--leaf-drift-x)), calc(-50% + var(--leaf-drop) * 0.6)) rotate(var(--leaf-rot-mid)) scale(calc(var(--leaf-scale) * 0.85)); }
+      100% { opacity: 0; transform: translate(calc(-50% + var(--leaf-drift-x)), calc(-50% + var(--leaf-drop))) rotate(var(--leaf-rot-end)) scale(calc(var(--leaf-scale) * 0.4)); }
+    }
+    .smoke {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: smokeRise 2.5s ease-out forwards;
+    }
+    @keyframes smokeRise {
+      0% { opacity: 0.8; transform: translate(-50%, 0) scale(1); }
+      20% { opacity: 0.6; }
+      100% { opacity: 0; transform: translate(calc(-50% + var(--smoke-drift-x)), -150px) scale(3); filter: blur(3px); }
+    }
+    .glitter {
+      position: absolute;
+      pointer-events: none;
+      animation-name: glitterFall;
+      animation-timing-function: ease-in;
+      animation-fill-mode: forwards;
+      border-radius: 50%;
+    }
+    @keyframes glitterFall {
+      0% { opacity: 1; transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+      70% { opacity: 0.8; transform: translate(calc(var(--drift-x) * 0.5), calc(-50% + 180px)) rotate(400deg) scale(0.8); }
+      85% { opacity: 0.9; transform: translate(calc(var(--drift-x) * 0.8), calc(-50% + 210px)) rotate(550deg) scale(1.2); }
+      100% { opacity: 0; transform: translate(calc(var(--drift-x) * 1), calc(-50% + 240px)) rotate(700deg) scale(0); }
+    }
+    .spark {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: sparkBurst 0.6s ease-out forwards;
+    }
+    @keyframes sparkBurst {
+      0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(calc(-50% + var(--spark-x)), calc(-50% + var(--spark-y))) scale(0); }
+    }
+
+    /* Full-screen canvas for the twinkling sparkle glitter */
+    #sparkleCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+  </style>
+</head>
+<body>
+  <canvas id="sparkleCanvas"></canvas>
+  <div class="eyes-container" id="eyesContainer">
+    <div class="ball" id="ballLeft">
+      <div class="shine"></div>
+      <div class="eye">
+        <div class="iris">
+          <div class="pupil"></div>
+          <div class="glint"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ball" id="ballRight">
+      <div class="shine"></div>
+      <div class="eye">
+        <div class="iris">
+          <div class="pupil"></div>
+          <div class="glint"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script>
+    const eyesContainer = document.getElementById('eyesContainer');
+    const ballLeft = document.getElementById('ballLeft');
+    const ballRight = document.getElementById('ballRight');
+
+    function addBloodshotVeins(eyeElement) {
+      const veinCount = 5 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < veinCount; i++) {
+        const vein = document.createElement('div');
+        vein.className = 'bloodshot';
+        const length = 8 + Math.random() * 18;
+        const thickness = 0.5 + Math.random() * 1.5;
+        const angle = Math.random() * 360;
+        const distX = (Math.random() - 0.5) * 35;
+        const distY = (Math.random() - 0.5) * 35;
+        vein.style.width = length + 'px';
+        vein.style.height = thickness + 'px';
+        vein.style.left = `calc(50% + ${distX}px)`;
+        vein.style.top = `calc(50% + ${distY}px)`;
+        vein.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+        vein.style.opacity = 0.3 + Math.random() * 0.5;
+        eyeElement.appendChild(vein);
+      }
+    }
+
+    addBloodshotVeins(ballLeft.querySelector('.eye'));
+    addBloodshotVeins(ballRight.querySelector('.eye'));
+
+    let mouseX = window.innerWidth / 2;
+    let mouseY = window.innerHeight / 2;
+    let eyesX = mouseX;
+    let eyesY = mouseY;
+    let lastX = eyesX;
+    let lastY = eyesY;
+
+    document.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+    });
+
+    function createLeaf(x, y) {
+      const leaf = document.createElement('img');
+      leaf.className = 'leaf-trail';
+      leaf.src = 'cannabis-leaf-smiling.png';
+      const size = 28 + Math.random() * 36;
+      const driftX = (Math.random() - 0.5) * 100;
+      const drop = 80 + Math.random() * 120;
+      const rotStart = (Math.random() - 0.5) * 60;
+      const rotMid = rotStart + (Math.random() - 0.5) * 120;
+      const rotEnd = rotStart + (Math.random() < 0.5 ? -1 : 1) * (150 + Math.random() * 120);
+      const scale = 0.6 + Math.random() * 0.7;
+      const duration = 1.2 + Math.random() * 1.2;
+
+      leaf.style.width = size + 'px';
+      leaf.style.height = size + 'px';
+      leaf.style.left = x + 'px';
+      leaf.style.top = y + 'px';
+      leaf.style.setProperty('--leaf-drift-x', driftX + 'px');
+      leaf.style.setProperty('--leaf-drop', drop + 'px');
+      leaf.style.setProperty('--leaf-rot-start', rotStart + 'deg');
+      leaf.style.setProperty('--leaf-rot-mid', rotMid + 'deg');
+      leaf.style.setProperty('--leaf-rot-end', rotEnd + 'deg');
+      leaf.style.setProperty('--leaf-scale', scale);
+      leaf.style.setProperty('--leaf-duration', duration + 's');
+      document.body.appendChild(leaf);
+      setTimeout(() => leaf.remove(), duration * 1000);
+    }
+
+    function createSmoke(x, y) {
+      const smoke = document.createElement('div');
+      smoke.className = 'smoke';
+      const size = 8 + Math.random() * 12;
+      smoke.style.width = size + 'px';
+      smoke.style.height = size + 'px';
+      smoke.style.left = x + 'px';
+      smoke.style.top = y + 'px';
+      smoke.style.background = `radial-gradient(circle, rgba(200,200,200,0.6) 0%, rgba(150,150,150,0.3) 50%, rgba(100,100,100,0) 100%)`;
+      smoke.style.filter = `blur(${2 + Math.random() * 2}px)`;
+      smoke.style.setProperty('--smoke-drift-x', (Math.random() - 0.5) * 60 + 'px');
+      document.body.appendChild(smoke);
+      setTimeout(() => smoke.remove(), 2500);
+    }
+
+    function createGlitter(x, y) {
+      const glitter = document.createElement('div');
+      glitter.className = 'glitter';
+      const isGold = Math.random() > 0.5;
+      const goldShades = ['#ffd700', '#ffc107', '#ffb300', '#ffeb3b', '#ffdf00'];
+      const silverShades = ['#e8e8e8', '#d4d4d4', '#c0c0c0', '#a8a8a8', '#ffffff', '#f5f5f5'];
+      const colors = isGold ? goldShades : silverShades;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const size = (3 + Math.random() * 8) * 0.75;
+      const driftX = (Math.random() - 0.5) * 120;
+      const duration = 2 + Math.random() * 1.5;
+      const endX = x + driftX;
+      const endY = y + 240;
+
+      glitter.style.width = size + 'px';
+      glitter.style.height = size + 'px';
+      glitter.style.left = x + 'px';
+      glitter.style.top = y + 'px';
+      glitter.style.background = `radial-gradient(circle at 30% 30%, #fff 0%, ${color} 50%, ${isGold ? '#b8860b' : '#888'} 100%)`;
+      glitter.style.boxShadow = `0 0 ${size}px ${color}`;
+      glitter.style.setProperty('--drift-x', driftX + 'px');
+      glitter.style.animationDuration = duration + 's';
+      document.body.appendChild(glitter);
+
+      setTimeout(() => {
+        createFireworks(endX, endY);
+        glitter.remove();
+      }, duration * 1000);
+    }
+
+    function createFireworks(x, y) {
+      const multiColors = ['#ff6b9d', '#ffd93d', '#6bff6b', '#c56bff', '#6bffff', '#ff9d6b', '#ff6bff', '#9dff6b', '#ffd700', '#e8e8e8'];
+      const sparkCount = 8 + Math.floor(Math.random() * 6);
+      for (let i = 0; i < sparkCount; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'spark';
+        const angle = (Math.PI * 2 * i) / sparkCount + (Math.random() - 0.5) * 0.5;
+        const distance = 20 + Math.random() * 40;
+        const sparkX = Math.cos(angle) * distance;
+        const sparkY = Math.sin(angle) * distance;
+        const sparkSize = 2 + Math.random() * 4;
+        const color = multiColors[Math.floor(Math.random() * multiColors.length)];
+        spark.style.left = x + 'px';
+        spark.style.top = y + 'px';
+        spark.style.width = sparkSize + 'px';
+        spark.style.height = sparkSize + 'px';
+        spark.style.background = `radial-gradient(circle, #fff 0%, ${color} 100%)`;
+        spark.style.boxShadow = `0 0 ${sparkSize * 2}px ${color}`;
+        spark.style.setProperty('--spark-x', sparkX + 'px');
+        spark.style.setProperty('--spark-y', sparkY + 'px');
+        spark.style.animationDuration = (0.4 + Math.random() * 0.4) + 's';
+        document.body.appendChild(spark);
+        setTimeout(() => spark.remove(), 800);
+      }
+    }
+
+    // ---- Twinkling sparkle glitter (canvas particle system) ----
+    const sparkleCanvas = document.getElementById('sparkleCanvas');
+    const sparkleCtx = sparkleCanvas.getContext('2d');
+
+    function resizeSparkleCanvas() {
+      sparkleCanvas.width = window.innerWidth;
+      sparkleCanvas.height = window.innerHeight;
+    }
+    resizeSparkleCanvas();
+    window.addEventListener('resize', resizeSparkleCanvas);
+
+    const sparkles = [];
+    let sparkleHue = 0;
+
+    // Spawn a sparkle near a given point, tinted with the current base hue
+    function spawnSparkle(x, y, baseHue) {
+      sparkles.push({
+        x: x + (Math.random() - 0.5) * 40,
+        y: y + (Math.random() - 0.5) * 40,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: (Math.random() - 0.5) * 1.2 + 0.4,
+        size: Math.random() * 2.5 + 1,
+        life: 1,
+        decay: Math.random() * 0.02 + 0.01,
+        hue: (210 + baseHue + (Math.random() - 0.5) * 40) % 360,
+        twinkle: Math.random() * Math.PI * 2,
+      });
+    }
+
+    // Draw a 4-point sparkle
+    function drawSparkle(p, alpha) {
+      const s = p.size * (0.6 + Math.sin(p.twinkle) * 0.4 + 0.4);
+      sparkleCtx.save();
+      sparkleCtx.translate(p.x, p.y);
+      sparkleCtx.globalAlpha = alpha;
+      sparkleCtx.fillStyle = `hsl(${p.hue}, 100%, 75%)`;
+      sparkleCtx.shadowColor = `hsl(${p.hue}, 100%, 70%)`;
+      sparkleCtx.shadowBlur = 8;
+      sparkleCtx.beginPath();
+      sparkleCtx.moveTo(0, -s * 3);
+      sparkleCtx.lineTo(s * 0.7, 0);
+      sparkleCtx.lineTo(0, s * 3);
+      sparkleCtx.lineTo(-s * 0.7, 0);
+      sparkleCtx.closePath();
+      sparkleCtx.moveTo(-s * 3, 0);
+      sparkleCtx.lineTo(0, s * 0.7);
+      sparkleCtx.lineTo(s * 3, 0);
+      sparkleCtx.lineTo(0, -s * 0.7);
+      sparkleCtx.closePath();
+      sparkleCtx.fill();
+      sparkleCtx.restore();
+    }
+
+    function updateSparkles() {
+      sparkleCtx.clearRect(0, 0, sparkleCanvas.width, sparkleCanvas.height);
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const p = sparkles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.02;
+        p.life -= p.decay;
+        p.twinkle += 0.3;
+        if (p.life <= 0) {
+          sparkles.splice(i, 1);
+          continue;
+        }
+        drawSparkle(p, Math.sin(p.life * Math.PI));
+      }
+    }
+
+    function animate() {
+      lastX = eyesX;
+      lastY = eyesY;
+      eyesX += (mouseX - eyesX) * 0.12;
+      eyesY += (mouseY - eyesY) * 0.12;
+      eyesContainer.style.left = eyesX + 'px';
+      eyesContainer.style.top = eyesY + 'px';
+
+      const eyeCenterX = eyesX;
+      const eyeCenterY = eyesY;
+      const dx = mouseX - eyeCenterX;
+      const dy = mouseY - eyeCenterY;
+      const angle = Math.atan2(dy, dx);
+      const maxOffset = 8;
+      const offsetX = Math.cos(angle) * maxOffset;
+      const offsetY = Math.sin(angle) * maxOffset;
+
+      ballLeft.querySelector('.eye').style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+      ballRight.querySelector('.eye').style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+
+      // Twinkling sparkle glitter: cycle color slowly and emit from each eye
+      sparkleHue = (sparkleHue + 0.3) % 360;
+      updateSparkles();
+      const eyeLX = eyesX - 45, eyeRX = eyesX + 45, eyeY = eyesY;
+      spawnSparkle(eyeLX, eyeY, sparkleHue);
+      spawnSparkle(eyeRX, eyeY, sparkleHue);
+      if (Math.random() < 0.5) spawnSparkle(eyeLX, eyeY, sparkleHue);
+      if (Math.random() < 0.5) spawnSparkle(eyeRX, eyeY, sparkleHue);
+
+      const dist = Math.sqrt((eyesX - lastX) ** 2 + (eyesY - lastY) ** 2);
+      if (dist > 4 && Math.random() < 0.12) {
+        createLeaf(lastX - 40 + (Math.random() - 0.5) * 20, lastY + (Math.random() - 0.5) * 20);
+        createLeaf(lastX + 40 + (Math.random() - 0.5) * 20, lastY + (Math.random() - 0.5) * 20);
+      }
+
+      if (Math.random() < 0.1) {
+        createGlitter(lastX - 45 + (Math.random() - 0.5) * 60, lastY - 20 + (Math.random() - 0.5) * 40);
+        createGlitter(lastX + 45 + (Math.random() - 0.5) * 60, lastY - 20 + (Math.random() - 0.5) * 40);
+      }
+
+      if (Math.random() < 0.4) {
+        createSmoke(mouseX + (Math.random() - 0.5) * 30, mouseY + (Math.random() - 0.5) * 30);
+      }
+
+      requestAnimationFrame(animate);
+    }
+    animate();
+  </script>
+</body>
+</html>
