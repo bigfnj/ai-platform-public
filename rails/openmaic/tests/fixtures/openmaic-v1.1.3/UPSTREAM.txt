@@ -1,0 +1,17 @@
+Verbatim copies of five files from upstream THU-MAIC/OpenMAIC at tag v1.1.3 (commit
+13b4f3134dea239887be46ccd05ac616ebadfad3, released 2026-10-05). OpenMAIC is MIT licensed; LICENSE
+in this directory is upstream's own, copied with the rest.
+
+tests/test_platform_basepath.py patches copies of these, so the anchors it tests are upstream's
+real lines rather than a stand-in. The ids below are upstream's git blob ids. In an OpenMAIC
+checkout, `git rev-parse v1.1.3:<path>` prints each one, and the test computes them from these
+files (line endings normalised to LF, as git stores them) to show nothing here was edited.
+
+fbaeccff31b076b8494f377b29cfb6f695474f84  next.config.ts
+bdbdbeeb0cf98c311337667a9e5adefb5a42d764  Dockerfile
+a58744507ac9410bb1664b0c3c688aa6e155ba46  lib/i18n/types.ts
+cafdbf9d114c4d0810a6cd0dc814877b8d284ca0  lib/i18n/locales.ts
+76abc5f13261e94fc0382b33ac8c101555288083  LICENSE
+
+To move to a newer upstream: copy the same paths from the new tag, replace the ids above, and run
+the tests. A refusal there is the patcher meeting an upstream change, which is what it is for.

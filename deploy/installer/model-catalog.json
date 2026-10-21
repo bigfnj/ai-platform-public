@@ -1,0 +1,27 @@
+{
+  "_note": "Candidate models per kind, for the installer's VRAM-sized picker. Grounded in real footprints: approx_gb for anything currently installed is MEASURED from `ollama list` on the reference box; entries marked \"estimated\": true are not installed here and their sizes are floors to refine once pulled. min_vram_gb is a curated floor for running the model as the SOLE resident (weights + KV cache + overhead), which is the only case that matters given the broker's one-heavy-model gate. The `default: true` entry per kind mirrors services/broker/roles.json, so the picker's recommendation matches what the platform ships with when the card is big enough.",
+
+  "chat": [
+    {"model": "nemotron-3-nano:4b", "min_vram_gb": 5,  "approx_gb": 2.8,  "tier": "tiny",  "note": "CPU-viable, weakest. The floor for an 8 GB card."},
+    {"model": "gemma4*:12b",        "min_vram_gb": 10, "approx_gb": 7.6,  "tier": "small", "note": "Fast and capable enough for most rails."},
+    {"model": "mistral-small3*:24b","min_vram_gb": 18, "approx_gb": 15.2, "tier": "mid",   "default": true, "note": "The default chat model across the platform."},
+    {"model": "qwen3.6*:27b",       "min_vram_gb": 20, "approx_gb": 17.4, "tier": "large", "note": "Strongest reasoning, largest footprint. Used for @reasoning / @code / fraud."}
+  ],
+
+  "vision": [
+    {"model": "moondream:latest",   "min_vram_gb": 4,  "approx_gb": 1.7,  "tier": "tiny",  "estimated": true, "note": "Small multimodal, basic image reading. The only vision option that fits a small card."},
+    {"model": "gemma4*:12b",        "min_vram_gb": 10, "approx_gb": 7.6,  "tier": "small", "note": "gemma4 is multimodal; the 12b reads images acceptably at far less VRAM than the 26b."},
+    {"model": "gemma4*:26b",        "min_vram_gb": 20, "approx_gb": 18.0, "tier": "large", "default": true, "note": "The default vision model; also serves the writer roles, so it loads once."}
+  ],
+
+  "embed": [
+    {"model": "embeddinggemma:latest", "min_vram_gb": 1, "approx_gb": 0.6, "tier": "any", "note": "Smallest. Fits anything, CPU included."},
+    {"model": "qwen3-embedding:0.6b",  "min_vram_gb": 1, "approx_gb": 0.6, "tier": "any", "note": "Tiny alternative."},
+    {"model": "bge-m3*",               "min_vram_gb": 2, "approx_gb": 1.2, "tier": "any", "default": true, "note": "The default embedder; ships regardless of card size."}
+  ],
+
+  "image": [
+    {"model": "sdxl-turbo",   "min_vram_gb": 8,  "approx_gb": 7,  "tier": "mid",   "backend": "hf-media-venv", "estimated": true, "note": "Lighter image path, 4-step. Needs the GPU media venv (torch + diffusers)."},
+    {"model": "flux-schnell", "min_vram_gb": 12, "approx_gb": 13, "tier": "large", "backend": "hf-media-venv", "default": true, "estimated": true, "note": "Default icon/image backend. Needs the GPU media venv; not an Ollama tag."}
+  ]
+}

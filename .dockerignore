@@ -1,0 +1,30 @@
+# Keep the gateway build context small. It only needs platform_core + the gateway
+# backend (Python); never the venv, node_modules, built dists, or git history.
+.git
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/dist
+
+# ai-voice host-native engine runtimes (venvs/models/GPT-SoVITS ~30 GB) live under the
+# rail but are broker-dispatched native, never needed in any image build context.
+rails/ai-voice/native/
+
+# Anything a HOST process writes while an image is being built. A file that grows while the
+# context is being tarred fails the whole build with "archive/tar: write too long" -- an error
+# that names neither the file nor the reason, and only reproduces while the platform is up.
+# The broker and course-builder services run native and log into deploy/logs/ continuously;
+# run-tests.ps1 writes .test-logs/ during a sweep.
+deploy/logs/
+.test-logs/
+# Runtime state (SQLite, uploads). Never needed in an image, and it moves under a live gateway.
+data/
+
+# Box-local, never image content. The media venv is named media-venv rather than .venv, so the
+# **/.venv rule above does not catch it, and it is large; media-assets holds model weights.
+local-patches/
+services/broker/media-venv/
+services/broker/media-assets/

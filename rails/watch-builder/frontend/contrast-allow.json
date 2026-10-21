@@ -1,0 +1,26 @@
+[
+  {
+    "expression": "designColour",
+    "why": "DesignChip (module.tsx), the one component every design-colour swatch goes through: a #RRGGBB the backend validates (design.py _HEX), never a UI or status colour"
+  },
+  {
+    "expression": "design.background",
+    "why": "the canvas screen (Canvas.tsx), painted in the design's own background colour, a #RRGGBB the backend validates"
+  },
+  {
+    "expression": "el.filled === false ? `${Math.max(1, (el.stroke || 1) * zoom)}px solid ${elementColour}` : undefined",
+    "why": "an unfilled rect or circle on the canvas (Canvas.tsx), outlined in the element's own design colour or its server-computed on-watch colour"
+  },
+  {
+    "expression": "el.filled === false ? 'transparent' : elementColour",
+    "why": "a filled rect or circle on the canvas (Canvas.tsx ElementVisual), painted in the element's own design colour or its server-computed on-watch colour; transparent when unfilled, where the outline entry above draws it"
+  },
+  {
+    "expression": "`${Math.max(1, (el.thickness || 6) * zoom)}px solid ${elementColour}`",
+    "why": "the battery ring on the canvas (Canvas.tsx), drawn in the element's own design colour or its server-computed on-watch colour"
+  },
+  {
+    "expression": "elementColour",
+    "why": "the battery bar and the line on the canvas (Canvas.tsx ElementVisual), painted in the element's own design colour or its server-computed on-watch colour; the name is ElementVisual's own local and is used nowhere else in this rail"
+  }
+]

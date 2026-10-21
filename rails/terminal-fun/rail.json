@@ -1,0 +1,33 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "terminal-fun",
+  "label": "Terminal Fun",
+  "description": "A browser terminal into a couple of dozen sandboxed games and toys, with an assistant that can explain what you are looking at and retune the toys while they run.",
+  "icon": "🕹️",
+  "package": "terminal_fun_app",
+  "federation_name": "terminal_fun",
+  "css_wrapper": "ft",
+  "layout": "backend",
+  "env_prefix": "TERMINAL_FUN_",
+  "ports": {
+    "backend": 8730,
+    "dev": 5290
+  },
+  "status_route": "/api/capabilities",
+  "model_slots": [
+    {
+      "slot": "assistant",
+      "label": "Terminal assistant",
+      "env": "TERMINAL_FUN_LLM_MODEL",
+      "role": "terminal-fun",
+      "kind": "chat",
+      "admin_panel": true
+    }
+  ],
+  "notes": [
+    "Moved off dev port 5240 to 5290 — it collided with bouquet and recipe-book.",
+    "Sandboxed by design: PTY sessions run inside this rail's own container with no host access. The high-privilege host terminal is the separate workstation rail; do not blur the two.",
+    "Ships its CSS as a template literal inside module.tsx scoped to .ft, so the theming rules are checked against that string.",
+    "Carries a 'web toy' tile type: a static HTML/canvas toy served from /api/webtoys/<id>/ and rendered in a sandboxed iframe. allow-same-origin is load-bearing there — an opaque-origin frame withholds the session cookie and the toy's own gateway-gated assets 401."
+  ]
+}

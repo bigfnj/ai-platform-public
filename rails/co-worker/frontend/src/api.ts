@@ -1,0 +1,60 @@
+// Same-origin API helpers. In production the shell serves this remote under /co-worker/
+// and the gateway proxies /co-worker/api/*. In standalone dev, vite proxies the same path
+// to the backend on :8890 (see vite.config.ts).
+const BASE = '/co-worker'
+
+export async function getJSON<T>(path: string): Promise<T> {
+  const r = await fetch(BASE + path)
+  if (!r.ok) throw new Error(`${path} -> ${r.status}`)
+  return r.json()
+}
+
+/** A non-2xx answer. `status` lets a caller tell a 409 (a run already in flight, worth
+ *  waiting on) from a failure, without parsing the message. */
+export class HttpError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
+export async function postJSON<T>(path: string, body?: unknown): Promise<T> {
+  const r = await fetch(BASE + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!r.ok) {
+    let detail = `${path} -> ${r.status}`
+    try {
+      const j = await r.json()
+      if (j?.detail) detail = String(j.detail)
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new HttpError(detail, r.status)
+  }
+  return r.json()
+}
+
+export async function patchJSON<T>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(BASE + path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) {
+    // The inbox is a Windows bind mount; a read-only mount surfaces here as a 503 with
+    // a useful detail. Pass it through rather than swallowing it.
+    let detail = `${path} -> ${r.status}`
+    try {
+      const j = await r.json()
+      if (j?.detail) detail = String(j.detail)
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail)
+  }
+  return r.json()
+}

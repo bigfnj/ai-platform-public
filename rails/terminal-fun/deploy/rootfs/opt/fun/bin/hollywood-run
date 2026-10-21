@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs hollywood on a private tmux socket so its detached server is reaped when the
+# session ends (otherwise a cmatrix-in-tmux keeps burning CPU after disconnect).
+export TMUX_TMPDIR="$(mktemp -d)"
+cleanup() { tmux kill-server 2>/dev/null; rm -rf "$TMUX_TMPDIR" 2>/dev/null; }
+trap cleanup EXIT INT TERM
+hollywood

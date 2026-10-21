@@ -1,0 +1,15 @@
+#!/bin/sh
+# BOFH excuse server — the towel.blinkenlights :666 classic, self-hosted.
+F=/opt/fun/share/bofh-excuses.txt
+while :; do
+  clear 2>/dev/null || true
+  echo
+  echo "   B O F H   S Y S T E M   D I A G N O S T I C"
+  echo "   ==========================================="
+  echo
+  echo "   Reason for the outage:"
+  echo
+  shuf -n1 "$F" | fold -s -w 56 | sed 's/^/     /'
+  echo
+  sleep 4
+done

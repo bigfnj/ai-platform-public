@@ -1,0 +1,7 @@
+[
+  {
+    "file": "src/Canvas.tsx",
+    "line": "color: elementColour,",
+    "why": "a text element's sample on the canvas (Canvas.tsx ElementVisual), in the element's own design colour or its server-computed on-watch colour: a #RRGGBB the backend validates (design.py _HEX, layout.py correct_hex), user data rather than a UI or status colour, so no --*-text token applies"
+  }
+]

@@ -1,0 +1,3 @@
+# Build output and screenshots: regenerate with shoot.ps1, never commit them.
+dist/
+shots/

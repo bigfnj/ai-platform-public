@@ -1,0 +1,19 @@
+# Caddy front door for a local lean install: serves the gateway at http://localhost:1111,
+# http://127.0.0.1:1111 and http://platform.localhost:1111, plain HTTP only. Every site below is an
+# http:// address and the
+# installer compose publishes only the container's port 80, as host port 1111
+# (docker-compose.installer.yml, the caddy `ports`), so nothing here terminates TLS. `local_certs`
+# does nothing while no site is https://; with it, an added https:// site would get a certificate
+# from Caddy's internal CA. No public domain / Cloudflare here: that is the full-stack setup.
+{
+	local_certs
+}
+
+# http://127.0.0.1 as well: Caddy picks a site by the request's Host, so http://127.0.0.1:1111
+# matched none and got an empty 200, a blank page with no error anywhere. A loopback literal is a
+# secure context like localhost, and the gateway's same-origin WebSocket check compares against the
+# Host it was reached on, so it is served the same way.
+http://platform.localhost, http://localhost, http://127.0.0.1 {
+	encode zstd gzip
+	reverse_proxy gateway:8700
+}

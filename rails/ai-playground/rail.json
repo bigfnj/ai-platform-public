@@ -1,0 +1,57 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "ai-playground",
+  "label": "AI Playground",
+  "description": "A showcase of what the platform's AI plumbing can actually do: ask questions of a document set and get answers with citations, or benchmark embedding models head-to-head — GPU against CPU — to see which one retrieves better on your own corpus.",
+  "icon": "🛝",
+  "package": "ai_playground",
+  "federation_name": "ai_playground",
+  "css_wrapper": "ai-playground",
+  "layout": "src",
+  "env_prefix": "AI_PLAYGROUND_",
+  "ports": {
+    "backend": 8850,
+    "dev": 5250
+  },
+  "status_route": "/api/capabilities",
+  "unslotted_models": [
+    {
+      "env": "AI_PLAYGROUND_NVIDIA_CHAT_MODEL",
+      "why": "A third-party NVIDIA NIM cloud model id (meta/llama-3.2-11b-vision-instruct). The broker resolves Ollama tags and nothing else, so no @role can name it; tools/tests/test_nim_model_consistency.py keeps the id in step with compose, the installer compose and .env.example."
+    }
+  ],
+  "model_slots": [
+    {
+      "slot": "generation",
+      "label": "RAG generation",
+      "env": "AI_PLAYGROUND_CHAT_MODEL",
+      "role": "ai-playground",
+      "kind": "chat",
+      "admin_panel": true
+    },
+    {
+      "slot": "embed",
+      "label": "Retrieval embedder",
+      "env": "AI_PLAYGROUND_EMBED_MODEL",
+      "role": "embed",
+      "kind": "embed",
+      "admin_panel": false,
+      "note": "Embedders are out of the admin panel's scope (it surfaces chat/vision/image only), so this correctly has no RAIL_MODEL_SLOTS counterpart."
+    },
+    {
+      "slot": "describe",
+      "label": "Model notes",
+      "env": "AI_PLAYGROUND_DESCRIBE_MODEL",
+      "role": "chat",
+      "kind": "chat",
+      "admin_panel": false,
+      "note": "Drafts the one-line 'about' text when an admin adds a model to the Embedding Lab (POST /api/bench/models/describe). A runtime call despite living under bench/. Out of the admin panel on purpose: @chat is a CLASS role other callers share (another rail's local condensing tier among them), so repointing it from this rail's row would move every one of them."
+    }
+  ],
+  "notes": [
+    "The shell overrides this rail's emoji with a real inline SVG via iconOverrides; the emoji here stays the catalog fallback and is what RC003 compares.",
+    "Two demos: RAG-over-documents (cited, token-streamed, local⇄NVIDIA-NIM toggle) and the Embedding Lab, which benchmarks embedders across broker/GPU and CPU int8-ONNX on one footing.",
+    "Retrieval stays local even when the NIM toggle sends generation to the NVIDIA cloud — that split is deliberate and should not be 'simplified'.",
+    "Torch-free rail; the Embedding Lab's onnx assets live on the ai_playground_data volume and are fetched at runtime, not baked into the image."
+  ]
+}

@@ -1,0 +1,212 @@
+{
+  "_provenance": "Each case is a deploy/.env text, a key, and the value compose gives that key (null = unset). Measured 2026-10-08 with Docker Compose v5.5.1: the text as --env-file, the key interpolated as ${KEY-<unset>}, read from `docker compose config --format json`, with the `$$` that output uses for a literal `$` undone. The expansion case reading the process environment ran with A55_FROM_OS=fromos. Every reader of deploy/.env should give these answers: tools/deploy_snapshot.read_env (and rail_smoke.declared through it) is held to them by tools/tests/test_dotenv_reader.py; a PowerShell reader can load this file with ConvertFrom-Json for the same parity.",
+  "environ": {
+    "A55_FROM_OS": "fromos"
+  },
+  "cases": [
+    {
+      "name": "plain",
+      "env": "K=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "inline comment after spaces",
+      "env": "K=servicenow  # a trailing comment\n",
+      "key": "K",
+      "value": "servicenow"
+    },
+    {
+      "name": "hash with no space before it",
+      "env": "K=v#notacomment\n",
+      "key": "K",
+      "value": "v#notacomment"
+    },
+    {
+      "name": "double-quoted keeps a hash",
+      "env": "K=\"v # kept\"\n",
+      "key": "K",
+      "value": "v # kept"
+    },
+    {
+      "name": "single-quoted keeps a hash",
+      "env": "K='v # kept'\n",
+      "key": "K",
+      "value": "v # kept"
+    },
+    {
+      "name": "double-quoted then a comment",
+      "env": "K=\"a b\"  # c\n",
+      "key": "K",
+      "value": "a b"
+    },
+    {
+      "name": "empty value",
+      "env": "K=\n",
+      "key": "K",
+      "value": ""
+    },
+    {
+      "name": "last line wins",
+      "env": "K=first\nK=second\n",
+      "key": "K",
+      "value": "second"
+    },
+    {
+      "name": "export prefix",
+      "env": "export K=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "spaces around the equals",
+      "env": "K = v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "commented-out line",
+      "env": "# K=commented\nK=real\n",
+      "key": "K",
+      "value": "real"
+    },
+    {
+      "name": "trailing whitespace",
+      "env": "K=v   \n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "inner spaces unquoted",
+      "env": "K=a b\n",
+      "key": "K",
+      "value": "a b"
+    },
+    {
+      "name": "crlf line ending",
+      "env": "K=v\r\nL=w\r\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "utf-8 value",
+      "env": "K=café€\n",
+      "key": "K",
+      "value": "café€"
+    },
+    {
+      "name": "double-quoted backslash-n",
+      "env": "K=\"a\\nb\"\n",
+      "key": "K",
+      "value": "a\nb"
+    },
+    {
+      "name": "single-quoted backslash-n",
+      "env": "K='a\\nb'\n",
+      "key": "K",
+      "value": "a\\nb"
+    },
+    {
+      "name": "expansion of an earlier key",
+      "env": "A=x\nK=${A}y\n",
+      "key": "K",
+      "value": "xy"
+    },
+    {
+      "name": "quoted value with an equals",
+      "env": "K=\"a=b\"\n",
+      "key": "K",
+      "value": "a=b"
+    },
+    {
+      "name": "comma list",
+      "env": "K=servicenow,openmaic\n",
+      "key": "K",
+      "value": "servicenow,openmaic"
+    },
+    {
+      "name": "a key that is absent",
+      "env": "OTHER=v\n",
+      "key": "K",
+      "value": null
+    },
+    {
+      "name": "a key only commented out",
+      "env": "# K=v\n",
+      "key": "K",
+      "value": null
+    },
+    {
+      "name": "double-quoted backslash-t",
+      "env": "K=\"a\\tb\"\n",
+      "key": "K",
+      "value": "a\tb"
+    },
+    {
+      "name": "double-quoted escaped backslash",
+      "env": "K=\"a\\\\b\"\n",
+      "key": "K",
+      "value": "a\\b"
+    },
+    {
+      "name": "double-quoted escaped quote",
+      "env": "K=\"say \\\"hi\\\"\"\n",
+      "key": "K",
+      "value": "say \"hi\""
+    },
+    {
+      "name": "expansion without braces",
+      "env": "A=x\nK=$A-y\n",
+      "key": "K",
+      "value": "x-y"
+    },
+    {
+      "name": "no expansion in single quotes",
+      "env": "A=x\nK='${A}y'\n",
+      "key": "K",
+      "value": "${A}y"
+    },
+    {
+      "name": "expansion in double quotes",
+      "env": "A=x\nK=\"${A} y\"\n",
+      "key": "K",
+      "value": "x y"
+    },
+    {
+      "name": "expansion of an undefined key",
+      "env": "K=a${NOPE_A5_5}b\n",
+      "key": "K",
+      "value": "ab"
+    },
+    {
+      "name": "expansion from the process environment",
+      "env": "K=${A55_FROM_OS}z\n",
+      "key": "K",
+      "value": "fromosz"
+    },
+    {
+      "name": "expansion of a LATER key",
+      "env": "K=${B}y\nB=x\n",
+      "key": "K",
+      "value": "y"
+    },
+    {
+      "name": "unquoted backslash-n stays literal",
+      "env": "K=a\\nb\n",
+      "key": "K",
+      "value": "a\\nb"
+    },
+    {
+      "name": "indented key",
+      "env": "  K=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "tab-indented key",
+      "env": "\tK=v\n",
+      "key": "K",
+      "value": "v"
+    }
+  ]
+}

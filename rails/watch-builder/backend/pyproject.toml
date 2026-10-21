@@ -1,0 +1,26 @@
+[project]
+name = "watch-builder"
+version = "0.1.0"
+description = "Watch Builder — a platform rail that designs, compiles and verifies Pebble watchfaces."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    # Screenshot post-processing: the sunlight correction and the contact sheet both walk
+    # pixels. Pillow is already in the platform's wheel cache for several rails.
+    "pillow>=10.3",
+    # FastAPI needs this for UploadFile / multipart form parsing. It is NOT a fastapi
+    # dependency, so without it the image upload route raises at import with a message about
+    # python-multipart rather than anything about images.
+    "python-multipart>=0.0.9",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["watch_builder*"]

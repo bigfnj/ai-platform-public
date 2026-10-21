@@ -1,0 +1,19 @@
+#!/bin/sh
+# A little rotating ASCII-banner show.
+banner() {
+  if command -v toilet >/dev/null 2>&1; then
+    toilet -f "$2" -F "$3" "$1" 2>/dev/null && return 0
+  fi
+  figlet "$1" 2>/dev/null || echo "$1"
+}
+while :; do
+  clear 2>/dev/null || true
+  banner "Fun in the Term" mono12 metal
+  sleep 3
+  clear 2>/dev/null || true
+  banner "$(date '+%H:%M:%S')" term gay
+  sleep 2
+  clear 2>/dev/null || true
+  banner "Game On" mono12 border
+  sleep 3
+done

@@ -1,0 +1,25 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "workstation",
+  "label": "Workstation",
+  "description": "A browser terminal into this machine over SSH, plus launchers that open a desktop application from the host as a single seamless window on whatever device you are using.",
+  "icon": "💻",
+  "package": "workstation_app",
+  "federation_name": "workstation",
+  "css_wrapper": "wt",
+  "layout": "backend",
+  "env_prefix": "WORKSTATION_",
+  "ports": {
+    "backend": 8720,
+    "dev": 5270
+  },
+  "status_route": null,
+  "model_slots": [],
+  "notes": [
+    "No model slots, correctly: this rail is an SSH terminal into the host and does no model work at all. It is the one rail with genuinely nothing to say about the GPU, which is why status_route is null and the broker-token rule does not apply to it.",
+    "Moved off dev port 5230 to 5270 — it collided with finance, which kept 5230.",
+    "The highest-privilege rail on the platform: a real shell on the host as Admin. Entitlement-gated even for admins; only the seed owner is all-access. See README.md and HARDENING.md.",
+    "The backend is an SSH CLIENT — the only listening SSH port is the host's, reached from the Docker network. It also serves RemoteApp .rdp launchers (GET /api/remoteapp/<id>.rdp) so a host desktop app opens as one seamless window in the user's own RDP client; the backend never speaks RDP itself.",
+    "Subclasses platform_core.PlatformSettings but overrides the env prefix to WORKSTATION_, so it inherits broker_url and never uses it."
+  ]
+}

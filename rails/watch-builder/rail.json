@@ -1,0 +1,37 @@
+{
+  "$schema": "../../docs/rail-manifest.schema.json",
+  "id": "watch-builder",
+  "label": "Watch Builder",
+  "description": "Design a Pebble smartwatch watchface in the browser, then compile and verify it here: one build produces native binaries for all seven Pebble platforms, screenshotted on real emulators so you can see the design before it reaches a wrist.",
+  "icon": "⌚",
+  "package": "watch_builder",
+  "federation_name": "watch_builder",
+  "css_wrapper": "watch-builder",
+  "layout": "backend",
+  "env_prefix": "WATCH_BUILDER_",
+  "ports": {
+    "backend": 8920,
+    "dev": 5370
+  },
+  "status_route": "/api/capabilities",
+  "max_request_bytes": 12648448,
+  "model_slots": [
+    {
+      "slot": "designer",
+      "label": "Designer",
+      "env": "WATCH_BUILDER_DESIGNER_MODEL",
+      "role": "watch-builder-designer",
+      "kind": "chat",
+      "admin_panel": true
+    }
+  ],
+  "notes": [
+    "One chat slot, not three. Both AI features (describe-a-face, and the variation explorer) are the same operation: emit a design document against this rail's JSON schema. A vision slot for screenshot critique and an image slot for generated backgrounds were both designed and deliberately deferred, because neither had a caller yet and a declared slot with no caller is a chip that reports on a model nothing uses.",
+    "The model NEVER emits C. It emits a design document, which is schema-validated and then compiled by the rail's own deterministic code generator. That boundary is the whole safety argument: a hallucinated field fails validation, and a valid document cannot produce uncompilable C. Do not 'improve' this by letting the model write source.",
+    "This rail's image carries the Pebble SDK (~2 GB: ARM toolchain, seven platform SDKs, QEMU). That is why its Dockerfile is the largest in the tree. The alternative considered was mounting the host Docker socket to drive a sibling SDK image, which was rejected: a rail that can drive the host's Docker is a privilege-escalation path, and one that needs the host's daemon is no longer an independent deployable (the rule docs/RAIL_CONTRACT.md opens with).",
+    "The Pebble SDK has no Windows build, so standalone dev on the Windows host cannot compile. The backend detects a missing toolchain and reports build_available=false in /api/capabilities rather than failing every build with a stack trace. Design, validate and preview all work without it.",
+    "A render asks the SDK for two screenshots per platform (sdk.render), and POST /api/build with render=true returns both; there is no separate render route. `on_watch` is `pebble screenshot`'s default, which already applies the SDK's sunlight correction: Pebble's colour screens are reflective and desaturate hard, and a #FF0000 fill screenshots as #E35462. `raw` is `--no-correction`, the literal framebuffer, and is best-effort. Judge colour on `on_watch`, which the Preview tab shows by default; `raw` shows the palette values the design specified, which no wrist shows. Nothing corrects a screenshot a second time: this rail first shipped a correction table run over the screenshot, which applied the correction twice.",
+    "WATCH_BUILDER_SDK_ROOT and WATCH_BUILDER_BUILD_TIMEOUT exist because a seven-platform build is ~4 s warm but the first build in a cold container pays for an SDK unpack. The timeout guards the pathological case, not the normal one.",
+    "max_request_bytes is 12 MiB + 64 KiB, the rail's own BodyLimit on POST /api/images (images.MAX_UPLOAD_BYTES + MULTIPART_SLACK), so the gateway (RC035) stops an oversized image before relaying any of it. Every other route takes a small JSON document."
+  ]
+}

@@ -1,0 +1,320 @@
+{
+  "_provenance": "More compose dotenv cases, beside dotenv_compose_cases.json and in the same shape (plus \"error\": true for a file compose refuses to load). Measured 2026-10-08 with Docker Compose v5.5.1: the text as --env-file, the key interpolated as ${K-<unset>}, read from `docker compose config --format json` with its `$$` for a literal `$` undone, the process environment holding only `environ`. The PowerShell reader (lib-runtime.ps1 Read-DotEnvFile) is held to both files by tools/tests/test_dotenv_ps_reader.py.",
+  "environ": {
+    "A55_FROM_OS": "fromos"
+  },
+  "cases": [
+    {
+      "name": "a tab before the hash is not a comment",
+      "env": "K=servicenow\t# note\n",
+      "key": "K",
+      "value": "servicenow\t# note"
+    },
+    {
+      "name": "space then tab before the hash is not a comment",
+      "env": "K=a \t# c\n",
+      "key": "K",
+      "value": "a \t# c"
+    },
+    {
+      "name": "a value that starts with a hash",
+      "env": "K=#c\n",
+      "key": "K",
+      "value": "#c"
+    },
+    {
+      "name": "a hash right after the equals and a space",
+      "env": "K= # c\n",
+      "key": "K",
+      "value": "# c"
+    },
+    {
+      "name": "two comments: the first one cuts",
+      "env": "K=a # b # c\n",
+      "key": "K",
+      "value": "a"
+    },
+    {
+      "name": "single-quoted then a hash with no space",
+      "env": "K='a'#c\n",
+      "key": "K",
+      "value": "a"
+    },
+    {
+      "name": "text after a closing double quote is dropped",
+      "env": "K=\"a\"b\n",
+      "key": "K",
+      "value": "a"
+    },
+    {
+      "name": "a BOM before the first key",
+      "env": "\ufeffK=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "no newline at the end of the file",
+      "env": "K=v",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "tabs around the equals",
+      "env": "K\t=\tv\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "a tab before the key",
+      "env": "\tK=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "export, then a later plain line wins",
+      "env": "K=one\nexport K=two\n",
+      "key": "K",
+      "value": "two"
+    },
+    {
+      "name": "a line with no equals is skipped",
+      "env": "JUNK\nK=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "a bare key with no equals is not an assignment",
+      "env": "K\n",
+      "key": "K",
+      "value": null
+    },
+    {
+      "name": "a dotted key beside it does not break the file",
+      "env": "K.X=1\nK=v\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "keys are case-sensitive",
+      "env": "k=v\nK=V\n",
+      "key": "K",
+      "value": "V"
+    },
+    {
+      "name": "crlf with a value on the last line",
+      "env": "A=1\r\nK=v\r\nB=2\r\n",
+      "key": "K",
+      "value": "v"
+    },
+    {
+      "name": "a JSON array",
+      "env": "K=[\"a\",\"b\"]\n",
+      "key": "K",
+      "value": "[\"a\",\"b\"]"
+    },
+    {
+      "name": "quotes in the middle of an unquoted value",
+      "env": "K=a\"b\"c\n",
+      "key": "K",
+      "value": "a\"b\"c"
+    },
+    {
+      "name": "an apostrophe in an unquoted value",
+      "env": "K=it's\n",
+      "key": "K",
+      "value": "it's"
+    },
+    {
+      "name": "an unquoted Windows path",
+      "env": "K=C:\\Users\\x\n",
+      "key": "K",
+      "value": "C:\\Users\\x"
+    },
+    {
+      "name": "a double-quoted Windows path keeps unknown escapes",
+      "env": "K=\"C:\\Users\\x\"\n",
+      "key": "K",
+      "value": "C:\\Users\\x"
+    },
+    {
+      "name": "an equals inside an unquoted value",
+      "env": "K=a=b\n",
+      "key": "K",
+      "value": "a=b"
+    },
+    {
+      "name": "non-ASCII in a Windows path",
+      "env": "K=C:\\Users\\Zo\u00eb\\donn\u00e9es \u20ac\n",
+      "key": "K",
+      "value": "C:\\Users\\Zo\u00eb\\donn\u00e9es \u20ac"
+    },
+    {
+      "name": "double-quoted backslash-r",
+      "env": "K=\"a\\rb\"\n",
+      "key": "K",
+      "value": "a\rb"
+    },
+    {
+      "name": "double-quoted backslash-a, -b, -f, -v",
+      "env": "K=\"\\a\\b\\f\\v\"\n",
+      "key": "K",
+      "value": "\u0007\b\f\u000b"
+    },
+    {
+      "name": "double-quoted unknown escape is kept",
+      "env": "K=\"a\\qb\"\n",
+      "key": "K",
+      "value": "a\\qb"
+    },
+    {
+      "name": "double-quoted backslash-apostrophe is kept",
+      "env": "K=\"a\\'b\"\n",
+      "key": "K",
+      "value": "a\\'b"
+    },
+    {
+      "name": "double-quoted trailing escaped backslash",
+      "env": "K=\"a\\\\\"\n",
+      "key": "K",
+      "value": "a\\"
+    },
+    {
+      "name": "double-quoted backslash-dollar is a literal dollar",
+      "env": "K=\"a\\$b\"\n",
+      "key": "K",
+      "value": "a$b"
+    },
+    {
+      "name": "double-quoted across lines",
+      "env": "K=\"line1\nline2\"\nB=2\n",
+      "key": "K",
+      "value": "line1\nline2"
+    },
+    {
+      "name": "single-quoted across lines",
+      "env": "K='line1\nline2'\nB=2\n",
+      "key": "K",
+      "value": "line1\nline2"
+    },
+    {
+      "name": "double-quoted across a crlf line keeps the crlf",
+      "env": "K=\"line1\r\nline2\"\r\nB=2\r\n",
+      "key": "K",
+      "value": "line1\r\nline2"
+    },
+    {
+      "name": "dollar-dollar is one dollar",
+      "env": "K=abc$$def\n",
+      "key": "K",
+      "value": "abc$def"
+    },
+    {
+      "name": "an unquoted password with a dollar loses the tail",
+      "env": "K=pa$sword\n",
+      "key": "K",
+      "value": "pa"
+    },
+    {
+      "name": "a dollar at the end stays",
+      "env": "K=abc$\n",
+      "key": "K",
+      "value": "abc$"
+    },
+    {
+      "name": "a dollar before a digit stays",
+      "env": "K=a$1b\n",
+      "key": "K",
+      "value": "a$1b"
+    },
+    {
+      "name": "single quotes keep dollar-dollar",
+      "env": "K='a$$b'\n",
+      "key": "K",
+      "value": "a$$b"
+    },
+    {
+      "name": "the process environment beats an earlier key",
+      "env": "A55_FROM_OS=fromfile\nK=a$A55_FROM_OS\n",
+      "key": "K",
+      "value": "afromos"
+    },
+    {
+      "name": "a key can read its own earlier value",
+      "env": "K=a\nK=${K}b\n",
+      "key": "K",
+      "value": "ab"
+    },
+    {
+      "name": "colon-dash default when unset",
+      "env": "K=a${A55_UNSET:-def}b\n",
+      "key": "K",
+      "value": "adefb"
+    },
+    {
+      "name": "colon-dash default when empty",
+      "env": "A55_E=\nK=a${A55_E:-def}b\n",
+      "key": "K",
+      "value": "adefb"
+    },
+    {
+      "name": "dash default only when unset",
+      "env": "A55_E=\nK=a${A55_E-def}b\n",
+      "key": "K",
+      "value": "ab"
+    },
+    {
+      "name": "colon-plus when set",
+      "env": "A55_S=1\nK=a${A55_S:+alt}b\n",
+      "key": "K",
+      "value": "aaltb"
+    },
+    {
+      "name": "colon-plus when unset",
+      "env": "K=a${A55_UNSET:+alt}b\n",
+      "key": "K",
+      "value": "ab"
+    },
+    {
+      "name": "question mark when set",
+      "env": "A55_S=1\nK=a${A55_S?boom}b\n",
+      "key": "K",
+      "value": "a1b"
+    },
+    {
+      "name": "a nested default",
+      "env": "A55_S=in\nK=${A55_UNSET:-${A55_S}}\n",
+      "key": "K",
+      "value": "in"
+    },
+    {
+      "name": "an unterminated double quote",
+      "env": "K=\"abc\n",
+      "key": "K",
+      "error": true
+    },
+    {
+      "name": "an unterminated single quote",
+      "env": "K='abc\n",
+      "key": "K",
+      "error": true
+    },
+    {
+      "name": "an unclosed brace",
+      "env": "K=a${A55_UNSET\n",
+      "key": "K",
+      "error": true
+    },
+    {
+      "name": "an empty brace",
+      "env": "K=a${}b\n",
+      "key": "K",
+      "error": true
+    },
+    {
+      "name": "question mark when unset",
+      "env": "K=a${A55_UNSET?boom}b\n",
+      "key": "K",
+      "error": true
+    }
+  ]
+}

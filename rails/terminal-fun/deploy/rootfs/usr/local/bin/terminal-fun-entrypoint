@@ -1,0 +1,57 @@
+#!/bin/sh
+# PID 1 for the terminal-fun container. Its only job is to decide which uid the backend runs
+# as — and to guarantee it is never root.
+#
+# The image has to boot under BOTH compose topologies, because the uid split is switched on in
+# deploy/docker-compose.yml and an image that only starts under the new one takes the rail down
+# the moment it is pulled ahead of the compose change.
+#
+#   A. Container starts NON-ROOT — today's compose: no `user:` key, so the image's own
+#      `USER funuser` applies. Nothing to drop, nothing to grant. The backend runs as funuser
+#      and, holding no CAP_SETUID, spawns games under its own uid: exactly the behaviour this
+#      rail shipped with. pty_session.split_uid_active() detects this and does not wrap.
+#
+#   B. Container starts as ROOT with the two drop-privilege capabilities granted:
+#          user: "0:0"
+#          cap_drop: [ALL]          # stays
+#          cap_add:  [SETUID, SETGID]
+#          security_opt: ["no-new-privileges:true"]   # stays
+#      We drop to funuser here and keep those two caps AMBIENT, which is the only way the
+#      backend can later put a game on gameuser. It has to happen here rather than via the
+#      image's USER because Docker never populates the ambient set, so capabilities granted to
+#      a container whose USER is non-root simply do not reach the process.
+#
+# no-new-privileges does not interfere: it blocks privilege GAIN through execve (setuid bits,
+# file capabilities). setpriv changes uid with setresuid(2), a capability check, not an exec.
+#
+# Root must never reach uvicorn. If we are uid 0 and cannot drop, that is a misconfiguration —
+# say which one, and exit rather than "helpfully" serving the rail as root.
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    exec "$@"
+fi
+
+DROP="--reuid=funuser --regid=funuser --init-groups
+      --inh-caps=+setuid,+setgid --ambient-caps=+setuid,+setgid"
+
+# Probe before committing: `setpriv ... true` costs one fork at boot and turns an opaque
+# "container exited 1" into the message below.
+# shellcheck disable=SC2086
+if setpriv $DROP true 2>/dev/null; then
+    # shellcheck disable=SC2086
+    exec setpriv $DROP -- "$@"
+fi
+
+cat >&2 <<'MSG'
+terminal-fun: started as uid 0 but cannot drop privileges — CAP_SETUID/CAP_SETGID are not
+granted, so setpriv(1) fails. Refusing to run the backend as root.
+
+Fix the compose service one of two ways:
+  * remove `user: "0:0"`  -> the image's own USER funuser applies and games run as the
+    backend's uid (the pre-split behaviour: correct, just not hardened); or
+  * keep it and add, alongside the existing `cap_drop: [ALL]`:
+        cap_add: [SETUID, SETGID]
+    -> the backend runs as funuser and games run as gameuser, which is the point.
+MSG
+exit 1

@@ -1,0 +1,16 @@
+{
+  "_comment": "The pytest targets' test directories, PYTHONPATH and pytest arguments, kept as DATA so that run-tests.ps1 and the public CI driver (.github/scripts/run_public_suite.py, which cannot run the script) read one table instead of each restating it. The driver restated it by hand until 2026-10-19 and had drifted: every rail got its source root alone, and edu-suite its rail directory. Paths are repo-relative with forward slashes; run-tests.ps1 turns them into Windows paths. tools/tests/test_public_suite_plan.py holds the two readers to each other through `run-tests.ps1 -List -Json`. The reason for each entry is written beside its reader in run-tests.ps1.",
+  "core": {
+    "paths": ["services/broker/tests", "apps/platform/backend/tests", "packages/platform_core/tests",
+              "tools/tests", "packages/edu-media-core/tests"],
+    "pythonpath": ["services/broker", "apps/platform/backend", "packages/platform_core",
+                   "packages/edu-media-core/src"],
+    "pytest_args": ["-o", "asyncio_mode=auto"]
+  },
+  "rail": {
+    "_comment": "Every rails/<id> with a `tests` directory holding a test_*.py is a target, PYTHONPATH = the rail's source root, then `shared`. The source root is source_root_of[<id>] under the rail when the rail has an entry there, else the first of source_roots that exists under the rail, else the rail directory itself.",
+    "source_roots": ["src", "backend"],
+    "source_root_of": {"edu-suite": "apps/dashboard/src"},
+    "shared": ["packages/platform_core", "packages/edu-media-core/src"]
+  }
+}

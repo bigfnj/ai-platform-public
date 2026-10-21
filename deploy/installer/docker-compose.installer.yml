@@ -1,0 +1,439 @@
+# Lean installer stack: the bundled gateway (frontends baked in) + the two installable rail
+# backends + caddy. No dist bind-mounts (the gateway image carries them), no host Node.
+# recipe-book is behind a profile so it only comes up when the chooser selected it.
+#
+# The installer runs this from deploy/ with an explicit env file, e.g.:
+#   docker compose --env-file .env -f installer/docker-compose.installer.yml [--profile recipe-book] up -d --build
+#
+# Build contexts are relative to THIS file (deploy/installer/), so ../.. is the repo root.
+name: platform
+
+services:
+  terminal-fun:                  # local terminal games/toys + a broker-backed AI assistant
+    build:
+      context: ../../rails/terminal-fun
+      dockerfile: deploy/Dockerfile
+    image: terminal-fun-backend:latest
+    environment:
+      TERMINAL_FUN_BROKER_URL: http://host.docker.internal:11500
+      # One platform-wide shared secret, passed under the canonical UNPREFIXED name every
+      # rail reads. The installer writes it into deploy/.env and the broker requires it.
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      TERMINAL_FUN_LLM_MODEL: ${TERMINAL_FUN_LLM_MODEL:-@terminal-fun}
+      TERMINAL_FUN_DATA_DIR: /data   # per-user game saves (NetHack + Crawl), the volume below
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    # Its own network, shared with the gateway only, exactly as on the full stack (see the note
+    # there): a player's shell in here must not be able to reach any other rail and assert an
+    # identity to it. Broker and internet egress are unaffected (an ordinary bridge).
+    networks:
+      - terminal_fun_net
+    # The uid split, as on the full stack (see the note there): PID 1 starts as root ONLY so the
+    # entrypoint can setpriv the backend down to funuser and each game to gameuser. Without it
+    # the games run on uvicorn's own uid, and an escaped game shell reads /proc/1/environ, where
+    # BROKER_AUTH_TOKEN now always is on a lean box. The entrypoint refuses to run the backend as
+    # root, so if the drop fails it EXITS saying so (the fix it names: remove `user:`), it never
+    # serves as root. SETUID/SETGID are the two drop-privilege capabilities, nothing more.
+    user: "0:0"
+    tmpfs:
+      - /tmp:size=256m   # session homes and a game shell's writes: sized as on the full stack (its note)
+    volumes:
+      # Per-user saves (NetHack + Crawl) and the player-name registry. This was the one lean rail
+      # with no volume, so they lived in the container layer and the documented repair path
+      # (install.ps1's `up -d --build`) erased every save with no message; the image assumes a
+      # named volume here. A fresh volume takes the image's /data mode (0700 funuser).
+      - terminal_fun_data:/data
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    expose:
+      - "8730"
+    restart: always
+
+  recipe-book:                   # recipe + cocktail book (opt-in; ships with seed + baked icons)
+    profiles: ["recipe-book"]
+    build:
+      context: ../../rails/recipe-book
+      dockerfile: deploy/Dockerfile
+    image: recipe-book-backend:latest
+    environment:
+      RECIPE_BOOK_DATA_DIR: /srv/var
+      RECIPE_BOOK_BROKER_URL: http://host.docker.internal:11500
+      # Client ceiling ABOVE the broker's own media_timeout (1200 s), as on the full stack: a
+      # client that gives up first leaves the worker running and its retry queued behind it.
+      # Unset, the rail's own default was 600 s here.
+      RECIPE_BOOK_BROKER_TIMEOUT: ${RECIPE_BOOK_BROKER_TIMEOUT:-1320}
+      # See the note on terminal-fun: canonical unprefixed name, inert while unset.
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      # @role, not a pinned model name: a concrete pin here silently overrides whatever
+      # Admin → Rails is set to, so the panel appears to do nothing. Every lean role resolves
+      # to the same model via roles.lean.json, so this is behaviour-preserving.
+      RECIPE_BOOK_ASSISTANT_MODEL: ${RECIPE_BOOK_ASSISTANT_MODEL:-@recipe}
+      RECIPE_BOOK_VISION_MODEL: ${RECIPE_BOOK_VISION_MODEL:-@recipe-vision}
+      RECIPE_BOOK_EMBED_MODEL: ${RECIPE_BOOK_EMBED_MODEL:-@embed}
+      # The icon IMAGE role, the rail's own default. Nothing calls it on a lean box (no media
+      # pipeline, icons pre-rendered into the seed); passed so a deploy/.env line reaches it.
+      RECIPE_BOOK_ICON_MODEL: ${RECIPE_BOOK_ICON_MODEL:-@recipe-icon}
+      RECIPE_BOOK_PRIMARY_USER: ${PLATFORM_ADMIN_USER:-admin}
+      # "Send to Phone" (Google Tasks) and the key that encrypts its stored tokens, as on the full
+      # stack: blank = feature off / tokens in plaintext. Set in deploy/.env, never here.
+      RECIPE_BOOK_GTASKS_CLIENT_ID: ${RECIPE_BOOK_GTASKS_CLIENT_ID:-}
+      RECIPE_BOOK_GTASKS_CLIENT_SECRET: ${RECIPE_BOOK_GTASKS_CLIENT_SECRET:-}
+      RECIPE_BOOK_GTASKS_REDIRECT_URI: ${RECIPE_BOOK_GTASKS_REDIRECT_URI:-}
+      RECIPE_BOOK_GTASKS_LIST_TITLE: ${RECIPE_BOOK_GTASKS_LIST_TITLE:-Shopping List}
+      RECIPE_BOOK_TOKEN_KEY: ${RECIPE_BOOK_TOKEN_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - recipe_book_data:/srv/var
+    expose:
+      - "8830"
+    restart: always
+
+  co-worker:                     # Co-Worker — email/calendar/Teams intelligence inbox (opt-in)
+    profiles: ["co-worker"]
+    # ⚠ Port 8890, NOT the 8860 the public sibling uses: 8860 belongs to ai-voice in this repo,
+    # and the collision was resolved in co-worker's favour of 8890 when the rail was imported.
+    # Keep this in step with deploy/docker-compose.yml and rails/co-worker/rail.json (RC001/RC011).
+    #
+    # Renders empty until something harvests into the inbox — that writer is an external host-side
+    # process, not part of this stack. An empty dashboard is the correct lean-install outcome.
+    build:
+      context: ../../rails/co-worker
+      dockerfile: deploy/Dockerfile
+    image: co-worker-backend:latest
+    environment:
+      CO_WORKER_INBOX_DIR: /data/inbox
+      CO_WORKER_PROMPTS_DIR: /data/prompts
+      CO_WORKER_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      CO_WORKER_SYNTHESIS_MODEL: ${CO_WORKER_SYNTHESIS_MODEL:-@co-worker-synthesis}
+      # Kept in step with deploy/docker-compose.yml: the self-filter and the staleness
+      # auto-trigger read these, and a key compose never passes reaches nothing.
+      CO_WORKER_USER_NAME: ${CO_WORKER_USER_NAME:-}
+      CO_WORKER_USER_EMAIL: ${CO_WORKER_USER_EMAIL:-}
+      CO_WORKER_INBOX_OWNER: ${CO_WORKER_INBOX_OWNER:-}
+      CO_WORKER_AUTO_SYNTHESIZE: ${CO_WORKER_AUTO_SYNTHESIZE:-true}
+      CO_WORKER_AUTO_SYNTHESIZE_MIN_INTERVAL_S: ${CO_WORKER_AUTO_SYNTHESIZE_MIN_INTERVAL_S:-900}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      # Both fall back to empty named volumes when unset, which yields an empty panel rather
+      # than a startup failure — the right default for an install with no harvester yet.
+      - ${CO_WORKER_INBOX_MOUNT:-co_worker_inbox}:/data/inbox
+      - ${CO_WORKER_PROMPTS_MOUNT:-co_worker_prompts}:/data/prompts:ro
+    expose:
+      - "8890"
+    restart: always
+
+  smb-partner-enablement:        # SMB Partner Enablement — grounded RAG + voice surface (opt-in)
+    profiles: ["smb-partner-enablement"]
+    build:
+      context: ../../rails/smb-partner-enablement
+      dockerfile: deploy/Dockerfile
+    image: smb-partner-backend:latest
+    environment:
+      SMB_PARTNER_BROKER_URL: http://host.docker.internal:11500
+      # Above the broker's media_timeout (1200 s), as on the full stack (see recipe-book).
+      SMB_PARTNER_BROKER_TIMEOUT: ${SMB_PARTNER_BROKER_TIMEOUT:-1320}
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      SMB_PARTNER_RAG_MODEL: ${SMB_PARTNER_RAG_MODEL:-@smb-partner-rag}
+      SMB_PARTNER_EMBED_MODEL: ${SMB_PARTNER_EMBED_MODEL:-@embed}
+      # OFF unless deploy/.env says otherwise. Listed here so that setting it in .env actually
+      # reaches the container — a variable the rail reads but compose never passes is a silent
+      # no-op. Off on an 8 GB card too: the warm holds ~3.5 GB of VRAM plus the runner's host RAM
+      # for 30 minutes after every stack start, which is when memory is tightest.
+      SMB_PARTNER_WARM_ON_BOOT: ${SMB_PARTNER_WARM_ON_BOOT:-}
+      # 'auto' probes the broker's media worker and falls back to browser speech synthesis.
+      SMB_PARTNER_VOICE_BACKEND: ${SMB_PARTNER_VOICE_BACKEND:-auto}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - smb_partner_data:/srv/var
+    expose:
+      - "8870"
+    restart: always
+
+  gemini-cx:                     # Gemini Enterprise CX — grounded RAG over a GECX corpus (opt-in)
+    profiles: ["gemini-cx"]
+    build:
+      context: ../../rails/gemini-cx
+      dockerfile: deploy/Dockerfile
+    image: gemini-cx-backend:latest
+    environment:
+      GEMINI_CX_BROKER_URL: http://host.docker.internal:11500
+      # Above the broker's media_timeout (1200 s), as on the full stack (see recipe-book).
+      GEMINI_CX_BROKER_TIMEOUT: ${GEMINI_CX_BROKER_TIMEOUT:-1320}
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      GEMINI_CX_RAG_MODEL: ${GEMINI_CX_RAG_MODEL:-@gemini-cx-rag}
+      GEMINI_CX_EMBED_MODEL: ${GEMINI_CX_EMBED_MODEL:-@embed}
+      # OFF unless deploy/.env says otherwise — same reasoning as the smb-partner-enablement twin
+      # above. Listed so the .env setting reaches the container at all.
+      GEMINI_CX_WARM_ON_BOOT: ${GEMINI_CX_WARM_ON_BOOT:-}
+      # Kokoro-82M via the broker's tts_light — NOT /v1/tts, which evicts every heavy model
+      # per utterance. 'auto' probes media and falls back to browser speech.
+      GEMINI_CX_VOICE_BACKEND: ${GEMINI_CX_VOICE_BACKEND:-auto}
+      GEMINI_CX_VOICE_SPEAKER: ${GEMINI_CX_VOICE_SPEAKER:-af_heart}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - gemini_cx_data:/srv/var
+    expose:
+      - "8880"
+    restart: always
+
+  ai-playground:                 # AI Playground — RAG over documents + the Embedding Lab (opt-in)
+    profiles: ["ai-playground"]
+    build:
+      context: ../../rails/ai-playground
+      dockerfile: deploy/Dockerfile
+    image: ai-playground-backend:latest
+    environment:
+      AI_PLAYGROUND_DATA_DIR: /srv/var
+      AI_PLAYGROUND_SEED_DIR: /srv/seed/corpora
+      AI_PLAYGROUND_BROKER_URL: http://host.docker.internal:11500
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      AI_PLAYGROUND_CHAT_MODEL: ${AI_PLAYGROUND_CHAT_MODEL:-@ai-playground}
+      AI_PLAYGROUND_EMBED_MODEL: ${AI_PLAYGROUND_EMBED_MODEL:-@embed}
+      # NVIDIA NIM toggle: key from the gitignored .env. Absent => the toggle greys out and
+      # generation stays local, which is the intended default for a lean install.
+      AI_PLAYGROUND_NVIDIA_API_KEY: ${AI_PLAYGROUND_NVIDIA_API_KEY:-}
+      AI_PLAYGROUND_NVIDIA_BASE_URL: ${AI_PLAYGROUND_NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      # Kept in step with deploy/docker-compose.yml and the rail's own default. Both retired
+      # defaults (nemotron-mini-4b-instruct, then mistral-nemotron) shipped from here too, so a
+      # fresh lean install inherited a dead cloud model; tools/tests/test_nim_model_consistency.py
+      # guards the sites, and the rail now names a retired model in its error message.
+      AI_PLAYGROUND_NVIDIA_CHAT_MODEL: ${AI_PLAYGROUND_NVIDIA_CHAT_MODEL:-meta/llama-3.2-11b-vision-instruct}
+      # Host Ollama for the Embedding Lab's pull button and the weekly re-pull; see the full
+      # compose file. Same default as the rail's own. In wsl mode, see the gateway's
+      # PLATFORM_OLLAMA_URL below: the installer binds Ollama beyond loopback there.
+      AI_PLAYGROUND_OLLAMA_URL: ${AI_PLAYGROUND_OLLAMA_URL:-http://host.docker.internal:11434}
+      # Blank = the weekly re-pull skips the platform @embed model; see the full compose file.
+      AI_PLAYGROUND_REPULL_EMBEDDER: ${AI_PLAYGROUND_REPULL_EMBEDDER:-}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    volumes:
+      - ai_playground_data:/srv/var
+    expose:
+      - "8850"
+    restart: always
+
+  meeting-atlas:                 # Meeting Atlas — indexes Meetily recordings; no inference (opt-in)
+    profiles: ["meeting-atlas"]
+    build:
+      context: ../../rails/meeting-atlas
+      dockerfile: deploy/Dockerfile
+    image: meeting-atlas-backend:latest
+    environment:
+      MEETING_ATLAS_RECORDINGS_DIR: /data/recordings
+      # Derived from the mount below, not set independently. These were two operator variables
+      # for one path, so setting either alone gave you a mounted-but-unread database or a
+      # configured-but-missing one, and the only symptom was titles quietly falling back to the
+      # folder name. `:+` substitutes only when the mount is set.
+      MEETING_ATLAS_MEETILY_DB: ${MEETING_ATLAS_MEETILY_DB_MOUNT:+/data/meetily.db}
+      # Recording timestamps are UTC; everything a user reads is local. A wrong value here
+      # shifts every meeting by hours while looking entirely plausible.
+      MEETING_ATLAS_DISPLAY_TZ: ${TZ:-America/Los_Angeles}
+      MEETING_ATLAS_AUTOREINDEX_SECONDS: ${MEETING_ATLAS_AUTOREINDEX_SECONDS:-300}
+      MEETING_ATLAS_SERVE_AUDIO: ${MEETING_ATLAS_SERVE_AUDIO:-true}
+      TZ: ${TZ:-America/Los_Angeles}
+    # No extra_hosts, and no BROKER_AUTH_TOKEN: this rail compiles in no HTTP client and does no
+    # inference at all (rail.json declares zero model slots), so it never contacts the host.
+    volumes:
+      # READ-ONLY, and not merely as hygiene: under Podman/Hyper-V this is a 9p mount, and 9p
+      # rejects rename-over-an-existing-file. The backend holds its index in memory and rebuilds
+      # on POST /api/reindex, so it has no write path here to get wrong. Unset falls back to an
+      # empty named volume, which yields an empty rail rather than a startup failure.
+      - ${MEETING_ATLAS_RECORDINGS_MOUNT:-meeting_atlas_recordings}:/data/recordings:ro
+      # OPTIONAL: the Meetily SQLite, read-only — the only place the real meeting title and
+      # Meetily's own summary live. ONE variable: point it at the database FILE on the host and
+      # the env above follows. Unset, titles come from summary.json sidecars instead.
+      - ${MEETING_ATLAS_MEETILY_DB_MOUNT:-meeting_atlas_db}:/data/meetily.db:ro
+    expose:
+      - "8740"
+    restart: always
+
+  openmaic:                      # OpenMAIC — interactive classroom over the platform's models (opt-in)
+    profiles: ["openmaic"]
+    # TWO containers, not one. This is the RAIL: a thin wrapper that reverse-proxies the
+    # openmaic-app container below and hosts the OpenAI-compatible shim the app generates
+    # through, so every token still passes the broker's GPU gate. openmaic-app carries the same
+    # profile, because a rail proxying a container that never started is a tile that only 502s.
+    build:
+      context: ../../rails/openmaic
+      dockerfile: deploy/Dockerfile
+    image: openmaic-backend:latest
+    environment:
+      OPENMAIC_BROKER_URL: http://host.docker.internal:11500
+      # A call the shim names a requester on may wait out the Claude CLI and then a local answer.
+      OPENMAIC_BROKER_TIMEOUT: ${OPENMAIC_BROKER_TIMEOUT:-1320}
+      # The proxy's wait on the app, which waits on that same call when it generates.
+      OPENMAIC_APP_TIMEOUT: ${OPENMAIC_APP_TIMEOUT:-1320}
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      OPENMAIC_LLM_MODEL: ${OPENMAIC_LLM_MODEL:-@openmaic}
+      OPENMAIC_EMBED_MODEL: ${OPENMAIC_EMBED_MODEL:-@embed}
+      OPENMAIC_APP_URL: http://openmaic-app:3000
+      # Shared secret the shim requires on /api/llm/v1; openmaic-app presents it as OLLAMA_API_KEY.
+      OPENMAIC_SHIM_TOKEN: ${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}
+      # Overrides the shim with an external OpenAI-compatible endpoint (a larger-VRAM host on
+      # the LAN). Set, the reasoning chip reports the override rather than broker residency.
+      OPENMAIC_LLM_BASE_URL: ${OPENMAIC_LLM_BASE_URL:-}
+      # SINGLE-USER BOXES ONLY: the account the shim names on the app's generation calls while
+      # it is the app's only user, so they may reach that owner's Claude CLI. Blank names nobody.
+      OPENMAIC_CLI_REQUESTER: ${OPENMAIC_CLI_REQUESTER:-}
+      TZ: ${TZ:-America/Los_Angeles}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    # `default` for the gateway and openmaic-app's own network, the only way to reach
+    # http://openmaic-app:3000, exactly as on the full stack. `default` must be named.
+    networks:
+      - default
+      - openmaic_app_net
+    expose:
+      - "8900"
+    restart: always
+
+  openmaic-app:                  # the upstream OpenMAIC Next.js app — PRE-BUILT image (opt-in)
+    profiles: ["openmaic"]
+    # NO `build:` on purpose: this app's source is not in this repo, and a build context that
+    # points outside the repo root breaks the installer build. Build or pull the image
+    # separately and name the tag in OPENMAIC_APP_IMAGE.
+    image: ${OPENMAIC_APP_IMAGE:-openmaic-app:latest}
+    labels:
+      # Exists only for the openmaic rail: disabling `openmaic` on a box (PLATFORM_DISABLED_APPS)
+      # parks this container too (deploy/installer/sync-disabled-rails.ps1 reads this label).
+      ai-platform.rail: openmaic
+    environment:
+      # The rail's shim by default. OPENMAIC_LLM_BASE_URL redirects generation to an
+      # external OpenAI-compatible endpoint instead (a larger-VRAM host on the LAN, a
+      # hosted provider). It has to be substituted HERE: the rail reads the same variable
+      # only to label its chip, so setting it without this line changed what the header
+      # claimed and nothing about where a single token was generated.
+      OLLAMA_BASE_URL: ${OPENMAIC_LLM_BASE_URL:-http://openmaic:8900/api/llm/v1}
+      # Falls through to the shim token, because the shim is the default endpoint. An
+      # external endpoint needs its own credential: set OPENMAIC_LLM_API_KEY with it.
+      OLLAMA_API_KEY: ${OPENMAIC_LLM_API_KEY:-${OPENMAIC_SHIM_TOKEN:-openmaic-local-dev}}
+      OLLAMA_MODELS: "@openmaic"
+      # MANDATORY: OpenMAIC has no hardcoded model fallback, so generation fails outright when
+      # this is unset rather than degrading to a default. The `ollama:` provider prefix is just
+      # as required — without it the model string is parsed as OpenAI and never reaches the shim.
+      DEFAULT_MODEL: ${OPENMAIC_DEFAULT_MODEL:-ollama:@openmaic}
+      TZ: ${TZ:-America/Los_Angeles}
+    # Its own network, shared with the openmaic rail only, exactly as on the full stack (see the
+    # note there): third-party code on `default` could assert any identity to every rail. An
+    # ordinary bridge, so an OPENMAIC_LLM_BASE_URL endpoint and the internet stay reachable.
+    networks:
+      - openmaic_app_net
+    volumes:
+      # KEY MUST STAY `openmaic_app_data`: with `name: platform` it resolves to the existing
+      # volume platform_openmaic_app_data, which holds generated courses. Any other key would
+      # silently create a new, empty volume and the courses would appear to vanish.
+      - openmaic_app_data:/app/data
+    expose:
+      - "3000"
+    restart: always
+
+  gateway:                       # shell host + reverse proxy; frontends baked into the image
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.gateway.bundled
+    image: platform-gateway-bundled:latest
+    depends_on:
+      - terminal-fun
+    environment:
+      # Container-network URLs for the profiled rails. Harmless when a profile is not selected:
+      # the gateway only routes an app that is ALSO in PLATFORM_ENABLED_APPS.
+      PLATFORM_APP_CO_WORKER_URL: http://co-worker:8890
+      PLATFORM_APP_SMB_PARTNER_ENABLEMENT_URL: http://smb-partner-enablement:8870
+      PLATFORM_APP_GEMINI_CX_URL: http://gemini-cx:8880
+      PLATFORM_APP_MEETING_ATLAS_URL: http://meeting-atlas:8740
+      PLATFORM_APP_OPENMAIC_URL: http://openmaic:8900
+      PLATFORM_DB_URL: sqlite:////data/platform.db
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-admin}
+      PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:-}
+      PLATFORM_ENABLED_APPS: ${PLATFORM_ENABLED_APPS:-terminal-fun}
+      # Subtracted from the list above; blank disables nothing. Same variable, same blank
+      # default as the full stack, so tools/rail_smoke.py reads one declaration on either box.
+      PLATFORM_DISABLED_APPS: ${PLATFORM_DISABLED_APPS:-}
+      PLATFORM_COOKIE_SECURE: ${PLATFORM_COOKIE_SECURE:-false}
+      # The WebSocket proxy's Origin allowlist; `[]` (same-origin) by default, as on the full
+      # stack, where the reason a blank would not do is written down.
+      PLATFORM_ALLOWED_WS_ORIGINS: "${PLATFORM_ALLOWED_WS_ORIGINS:-[]}"
+      # The broker's shared token (install writes it into deploy/.env). The gateway sends it on its
+      # own broker calls (roles, status, the admin pages); without it they 401 once the broker
+      # enforces, which every lean install now does.
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:-}
+      # The same broker the image's ENV names, stated here as on the full stack, with the full
+      # stack's client ceiling ABOVE the broker's media_timeout (1200 s); unset it was 600 s.
+      PLATFORM_BROKER_URL: http://host.docker.internal:11500
+      PLATFORM_BROKER_TIMEOUT: ${PLATFORM_BROKER_TIMEOUT:-1320}
+      # Direct Ollama endpoint, used only by Admin > Models > Delete (ollama rm). Unset it was the
+      # gateway's own 127.0.0.1:11434, inside the container, so every delete on a lean box 502'd.
+      # Reaches the Ollama app on podman and Docker Desktop, which deliver host.docker.internal
+      # from the host's loopback. In wsl mode it is WINDOWS_HOST, the Windows end of the WSL vNIC,
+      # where an Ollama on its default 127.0.0.1 bind does not listen, so a wsl install sets the
+      # user's OLLAMA_HOST=0.0.0.0:11434 (lib-runtime Set-WslOllamaHost; docs/INSTALL.md).
+      PLATFORM_OLLAMA_URL: http://host.docker.internal:11434
+      # Read by the gateway and, until these lines, never handed to the lean one: a deploy/.env
+      # value changed nothing. The same lines and defaults as the full stack.
+      PLATFORM_SESSION_TTL_HOURS: ${PLATFORM_SESSION_TTL_HOURS:-168}
+      PLATFORM_DESCRIBE_MODEL: ${PLATFORM_DESCRIBE_MODEL:-@chat-fast}
+      PLATFORM_DESCRIBE_CAP: ${PLATFORM_DESCRIBE_CAP:-8}
+      PLATFORM_MAX_REQUEST_BYTES: ${PLATFORM_MAX_REQUEST_BYTES:-}
+    extra_hosts:
+      - "host.docker.internal:${WINDOWS_HOST:-host-gateway}"
+    # The default network (caddy and the profiled rails) and terminal-fun's own, the only way to
+    # reach http://terminal-fun:8730. `default` must be named: listing networks replaces it.
+    networks:
+      - default
+      - terminal_fun_net
+    volumes:
+      - gateway_data:/data
+    expose:
+      - "8700"
+    restart: always
+
+  caddy:                         # front door on host :1111
+    # Fully qualified: Podman has no implicit Docker Hub default, and the installer is the
+    # path most likely to meet a fresh podman machine with no registries.conf at all. See the
+    # matching note in deploy/docker-compose.yml.
+    image: docker.io/library/caddy:2
+    depends_on:
+      - gateway
+    ports:
+      - "1111:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: always
+
+volumes:
+  terminal_fun_data:          # terminal-fun per-user save/resume state (NetHack + Crawl)
+  recipe_book_data:
+  co_worker_inbox:
+  co_worker_prompts:
+  smb_partner_data:
+  gemini_cx_data:
+  ai_playground_data:         # corpora DB + uploads; the Embedding Lab's onnx assets land here too
+  meeting_atlas_recordings:   # empty by default; point MEETING_ATLAS_RECORDINGS_MOUNT at the real tree
+  meeting_atlas_db:           # empty by default; the optional read-only Meetily SQLite
+  openmaic_app_data:          # the upstream OpenMAIC app's own /app/data (generated courses + uploads)
+  gateway_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  # terminal-fun's own: the gateway and terminal-fun, nobody else; see deploy/docker-compose.yml.
+  # Not `internal: true`, which would cut host.docker.internal (the broker) and the internet.
+  terminal_fun_net:
+  # openmaic-app's own: the app and the openmaic rail, nobody else; see deploy/docker-compose.yml.
+  openmaic_app_net:

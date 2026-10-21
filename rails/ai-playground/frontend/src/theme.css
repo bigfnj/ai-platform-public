@@ -1,0 +1,419 @@
+/* AI Playground module styles, scoped under `.ai-playground`.
+
+   EVERY rule below starts with `.ai-playground`, and that is not tidiness. The federation runtime
+   never removes a remote's stylesheet, so a top-level `.chip`, `.cite`, `.caret` or `.src` here
+   restyled every other rail's chips, and the shell's own, from the first visit to this rail
+   until the page was reloaded (measured in Chromium in both visit orders).
+   tests/test_theme_scope.py fails on any rule that is not under the wrapper.
+
+   Follows the platform theming contract (web/THEMING.md): local tokens are DERIVED from
+   the shared design tokens with standalone fallbacks, so the module adopts the shell's
+   palette + light/dark for free. --accent / --grad-accent / --good / --warning are the
+   platform's own names and are left to INHERIT — not redefined here. Action surfaces use
+   the gradient; the NIM-enabled state uses the semantic --good (a status colour). */
+
+.ai-playground {
+  --ink: var(--text-primary, #1f2430);
+  --sec: var(--text-secondary, #5b616e);
+  --mut: var(--muted, var(--text-muted, #8b909c));
+  --pg: var(--page, #f7f7fb);
+  --s1: var(--surface-1, #ffffff);
+  --s2: var(--surface-2, #f1f2f6);
+  --bd: var(--border, rgba(31, 36, 48, 0.12));
+  --sh: var(--shadow, 0 1px 2px rgba(20, 22, 30, 0.05), 0 8px 24px rgba(20, 22, 30, 0.06));
+  --rad: var(--radius, 14px);
+  --ac: var(--accent, #4f7cff);
+  --ac-text: var(--accent-text, #4f7cff);
+  --grad: var(--grad-accent, var(--accent, linear-gradient(135deg, #5b8cff, #3f63e6)));
+  --ok: var(--good, #3fae6b);
+  /* The same hue at 4.5:1 for words (web/THEMING.md rule 4); --ok stays for dots and tints. */
+  --ok-text: var(--good-text, #12652a);
+  /* ...and at 3:1 for dots (graphics): the per-mode dot token. */
+  --ok-dot: var(--chip-loaded, #178a1b);
+
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 4px 8px 48px;
+}
+.ai-playground * { box-sizing: border-box; }
+.ai-playground h1, .ai-playground h3 { margin: 0; font-weight: 680; letter-spacing: -0.01em; }
+
+/* --- demo picker (the header itself is web-core's RailHeader) --------------- */
+.ai-playground .ap-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.ai-playground .ap-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--s1); color: var(--sec);
+  border: 1px solid var(--bd); border-radius: 999px;
+  padding: 7px 14px; font-size: 13px; cursor: pointer; transition: 0.15s;
+}
+.ai-playground .ap-tab:hover:not(:disabled) { color: var(--ink); border-color: var(--ac); }
+.ai-playground .ap-tab.active { background: var(--grad); color: var(--on-accent, #fff); border-color: transparent; }
+.ai-playground .ap-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-playground .ap-tab-ic { font-size: 15px; }
+.ai-playground .ap-empty { color: var(--mut); padding: 40px; text-align: center; }
+
+/* --- RAG controls row ---------------------------------------------------- */
+.ai-playground .rag-controls {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; margin: 0 4px 16px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rad);
+}
+.ai-playground .rag-corpus { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--mut); }
+.ai-playground .rag-corpus select {
+  font: inherit; color: var(--ink); background: var(--s1);
+  border: 1px solid var(--bd); border-radius: 8px; padding: 6px 10px; max-width: 340px;
+}
+.ai-playground .rag-del {
+  background: transparent; border: 1px solid var(--bd); color: var(--mut);
+  border-radius: 8px; width: 30px; height: 30px; cursor: pointer;
+}
+.ai-playground .rag-del:hover { color: var(--critical-text, #ab0f21); border-color: var(--critical-text, #ab0f21); }
+.ai-playground .rag-upload-btn {
+  background: var(--s1); border: 1px solid var(--bd); color: var(--ink);
+  border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+}
+.ai-playground .rag-upload-btn:hover { border-color: var(--ac); }
+.ai-playground .rag-spacer { flex: 1; }
+/* The endpoint line is the one item that may wrap INSIDE itself (from a 240px basis), so the
+   row keeps the NIM switch and the GPU pill beside it instead of breaking the row and leaving
+   the pill alone on a second line, as it did at 1440px in the shell. */
+.ai-playground .rag-endpoint { font-size: 11.5px; color: var(--mut); flex: 1 1 240px; min-width: 0; text-align: right; }
+.ai-playground .rag-endpoint b { color: var(--sec); font-weight: 620; }
+.ai-playground .rag-genmodel { font-size: 10.5px; color: var(--mut); font-family: ui-monospace, SFMono-Regular, monospace; }
+.ai-playground .rag-nim {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--s1); border: 1px solid var(--bd); color: var(--ink);
+  border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; transition: 0.15s;
+}
+.ai-playground .rag-nim:hover:not(:disabled) { border-color: var(--ac); }
+.ai-playground .rag-nim:disabled { opacity: 0.55; cursor: not-allowed; }
+.ai-playground .rag-nim .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mut); }
+.ai-playground .rag-nim .dot.on { background: var(--ok-dot); box-shadow: 0 0 8px var(--ok-dot); }
+.ai-playground .rag-pill {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--sec); border: 1px solid var(--bd); border-radius: 999px; padding: 5px 11px;
+}
+.ai-playground .rag-pill.enabled { background: var(--ok); color: #06210f; border-color: transparent; box-shadow: 0 0 10px rgba(63, 174, 107, 0.5); }
+
+/* --- 3-column layout ----------------------------------------------------- */
+.ai-playground .rag-layout { display: flex; flex-wrap: wrap; gap: 22px; align-items: flex-start; padding: 0 4px; }
+.ai-playground .rag-side { flex: 0 0 280px; position: sticky; top: 14px; }
+.ai-playground .rag-main { flex: 1; min-width: 320px; }
+.ai-playground .rag-sources { flex: 0 0 340px; position: sticky; top: 14px; }
+@media (max-width: 1100px) { .ai-playground .rag-side, .ai-playground .rag-sources { flex-basis: 100%; position: static; } }
+
+.ai-playground .side-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--mut); margin: 2px 2px 12px; }
+.ai-playground .side-list { display: flex; flex-direction: column; gap: 8px; }
+.ai-playground .chip {
+  text-align: left; font-size: 12.5px; color: var(--ink);
+  background: var(--s1); border: 1px solid var(--bd); border-radius: 10px;
+  padding: 8px 12px; cursor: pointer; transition: 0.15s;
+}
+.ai-playground .chip:hover:not(:disabled) { border-color: var(--ac); background: var(--s2); }
+.ai-playground .chip:disabled { opacity: 0.6; cursor: default; }
+
+/* askbar */
+.ai-playground .askbar { display: flex; gap: 10px; margin-bottom: 14px; }
+.ai-playground .askbar input {
+  flex: 1; font: inherit; color: var(--ink); background: var(--s1);
+  border: 1px solid var(--bd); border-radius: 12px; padding: 12px 16px;
+}
+.ai-playground .askbar input:focus { outline: none; border-color: var(--ac); }
+/* The Ask button only: a direct child. The shared Dictate pill (web-core DictateButton) sits
+   in this bar too, inside its own .vc-dict-wrap span, and a descendant `button` rule outranked
+   .vc-speak.sm and squashed it into a 14px gradient strip. */
+.ai-playground .askbar > button {
+  background: var(--grad); color: var(--on-accent, #fff); border: none; border-radius: 12px;
+  padding: 0 26px; font-size: 14px; font-weight: 640; cursor: pointer; min-width: 84px;
+}
+.ai-playground .askbar > button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.ai-playground .rag-error {
+  background: color-mix(in srgb, var(--critical, #d1495b) 9%, transparent);
+  border: 1px solid var(--critical-text, #ab0f21); color: var(--critical-text, #ab0f21);
+  border-radius: 10px; padding: 8px 12px; font-size: 12.5px; margin-bottom: 12px;
+}
+
+.ai-playground .answer.card {
+  background: var(--s1); border: 1px solid var(--bd); border-radius: var(--rad);
+  box-shadow: var(--sh); padding: 18px 20px; min-height: 120px;
+  white-space: pre-wrap; line-height: 1.62; font-size: 14px;
+}
+.ai-playground .ans-empty { color: var(--mut); }
+.ai-playground .rag-servedby { font-size: 11.5px; color: var(--mut); margin-bottom: 6px; }
+.ai-playground .cite {
+  display: inline; font: inherit; font-weight: 700; color: var(--ac-text);
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
+  border: none; border-radius: 5px; padding: 0 4px; margin: 0 1px; cursor: pointer;
+}
+.ai-playground .cite:hover { background: var(--grad); color: var(--on-accent, #fff); }
+/* Keyframe names are as global as top-level selectors, hence the rail prefix. */
+.ai-playground .caret { color: var(--ac-text); font-weight: 700; animation: ap-blink 1s steps(2) infinite; }
+@keyframes ap-blink { 50% { opacity: 0; } }
+
+/* sources column */
+.ai-playground .src { display: flex; flex-direction: column; gap: 10px; }
+.ai-playground .src-empty { color: var(--mut); font-size: 12.5px; padding: 4px 2px; }
+.ai-playground .srccard {
+  background: var(--s1); border: 1px solid var(--bd); border-left: 3px solid var(--ac);
+  border-radius: 12px; padding: 11px 13px; transition: box-shadow 0.2s, border-color 0.2s;
+}
+.ai-playground .srccard.hot { border-color: var(--ac); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac) 45%, transparent); }
+.ai-playground .srchead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.ai-playground .src-n { font-weight: 700; color: var(--ac-text); font-family: ui-monospace, monospace; }
+.ai-playground .src-name { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink); word-break: break-all; }
+.ai-playground .src-score { margin-left: auto; font-size: 11px; color: var(--mut); white-space: nowrap; }
+.ai-playground .src-body {
+  font-size: 12.5px; color: var(--sec); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* --- modals / popovers --------------------------------------------------- */
+.ai-playground .ap-modal-back {
+  position: fixed; inset: 0; background: rgba(10, 12, 18, 0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.ai-playground .ap-modal {
+  background: var(--s1); color: var(--ink); border: 1px solid var(--bd);
+  border-radius: 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 22px; width: min(460px, 92vw); display: flex; flex-direction: column; gap: 12px;
+}
+.ai-playground .ap-modal h3 { font-size: 16px; }
+.ai-playground .ap-modal .hint { color: var(--mut); font-size: 12.5px; margin: 0; }
+.ai-playground .ap-input, .ai-playground .ap-modal input[type="file"] {
+  font: inherit; color: var(--ink); background: var(--s2);
+  border: 1px solid var(--bd); border-radius: 10px; padding: 9px 12px;
+}
+.ai-playground .ap-modal-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.ai-playground .ap-modal-row button {
+  font: inherit; border-radius: 10px; padding: 8px 16px; cursor: pointer;
+  background: var(--s2); border: 1px solid var(--bd); color: var(--ink);
+}
+.ai-playground .ap-modal-row button.primary { background: var(--grad); border-color: transparent; color: var(--on-accent, #fff); font-weight: 620; }
+.ai-playground .ap-modal-row button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.ai-playground .sw-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-playground .sw-steps li { font-size: 13px; color: var(--sec); padding-left: 20px; position: relative; }
+.ai-playground .sw-steps li::before { content: "▸"; position: absolute; left: 2px; color: var(--ac-text); }
+.ai-playground .sw-final { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 620; padding: 10px 12px; border-radius: 10px; }
+/* Tints at 10% / 9%, not 14% / 12%: with the 4.5:1 text tokens on top, the stronger tints left
+   the words at 4.41-4.42:1 on tokyo's darker light page (measured in Chromium). */
+.ai-playground .sw-final.ok { background: color-mix(in srgb, var(--ok) 10%, transparent); color: var(--ok-text); }
+.ai-playground .sw-final.err { background: color-mix(in srgb, var(--critical, #d1495b) 9%, transparent); color: var(--critical-text, #ab0f21); }
+.ai-playground .sw-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; }
+.ai-playground .sw-final.ok .sw-dot { background: var(--ok-dot); box-shadow: 0 0 10px var(--ok-dot); }
+.ai-playground .sw-final.err .sw-dot { background: var(--chip-missing, #dc1f3c); }
+
+/* ======================================================================== */
+/* Embedding Lab demo                                                        */
+/* ======================================================================== */
+.ai-playground .lab { padding: 0 4px; }
+.ai-playground .lab-setup {
+  display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap;
+  padding: 12px 14px; margin: 0 0 14px;
+  background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rad);
+}
+.ai-playground .lab-field { display: inline-flex; flex-direction: column; gap: 5px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.4px; color: var(--mut); font-weight: 700; }
+.ai-playground .lab-field select, .ai-playground .lab-field input {
+  font: inherit; text-transform: none; letter-spacing: 0; font-weight: 400;
+  color: var(--ink); background: var(--s1); border: 1px solid var(--bd);
+  border-radius: 9px; padding: 8px 11px;
+}
+.ai-playground .lab-field select { max-width: 320px; }
+.ai-playground .lab-mini {
+  background: var(--s1); border: 1px solid var(--bd); color: var(--sec);
+  border-radius: 9px; padding: 8px 11px; font-size: 12px; cursor: pointer; align-self: flex-end;
+}
+.ai-playground .lab-mini:hover { border-color: var(--ac); color: var(--ink); }
+.ai-playground .lab-spacer { flex: 1; }
+.ai-playground .lab-count { font-size: 12px; color: var(--mut); align-self: center; }
+.ai-playground .lab-run {
+  background: var(--grad); color: var(--on-accent, #fff); border: none; border-radius: 11px;
+  padding: 10px 22px; font-size: 13.5px; font-weight: 640; cursor: pointer; align-self: flex-end;
+}
+.ai-playground .lab-run:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-playground .lab-error {
+  background: color-mix(in srgb, var(--critical, #d1495b) 9%, transparent);
+  border: 1px solid var(--critical-text, #ab0f21); color: var(--critical-text, #ab0f21);
+  border-radius: 10px; padding: 8px 12px; font-size: 12.5px; margin-bottom: 12px;
+}
+.ai-playground .lab-meta { font-size: 12px; color: var(--mut); margin: 0 2px 12px; }
+
+.ai-playground .lab-body { display: flex; gap: 20px; align-items: flex-start; }
+.ai-playground .lab-models { flex: 0 0 340px; }
+.ai-playground .lab-results { flex: 1; min-width: 360px; }
+@media (max-width: 1080px) { .ai-playground .lab-body { flex-direction: column; } .ai-playground .lab-models { flex-basis: auto; width: 100%; } }
+
+.ai-playground .lab-models .side-h { display: flex; align-items: center; justify-content: space-between; }
+.ai-playground .side-h-btns { display: flex; gap: 6px; }
+
+/* refresh modal */
+.ai-playground .lab-refresh { width: min(620px, 94vw); }
+.ai-playground .rf-list { display: flex; flex-direction: column; gap: 2px; max-height: 56vh; overflow: auto; }
+.ai-playground .rf-sec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--mut); margin: 12px 2px 4px; }
+.ai-playground .rf-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-bottom: 1px solid color-mix(in srgb, var(--bd) 60%, transparent); }
+.ai-playground .rf-name { flex: 1; font-size: 12.5px; color: var(--ink); font-weight: 600; }
+.ai-playground .rf-sub { font-size: 11px; color: var(--mut); font-weight: 400; margin-top: 2px; }
+.ai-playground .rf-btn { font-size: 12px; background: var(--grad); color: var(--on-accent, #fff); border: none; border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.ai-playground .rf-uptodate { font-size: 11.5px; color: var(--ok-text); white-space: nowrap; }
+.ai-playground .rf-ok { font-size: 11.5px; color: var(--ok-text); white-space: nowrap; }
+.ai-playground .lab-add { text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 11.5px;
+  background: var(--s1); border: 1px solid var(--bd); color: var(--sec); border-radius: 8px; padding: 4px 9px; cursor: pointer; }
+.ai-playground .lab-add:hover { border-color: var(--ac); color: var(--ink); }
+.ai-playground .lab-group { margin-bottom: 16px; }
+.ai-playground .lab-group-h { font-size: 11px; color: var(--sec); font-weight: 700; margin: 0 2px 8px; }
+
+.ai-playground .mrow { position: relative; background: var(--s1); border: 1px solid var(--bd);
+  border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; transition: 0.15s; }
+.ai-playground .mrow.on { border-color: var(--ac); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ac) 35%, transparent); }
+.ai-playground .mrow-top { display: flex; align-items: center; gap: 8px; }
+.ai-playground .mrow-pick { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
+.ai-playground .mrow-pick input { accent-color: var(--ac); }
+.ai-playground .mrow-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.ai-playground .mrow-badge { font-size: 10.5px; color: var(--mut); border: 1px solid var(--bd); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+.ai-playground .mrow-badge.ok { color: var(--ok-text); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.ai-playground .mrow-meta { font-size: 11px; color: var(--mut); margin: 5px 0 0 26px; }
+.ai-playground .mrow-about { font-size: 12px; color: var(--sec); line-height: 1.45; margin: 6px 0 0 26px; }
+
+/* add-model modal: About field + grounded Suggest button */
+.ai-playground .lab-about-field { display: flex; flex-direction: column; gap: 6px; }
+.ai-playground .lab-about-head { display: flex; align-items: center; justify-content: space-between; }
+.ai-playground .lab-about-head > span { font-size: 12px; color: var(--sec); }
+.ai-playground .lab-suggest {
+  font-size: 11.5px; background: color-mix(in srgb, var(--ac) 12%, var(--s2));
+  border: 1px solid color-mix(in srgb, var(--ac) 40%, transparent); color: var(--ac-text);
+  border-radius: 8px; padding: 4px 10px; cursor: pointer;
+}
+.ai-playground .lab-suggest:hover:not(:disabled) { background: color-mix(in srgb, var(--ac) 20%, var(--s2)); }
+.ai-playground .lab-suggest:disabled { opacity: 0.6; cursor: default; }
+.ai-playground .lab-about-ta { resize: vertical; min-height: 46px; font-family: inherit; line-height: 1.5; }
+.ai-playground .lab-about-note { font-size: 11px; color: var(--mut); }
+.ai-playground .lab-about-note b { color: var(--sec); }
+.ai-playground .mrow-actions { margin: 8px 0 0 26px; }
+.ai-playground .mrow-actions button { font-size: 11.5px; background: var(--s2); border: 1px solid var(--bd); color: var(--ink);
+  border-radius: 8px; padding: 5px 11px; cursor: pointer; }
+.ai-playground .mrow-actions button:hover { border-color: var(--ac); }
+.ai-playground .mrow-busy { font-size: 11.5px; color: var(--ac-text); }
+.ai-playground .mrow-hint { font-size: 11px; color: var(--mut); margin: 7px 0 0 26px; font-family: ui-monospace, monospace; }
+.ai-playground .mrow-knobs { margin: 9px 0 2px 26px; display: flex; flex-direction: column; gap: 7px; }
+.ai-playground .knob { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-playground .knob > span { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--mut); width: 42px; }
+.ai-playground .chip2 { font-size: 11px; background: var(--s2); border: 1px solid var(--bd); color: var(--sec);
+  border-radius: 999px; padding: 3px 10px; cursor: pointer; transition: 0.12s; }
+.ai-playground .chip2:hover { border-color: var(--ac); }
+.ai-playground .chip2.sel { background: var(--grad); color: var(--on-accent, #fff); border-color: transparent; }
+.ai-playground .mrow-del { position: absolute; top: 8px; right: 8px; background: transparent; border: none;
+  color: var(--mut); cursor: pointer; font-size: 12px; display: none; }
+.ai-playground .mrow:hover .mrow-del { display: block; }
+
+/* reranker group — the optional two-stage selector, set apart from the embedder groups */
+.ai-playground .lab-group-rr { border-top: 1px dashed var(--bd); padding-top: 14px; }
+.ai-playground .rr-lead { margin: 0 2px 10px; font-family: inherit; line-height: 1.45; }
+.ai-playground .rr-depth { margin: 4px 2px 2px; }
+.ai-playground .rr-depth > span { width: auto; }
+.ai-playground .rr-depth input { width: 56px; background: var(--s2); border: 1px solid var(--bd); color: var(--ink);
+  border-radius: 8px; padding: 3px 7px; font-size: 12px; }
+.ai-playground .rr-clear { margin: 8px 2px 0; font-size: 11px; background: transparent; border: none;
+  color: var(--mut); cursor: pointer; text-decoration: underline; }
+.ai-playground .rr-clear:hover { color: var(--ac-text); }
+.ai-playground .lab-rr-chip { align-self: center; font-size: 11.5px; color: var(--ac-text); white-space: nowrap;
+  border: 1px solid color-mix(in srgb, var(--ac) 40%, transparent); border-radius: 999px;
+  padding: 2px 9px; margin-right: 4px; background: color-mix(in srgb, var(--ac) 10%, transparent); }
+.ai-playground .mrow-del:hover { color: var(--critical-text, #ab0f21); }
+
+.ai-playground .lab-empty { color: var(--mut); padding: 30px 8px; font-size: 13px; line-height: 1.6; }
+.ai-playground .lab-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ai-playground .lab-table thead th { text-align: right; color: var(--mut); font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.3px; padding: 6px 10px; border-bottom: 1px solid var(--bd); white-space: nowrap; }
+.ai-playground .lab-table thead th:first-child, .ai-playground .lab-table td.c-label { text-align: left; }
+.ai-playground .lab-table th.sortable { cursor: pointer; }
+.ai-playground .lab-table th.sortable:hover { color: var(--ink); }
+.ai-playground .lab-table th.active { color: var(--ac-text); }
+.ai-playground .lab-table tbody td { padding: 8px 10px; text-align: right; border-bottom: 1px solid color-mix(in srgb, var(--bd) 60%, transparent); }
+.ai-playground .lab-table tbody tr { cursor: default; }
+.ai-playground .lab-table tbody tr:hover { background: var(--s2); }
+.ai-playground .lab-table tr.err td { color: var(--critical-text, #ab0f21); }
+.ai-playground .c-label { font-weight: 600; color: var(--ink); }
+.ai-playground .c-errtag { color: var(--critical-text, #ab0f21); font-weight: 400; font-size: 11.5px; }
+.ai-playground .c-prov { font-size: 11px; color: var(--mut); text-align: right; }
+.ai-playground .c-m { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+.ai-playground .c-m.strong { font-weight: 700; color: var(--ink); }
+.ai-playground .pdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.ai-playground .pdot.broker { background: var(--ac); }
+.ai-playground .pdot.onnx { background: var(--ok-dot); }
+.ai-playground .miss-row td { text-align: left; background: var(--s2); font-size: 12px; padding: 10px 14px; }
+.ai-playground .miss-h { color: var(--sec); font-weight: 600; margin-bottom: 6px; }
+.ai-playground .miss { color: var(--mut); margin: 2px 0; }
+.ai-playground .miss code { color: var(--ink); background: var(--s1); border: 1px solid var(--bd); border-radius: 5px; padding: 0 5px; }
+.ai-playground .lab-results-bar { display: flex; justify-content: flex-end; margin-top: 12px; }
+.ai-playground .lab-legend { font-size: 11.5px; color: var(--mut); line-height: 1.6; margin-top: 10px; padding: 0 2px; }
+.ai-playground .lab-legend b { color: var(--sec); }
+
+/* verdict card — declares the winner + runner-up shortfall */
+.ai-playground .lab-verdict {
+  margin-top: 18px; padding: 16px 18px;
+  background: var(--s1); border: 1px solid var(--bd);
+  border-left: 4px solid var(--ac); border-radius: var(--rad); box-shadow: var(--sh);
+}
+.ai-playground .lv-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.ai-playground .lv-badge {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px; color: var(--on-accent, #fff);
+  background: var(--grad); border-radius: 999px; padding: 4px 12px; white-space: nowrap;
+}
+.ai-playground .lv-name { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.ai-playground .lv-why { font-size: 13px; color: var(--sec); line-height: 1.6; margin: 0 0 10px; }
+.ai-playground .lv-why strong, .ai-playground .lv-runner strong, .ai-playground .lv-note strong, .ai-playground .lab-plain-list strong { color: var(--ink); font-weight: 680; }
+.ai-playground .lv-runner {
+  font-size: 12.5px; color: var(--sec); line-height: 1.6; margin: 0;
+  padding: 9px 12px; background: var(--s2); border-radius: 10px;
+}
+.ai-playground .lv-ru { font-weight: 700; color: var(--ink); margin-right: 4px; }
+/* --ink, not --sec: solarized's own secondary text is already under 4.5:1 on its surface-2
+   (3.90:1 dark), and the green tint took it to 3.51:1. */
+.ai-playground .lv-value {
+  font-size: 12.5px; color: var(--ink); line-height: 1.6; margin: 8px 0 0;
+  padding: 9px 12px; border-radius: 10px;
+  background: color-mix(in srgb, var(--ok) 10%, var(--s2)); border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+}
+.ai-playground .lv-note { font-size: 12px; color: var(--mut); line-height: 1.55; margin: 10px 0 0; }
+
+/* plain-terms card — layman breakdown */
+.ai-playground .lab-plain {
+  margin-top: 14px; padding: 16px 18px;
+  background: color-mix(in srgb, var(--ac) 4%, var(--s1));
+  border: 1px solid var(--bd); border-radius: var(--rad);
+}
+.ai-playground .lab-plain-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--sec); margin-bottom: 8px; }
+.ai-playground .lab-plain-lead { font-size: 12.5px; color: var(--sec); margin: 0 0 10px; }
+.ai-playground .lab-plain-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.ai-playground .lab-plain-list li { font-size: 13px; color: var(--sec); line-height: 1.6; }
+.ai-playground .lab-plain-foot {
+  font-size: 11.5px; color: var(--mut); line-height: 1.6; margin: 12px 0 0;
+  padding-top: 10px; border-top: 1px solid var(--bd);
+}
+
+/* rerank-lift callout — the two-stage story, base vs reranked on comparable metrics */
+.ai-playground .lab-lift {
+  margin-top: 14px; padding: 16px 18px;
+  background: color-mix(in srgb, var(--ac) 8%, var(--s1));
+  border: 1px solid color-mix(in srgb, var(--ac) 30%, var(--bd)); border-radius: var(--rad);
+}
+.ai-playground .lab-lift-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ac-text); margin-bottom: 8px; }
+.ai-playground .lab-lift-lead { font-size: 12.5px; color: var(--sec); margin: 0 0 10px; }
+.ai-playground .lab-lift strong { color: var(--ink); font-weight: 680; }
+
+.ai-playground .lab-modal .seg { display: flex; gap: 0; border: 1px solid var(--bd); border-radius: 10px; overflow: hidden; }
+.ai-playground .lab-modal .seg button { flex: 1; font: inherit; background: var(--s2); border: none; color: var(--sec);
+  padding: 8px; cursor: pointer; font-size: 12.5px; }
+.ai-playground .lab-modal .seg button.on { background: var(--grad); color: var(--on-accent, #fff); }
+.ai-playground .lab-inline { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--sec); }
+.ai-playground .lab-inline span { min-width: 78px; }
+.ai-playground .lab-inline input, .ai-playground .lab-inline select { font: inherit; color: var(--ink); background: var(--s2);
+  border: 1px solid var(--bd); border-radius: 9px; padding: 8px 11px; }

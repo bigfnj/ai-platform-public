@@ -1,0 +1,9 @@
+bin/
+logs/
+.env
+.env.bak-*
+data/
+.env.bak
+# A lean box's own broker maps (roles.json, disabled.json): the broker writes admin edits into them,
+# and a tracked copy was put back to the 24 GB map by every update (lib-runtime Get-LeanBrokerFiles).
+local/
